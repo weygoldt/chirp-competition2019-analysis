@@ -17,6 +17,10 @@ from datetime import datetime
 from pathlib import Path
 
 
+#: Name fragments of exploratory jobs, stopped before training runs.
+LOW_PRIORITY = ("params", "explore", "showcase", "smoke", "selftest", "probe", "prof")
+
+
 def mem_available_gb() -> float:
     for line in Path("/proc/meminfo").read_text().splitlines():
         if line.startswith("MemAvailable:"):
@@ -42,7 +46,17 @@ def guarded_scopes() -> list[str]:
         capture_output=True, text=True, check=False,
     ).stdout
     units = [line.split()[0] for line in out.splitlines() if line.strip()]
-    return sorted(units, reverse=True)  # names end in a timestamp: newest first
+
+    def stamp(unit: str) -> str:
+        # scripts/guarded names end in ...-YYYYMMDD-HHMMSS-PID
+        return "-".join(unit.removesuffix(".scope").split("-")[-3:-1])
+
+    def low_priority(unit: str) -> bool:
+        return any(tag in unit for tag in LOW_PRIORITY)
+
+    # Exploratory jobs first, then everything else; newest first within each.
+    newest_first = sorted(units, key=stamp, reverse=True)
+    return sorted(newest_first, key=lambda u: not low_priority(u))
 
 
 def main() -> None:
