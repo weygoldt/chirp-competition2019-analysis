@@ -285,6 +285,12 @@ labelling with the P1b tool runs in parallel with P2–P4.
     default) and single-channel data; pipelines skip it with a warning.
     Simulations use 1-16 electrodes and varied spacing, so the detector
     learns to reject clicks where removal is not possible.
+18. Template library v4 (2026-11-12): all harvested long chirps kept, but
+    sampling picks an individual first and then one of its templates, in
+    every equalization bin; events with FWHM <= 2 EOD cycles are cut; only
+    clean samples: every QC flag (ripple, multi-peak, line in span,
+    baseline drift, low SNR, interrupted decay) excludes a template by
+    default.
 
 ## Constraints
 
