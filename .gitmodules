@@ -1,0 +1,8 @@
+[submodule "packages/gridtools"]
+	path = packages/gridtools
+	url = git@github.com:weygoldt/gridtools.git
+	branch = v2
+[submodule "packages/chirpdetector"]
+	path = packages/chirpdetector
+	url = git@github.com:weygoldt/chirpdetector.git
+	branch = v2
