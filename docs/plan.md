@@ -275,6 +275,16 @@ labelling with the P1b tool runs in parallel with P2–P4.
     calibrated in units of spacing) and simulates an in-tank reference as an
     augmentation. Detection and assignment must not rely on absolute
     electrode positions or channel order.
+16. Sample-rate agnostic (2026-11-12): every spectrogram, click-removal,
+    plotting and footprint parameter is in physical units (s, Hz); the
+    sampling rate comes from the recording. Recordings at any rate get the
+    same time and frequency resolution (frequency grid equal to within
+    rounding), so a model bundle trained at 20 kHz applies at any rate.
+17. Click removal always uses the electrode-coincidence guard and refuses
+    recordings with fewer electrodes than it protects chirps on (9 at the
+    default) and single-channel data; pipelines skip it with a warning.
+    Simulations use 1-16 electrodes and varied spacing, so the detector
+    learns to reject clicks where removal is not possible.
 
 ## Constraints
 
