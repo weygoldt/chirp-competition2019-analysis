@@ -16,7 +16,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-
 #: Name fragments of exploratory jobs, stopped before training runs.
 LOW_PRIORITY = ("params", "explore", "showcase", "smoke", "selftest", "probe", "prof")
 
@@ -32,18 +31,31 @@ def vram_used_gb() -> float:
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=20, check=True,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=True,
         ).stdout
         return max(float(v) for v in out.split()) / 1024
-    except (subprocess.SubprocessError, ValueError, OSError):
+    except subprocess.SubprocessError, ValueError, OSError:
         return 0.0
 
 
 def guarded_scopes() -> list[str]:
     out = subprocess.run(
-        ["systemctl", "--user", "list-units", "--type=scope", "--state=running",
-         "--no-legend", "--plain", "chirpv2-*"],
-        capture_output=True, text=True, check=False,
+        [
+            "systemctl",
+            "--user",
+            "list-units",
+            "--type=scope",
+            "--state=running",
+            "--no-legend",
+            "--plain",
+            "chirpv2-*",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout
     units = [line.split()[0] for line in out.splitlines() if line.strip()]
 
@@ -80,14 +92,20 @@ def main() -> None:
             scopes = guarded_scopes()
             if scopes:
                 victim = scopes[0]
-                log(f"LOW ram_avail={ram:.1f}GB vram_used={vram:.1f}GB -> stopping {victim}")
+                log(
+                    f"LOW ram_avail={ram:.1f}GB vram_used={vram:.1f}GB -> stopping {victim}"
+                )
                 subprocess.run(["systemctl", "--user", "stop", victim], check=False)
             else:
-                log(f"LOW ram_avail={ram:.1f}GB vram_used={vram:.1f}GB, no guarded job to stop")
+                log(
+                    f"LOW ram_avail={ram:.1f}GB vram_used={vram:.1f}GB, no guarded job to stop"
+                )
             time.sleep(10)
             continue
         if time.monotonic() - last_ok > 600:
-            log(f"ok ram_avail={ram:.1f}GB vram_used={vram:.1f}GB jobs={len(guarded_scopes())}")
+            log(
+                f"ok ram_avail={ram:.1f}GB vram_used={vram:.1f}GB jobs={len(guarded_scopes())}"
+            )
             last_ok = time.monotonic()
         time.sleep(args.interval_s)
 
