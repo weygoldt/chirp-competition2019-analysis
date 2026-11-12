@@ -16,3 +16,6 @@ wheels/
 # Bulk data lives on /mnt/data1/chirp_v2, never in git
 data/
 runs/
+
+# Agent and feature worktrees of the submodules
+.worktrees/
