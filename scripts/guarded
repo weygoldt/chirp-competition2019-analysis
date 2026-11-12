@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Run a heavy job in a memory-capped systemd user scope, so that an
+# out-of-memory condition kills this job and never the machine.
+#
+#   scripts/guarded [--name NAME] [--mem 24G] [--vram 0.75] [--cpus 16] -- CMD ARGS...
+#
+# - RAM: cgroup MemoryMax (hard cap, no swap); the kernel kills the job's
+#   processes when they exceed it.
+# - VRAM: exports CHIRP_MAX_VRAM_FRACTION; chirpdetector's training and
+#   inference call torch.cuda.set_per_process_memory_fraction with it.
+#   The watchdog (scripts/oom_watchdog.py) is the second line of defence.
+# - Scopes are named chirpv2-<NAME>-<timestamp>; the watchdog stops them.
+set -euo pipefail
+name=job mem=24G vram=0.75 cpus=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --name) name=$2; shift 2 ;;
+    --mem) mem=$2; shift 2 ;;
+    --vram) vram=$2; shift 2 ;;
+    --cpus) cpus=$2; shift 2 ;;
+    --) shift; break ;;
+    *) echo "guarded: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+[[ $# -gt 0 ]] || { echo "guarded: no command" >&2; exit 2; }
+unit="chirpv2-${name}-$(date +%Y%m%d-%H%M%S)-$$"
+props=(-p "MemoryMax=${mem}" -p "MemorySwapMax=0")
+[[ -n "$cpus" ]] && props+=(-p "CPUQuota=$((cpus * 100))%")
+export CHIRP_MAX_VRAM_FRACTION="$vram"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+echo "guarded: unit=$unit mem=$mem vram=$vram cpus=${cpus:-all}" >&2
+exec systemd-run --user --scope --quiet --unit="$unit" "${props[@]}" \
+  --setenv=CHIRP_MAX_VRAM_FRACTION="$vram" -- "$@"
