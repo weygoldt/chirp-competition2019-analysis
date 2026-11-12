@@ -1,0 +1,19 @@
+# Training scenes v1 (2026-11-12, overnight run): synthetic noise only.
+# Differences from gridtools' shipped default (configs/scenes/default.toml):
+# - 60 s scenes (more scenes, more variety per GB);
+# - fewer deliberate close-dF pairs (0.3 instead of 0.5): the default
+#   chains them into crowded clusters (44 % of time < 20 Hz vs 6 % real);
+# - lower chirp rates (0.05-0.25/s per fish instead of 0.05-0.5) so that
+#   fewer chirps overlap another fish's chirp by chance (44 % at the default).
+# Real background segments (hybrid scenes) come in train_v2.
+name = "train_v1"
+duration_s = 60.0
+
+[population]
+close_pair_prob = 0.3
+
+[chirps]
+rate_hz = [0.05, 0.25]
+
+[plot]
+enabled = false
