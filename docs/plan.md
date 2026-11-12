@@ -300,6 +300,15 @@ labelling with the P1b tool runs in parallel with P2–P4.
     used (linear frequency resolution is what separates fish). The dataset
     contract therefore stores emitter EODf and track id per box, and the
     trainer, bundle and evaluation are model-agnostic.
+20. Hybrid scenes only (2026-11-12, author): synthetic-noise-only scenes
+    (all of train_v1/sim_v1, 40% of train_v2/sim_v2) are dropped from
+    training, model selection (validation) and testing; their noise is too
+    Gaussian to be relevant. Training data is train_v3/sim_v3: every scene
+    on a real background segment (which replaces the synthetic electrode
+    noise, hum and clicks), with the background recordings split as in v2
+    (train/val/test disjoint), new seeds (train 2000-4399, val 4400-4699,
+    test 4700-4999). The same rule applies to the chirp-parameter decoder.
+    Models fitted on sim_v1/sim_v2 are kept on disk only for reference.
 
 ## Constraints
 
