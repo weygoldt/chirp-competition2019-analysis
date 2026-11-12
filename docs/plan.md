@@ -268,6 +268,13 @@ labelling with the P1b tool runs in parallel with P2–P4.
     thesis' hybrid dataset. Segments avoid detected chirps; real fish in them
     become tracked, non-chirping candidates; a hybrid scene takes its grid
     geometry from the background segment (no random electrode subsets).
+15. Recording setup (2026-11-12): electrode spacing of the tube competition
+    grids is unknown (not the 0.5 m in fishgrid.cfg; likely different in
+    2019 and 2020) and the reference electrode position is unknown. The
+    simulator draws spacing per scene from a broad range (field falloff
+    calibrated in units of spacing) and simulates an in-tank reference as an
+    augmentation. Detection and assignment must not rely on absolute
+    electrode positions or channel order.
 
 ## Constraints
 
