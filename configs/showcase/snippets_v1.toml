@@ -1,0 +1,40 @@
+# Hard snippets of real recordings for the model showcase (2026-11-12).
+# Chosen from v1 detections + tracks + click counts; (a)-(d) lie outside the
+# hand-labelled test regions, (e) inside one so misses and false positives
+# show against labels. Render: chirpdetector showcase --snippets THIS --v1
+# --bundle B ... --out /mnt/data1/chirp_v2/showcase
+
+[[snippet]]
+name = "close-df"
+recording = "/mnt/data2/2019_tube_competition/2020-03-13-10_00"
+t_start_s = 9400.0
+t_end_s = 9410.0
+reason = "two fish ~7 Hz apart, both chirping (12 v1 detections)"
+
+[[snippet]]
+name = "dense-bout"
+recording = "/mnt/data2/2019_tube_competition/2019-12-12-10_00"
+t_start_s = 10615.0
+t_end_s = 10625.0
+reason = "dense bout: 19 v1 detections, 8 near-simultaneous chirps of both fish"
+
+[[snippet]]
+name = "long-chirps"
+recording = "/mnt/data2/2019_tube_competition/2020-06-02-10_00"
+t_start_s = 10980.0
+t_end_s = 10990.0
+reason = "long big chirps (v1 boxes 400-570 ms), plateau and slow decay"
+
+[[snippet]]
+name = "clicks"
+recording = "/mnt/data2/2019_tube_competition/2020-05-19-10_00"
+t_start_s = 11662.3
+t_end_s = 11672.3
+reason = "click-heavy (29 click events in 10 s) with chirps"
+
+[[snippet]]
+name = "labelled"
+recording = "/mnt/data2/2019_tube_competition/2019-12-09-10_00"
+t_start_s = 1148.0
+t_end_s = 1158.0
+reason = "hand-labelled test region: compare boxes with labels"
