@@ -1,0 +1,34 @@
+# Training scenes v2, train split (2026-11-12): background segments only from the
+# train recordings (whole recordings per split, ~80/10/10 within each source, seed 20261112).
+# Differences from gridtools' shipped default (configs/scenes/default.toml):
+# - fewer deliberate close-dF pairs (0.3 instead of 0.5): the default
+#   chains them into crowded clusters (44 % of time < 20 Hz vs 6 % real);
+# - lower chirp rates (0.05-0.25/s per fish instead of 0.05-0.5) so that
+#   fewer chirps overlap another fish's chirp by chance (44 % at the default).
+# Hybrid scenes: 60 % of the scenes put the simulated fish on a real 60-s
+# background segment (library /mnt/data1/chirp_v2/background/v1): its grid,
+# noise, hum, clicks and non-chirping real fish (track idents >= 1000). The
+# unscreened 2022 segments are downweighted (0.3x); the pulse-heavy field
+# segments stay in as realistic negatives. Simulated fish SNR 10-35 dB (40 %)
+# or 35-80 dB, at most 30 dB below the segment's loudest real fish.
+# Scenes stay 60 s (the segment length; longer hybrid scenes are refused).
+# For train/validation/test splits by source recording, set
+# background.include_groups / exclude_groups (split_group in the manifest).
+name = "train_v2_train"
+duration_s = 60.0
+
+[population]
+close_pair_prob = 0.3
+
+[chirps]
+rate_hz = [0.05, 0.25]
+
+[background]
+library = "/mnt/data1/chirp_v2/background/v1"
+prob = 0.6
+unscreened_weight = 0.3
+max_real_gap_db = 30.0
+include_groups = ["competition2019/2019-11-25-09_59", "competition2019/2019-11-26-10_00", "competition2019/2019-11-28-09_58", "competition2019/2019-12-04-10_00", "competition2019/2019-12-05-10_00", "competition2019/2019-12-06-10_00", "competition2019/2019-12-11-10_00", "competition2019/2019-12-12-10_00", "competition2019/2019-12-16-10_00", "competition2019/2020-03-09-10_04", "competition2019/2020-03-10-09_56", "competition2019/2020-03-13-10_00", "competition2019/2020-03-17-11_17", "competition2019/2020-03-18-10_34", "competition2019/2020-03-19-10_00", "competition2019/2020-03-20-10_00", "competition2019/2020-03-23-09_58", "competition2019/2020-03-24-10_00", "competition2019/2020-03-25-10_00", "competition2019/2020-03-31-09_59", "competition2019/2020-05-11-10_00", "competition2019/2020-05-12-10_00", "competition2019/2020-05-13-10_00", "competition2019/2020-05-14-10_00", "competition2019/2020-05-15-10_00", "competition2019/2020-05-18-10_00", "competition2019/2020-05-20-10_00", "competition2019/2020-05-21-10_00", "competition2019/2020-05-25-10_00", "competition2019/2020-05-27-10_00", "competition2019/2020-05-28-10_00", "competition2019/2020-05-29-10_00", "competition2019/2020-06-02-10_00", "competition2019/2020-06-05-10_00", "competition2019/2020-06-08-10_00", "competition2019/2020-06-09-10_00", "competition2019/2020-06-10-10_00", "competition2022/2022-05-11-10_00", "competition2022/2022-06-02-10_00", "competition2022/2022-06-07-10_00", "competition2022/2022-06-08-10_00", "competition2022/2022-06-20-10_00", "competition2022/2022-06-22-10_00", "competition2022/2022-06-24-10_00", "competition2022/2022-06-27-10_00", "competition2022/2022-07-01-10_00", "competition2022/2022-07-04-10_00", "competition2022/2022-07-05-10_10", "competition2022/2022-07-06-10_00", "competition2022/2022-07-07-10_00", "field_flona2025/site_1", "field_flona2025/site_2", "field_flona2025/site_3", "field_flona2025/site_4", "field_flona2025/site_5", "field_flona2025/site_7", "field_flona2025/site_8", "field_iriri2026/iriri01_lago-de-pedro/grid00", "field_iriri2026/iriri01_lago-de-pedro/grid01", "field_iriri2026/iriri01_lago-de-pedro/grid04", "field_iriri2026/iriri01_lago-de-pedro/grid05", "field_iriri2026/iriri01_lago-de-pedro/grid06", "field_iriri2026/iriri01_lago-de-pedro/grid07", "field_iriri2026/iriri01_lago-de-pedro/grid08", "field_iriri2026/iriri02_igarape-dos-trempes/grid01", "field_iriri2026/iriri02_igarape-dos-trempes/grid02", "field_iriri2026/iriri02_igarape-dos-trempes/grid03", "field_iriri2026/iriri02_igarape-dos-trempes/grid04", "field_iriri2026/iriri02_igarape-dos-trempes/grid05"]
+
+[plot]
+enabled = false

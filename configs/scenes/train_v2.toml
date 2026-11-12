@@ -1,0 +1,32 @@
+# Training scenes v2 (2026-11-12): train_v1 plus real backgrounds.
+# Differences from gridtools' shipped default (configs/scenes/default.toml):
+# - fewer deliberate close-dF pairs (0.3 instead of 0.5): the default
+#   chains them into crowded clusters (44 % of time < 20 Hz vs 6 % real);
+# - lower chirp rates (0.05-0.25/s per fish instead of 0.05-0.5) so that
+#   fewer chirps overlap another fish's chirp by chance (44 % at the default).
+# Hybrid scenes: 60 % of the scenes put the simulated fish on a real 60-s
+# background segment (library /mnt/data1/chirp_v2/background/v1): its grid,
+# noise, hum, clicks and non-chirping real fish (track idents >= 1000). The
+# unscreened 2022 segments are downweighted (0.3x); the pulse-heavy field
+# segments stay in as realistic negatives. Simulated fish SNR 10-35 dB (40 %)
+# or 35-80 dB, at most 30 dB below the segment's loudest real fish.
+# Scenes stay 60 s (the segment length; longer hybrid scenes are refused).
+# For train/validation/test splits by source recording, set
+# background.include_groups / exclude_groups (split_group in the manifest).
+name = "train_v2"
+duration_s = 60.0
+
+[population]
+close_pair_prob = 0.3
+
+[chirps]
+rate_hz = [0.05, 0.25]
+
+[background]
+library = "/mnt/data1/chirp_v2/background/v1"
+prob = 0.6
+unscreened_weight = 0.3
+max_real_gap_db = 30.0
+
+[plot]
+enabled = false
