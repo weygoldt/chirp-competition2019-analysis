@@ -8,3 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+
+# Bulk data lives on /mnt/data1/chirp_v2, never in git
+data/
+runs/

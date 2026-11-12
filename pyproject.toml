@@ -1,17 +1,50 @@
 [project]
 name = "chirp-competition-upgrade"
 version = "0.1.0"
-description = "Add your description here"
+description = "Rebuild of the chirp simulation, detection and assignment pipeline (gridtools + chirpdetector v2)."
 readme = "README.md"
 authors = [
     { name = "weygoldt", email = "88969563+weygoldt@users.noreply.github.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "chirpdetector",
+    "gridtools",
+]
 
-[project.scripts]
-chirp-competition-upgrade = "chirp_competition_upgrade:main"
+[dependency-groups]
+dev = [
+    "hypothesis>=6.170",
+    "pre-commit>=4.7",
+    "pyright>=1.1.414",
+    "pytest>=9.2",
+    "pytest-cov>=7.1",
+    "ruff>=0.17",
+]
 
-[build-system]
-requires = ["uv_build>=0.13.7,<0.14.0"]
-build-backend = "uv_build"
+[tool.uv]
+# Not a library: this project only pins the environment the two packages
+# are developed and run in. Both are installed editable from the submodules.
+package = false
+
+[tool.uv.sources]
+gridtools = { path = "packages/gridtools", editable = true }
+chirpdetector = { path = "packages/chirpdetector", editable = true }
+
+[tool.pytest.ini_options]
+# Lets `pytest packages/gridtools packages/chirpdetector` run both suites
+# from the root; each package also runs standalone with its own config.
+addopts = ["--strict-markers", "--import-mode=importlib"]
+markers = [
+    "slow: long-running tests",
+    "gpu: tests that need a CUDA device (skipped if absent)",
+    "data: tests that need the recordings on /mnt/data2 (skipped if absent)",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF", "PT"]
+ignore = ["E501"]
