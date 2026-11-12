@@ -262,6 +262,12 @@ labelling with the P1b tool runs in parallel with P2–P4.
     above ~150 ms; equalization may be tempered or log-binned, because
     repeats are acceptable while the chirp's context (noise, other fish,
     position in the spectrogram) varies.
+14. Background noise (2026-11-12): simulated noise alone is too Gaussian.
+    Scenes add real background segments from the 2019 and 2022 competitions
+    (and field recordings if usable), scaled over a range of SNRs, as in the
+    thesis' hybrid dataset. Segments avoid detected chirps; real fish in them
+    become tracked, non-chirping candidates; a hybrid scene takes its grid
+    geometry from the background segment (no random electrode subsets).
 
 ## Constraints
 
