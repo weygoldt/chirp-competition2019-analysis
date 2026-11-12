@@ -242,6 +242,17 @@ labelling with the P1b tool runs in parallel with P2–P4.
    spectrogram (counterfactual re-rendering), with visibility-based ignore
    regions.
 8. Reproducing the v1 training set is not a goal.
+10. Template handling follows the author's MSc thesis (2026-11-12): chirps are
+    baseline-relative (usable on a fish of any EODf); rare large and long
+    chirps (up to ~400 Hz and several hundred ms) are kept and oversampled by
+    histogram equalization over excursion x duration (10 x 10 bins); the
+    chirp's amplitude envelope is its inverted frequency trace scaled by a
+    random factor (EOD amplitude between 100% and 20%); the baseline around a
+    chirp is crossfaded smooth.
+11. Scenes are written as multichannel wav, each with an annotated
+    spectrogram (tracks, chirps, emitter EODf).
+12. Click removal (port of audian/wavetracker) becomes a chirpdetector
+    preprocessing step if it leaves chirps intact.
 9. gridtools `df7f504` tagged `paper-chirp-competition-v1` (pushed), matching
    chirpdetector; `v2` branches pushed on both.
 
