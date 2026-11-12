@@ -255,6 +255,13 @@ labelling with the P1b tool runs in parallel with P2–P4.
     spectrogram (tracks, chirps, emitter EODf).
 12. Click removal (port of audian/wavetracker) becomes a chirpdetector
     preprocessing step if it leaves chirps intact.
+13. Template library (2026-11-12): the 320-440 Hz group (maybe Eigenmannia)
+    is kept; templates shorter than 5 ms are not real chirps and are
+    excluded; long chirps (300-450 ms, plateau and slow decay) are harvested
+    from the competition recordings, since the chirp-chamber source has none
+    above ~150 ms; equalization may be tempered or log-binned, because
+    repeats are acceptable while the chirp's context (noise, other fish,
+    position in the spectrogram) varies.
 
 ## Constraints
 
