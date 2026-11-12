@@ -291,6 +291,15 @@ labelling with the P1b tool runs in parallel with P2–P4.
     clean samples: every QC flag (ripple, multi-peak, line in span,
     baseline drift, low SNR, interrupted decay) excludes a template by
     default.
+19. Detector architecture (2026-11-12, author's idea): YOLO26 is the first
+    baseline. Next, a dual-head model with a strong backbone (DETR family,
+    e.g. RT-DETRv2/D-FINE with an extra regression head on the decoder
+    queries, or a timm backbone with an anchor-free head) that predicts the
+    box and the emitter's EODf in one forward pass; assignment becomes the
+    nearest live track to the predicted EODf. Log-mel audio models are not
+    used (linear frequency resolution is what separates fish). The dataset
+    contract therefore stores emitter EODf and track id per box, and the
+    trainer, bundle and evaluation are model-agnostic.
 
 ## Constraints
 
