@@ -65,12 +65,14 @@ once at the workspace root.
   - population: baseline EODf from a distribution fitted to the 33 trials'
     tracks; shared temperature drift + individual drift; small ΔF pairs and
     track crossings deliberately included;
-  - signals: parametric chirp families (small/type-2, big/type-1) with
-    excursion, duration, shape, undershoot and amplitude dip fitted to the
-    curated template library and real labels; template mode kept as an
-    alternative, sampling without duplicate inflation and logging template IDs;
-    rises; chirp timing with bursts and responses so near-simultaneous chirps
-    occur;
+  - signals: real chirps from the curated template library (decision 5),
+    sampled without duplicate inflation, every placed chirp logging its
+    template ID; amplitude modulation from real amplitude traces where the
+    library has them; rises; chirp timing with bursts and responses so
+    near-simultaneous chirps occur;
+  - re-rendering: any fish's signal can be re-rendered deterministically for a
+    time span, with or without a given chirp, on any electrodes (needed for
+    ground-truth boxes, see `chirpdetector.data`);
   - EOD: phase-continuous harmonic series with per-fish harmonic amplitudes
     and phases (no thunderfish dependency);
   - movement: vectorised correlated random walk with rest states, exporting
@@ -87,9 +89,13 @@ once at the workspace root.
     time, emitter, baseline, excursion, duration, AM, family, template ID),
     tracks in wavetracker format, electrode positions, fish paths,
     `scene.json` (resolved config, seed, versions).
-- `gridtools.templates`: rewrite of chirp extraction; curates the surviving
-  9,082 clustered templates (dedup, beat-ripple check, provenance flag
-  "source recording lost").
+- `gridtools.templates`: a versioned chirp template library built from the
+  surviving arrays (9,082 clustered templates; 13,015 extracted chirps):
+  dedup, beat-ripple and artefact checks, per-template metadata (excursion,
+  duration, family), provenance flag "source recording lost". If the library
+  turns out too narrow, it can be extended with chirps extracted from
+  well-separated, high-SNR fish in the competition recordings, with
+  provenance.
 - CLI: `gridtools sim run CONFIG --seeds 0:N --out DIR`, `gridtools sim plot SCENE`.
 
 ### chirpdetector v2
@@ -98,11 +104,36 @@ once at the workspace root.
   channels (e.g. long/medium/short windows on one grid) instead of three
   identical channels; electrode aggregation in power, not dB; fixed dB range
   relative to a robust per-window reference instead of per-tile min–max.
-  Parameters live in the bundle. Multi-resolution is a hypothesis to test by
-  ablation, not an assumption.
-- `chirpdetector.data`: chirp → box geometry (one function, in s and Hz),
-  dataset builders from simulated scenes and real audian labels, rendered with
-  the front end into a detector dataset with a manifest; grouped splits.
+  Parameters live in the bundle. Shorter windows trade frequency resolution
+  for time resolution, and frequency resolution is what separates close-ΔF
+  fish. The long window (v1: 4096 points, 4.9 Hz) therefore stays as one
+  channel; shorter windows are added next to it, not instead of it.
+  Assignment features use the long window and the tracks. Whether the extra
+  channels help is decided by ablation on the real test set.
+- `chirpdetector.data`: ground-truth boxes, dataset builders from simulated
+  scenes and real audian labels, rendered with the front end into a detector
+  dataset with a manifest; grouped splits.
+  - Ground-truth boxes come from the chirp's footprint in the actual
+    spectrogram, not from template width/height plus fixed padding
+    (v1: ±(width + 0.8·nfft/fs)/2 in time, baseline + trough − 5 bins to
+    baseline + height + 5 bins in frequency). For each chirp, the emitter's
+    signal is re-rendered over a short span with and without that chirp and
+    passed through the same front end as the detector. The footprint is the
+    set of time–frequency cells where the two differ by more than a threshold
+    relative to the footprint's peak. This includes the power drop at the
+    emitter's baseline during the chirp and the smear of the analysis
+    window, at whatever window length the bundle uses.
+  - Visibility: footprint power is compared with the mixture (other fish +
+    noise) in the same cells, giving a per-chirp SNR. Chirps above a
+    visibility threshold become boxes; chirps below it become ignore regions
+    (neither positive nor negative), so invisible chirps don't train the
+    model to hallucinate and missed-but-real chirps don't count as negatives.
+  - Edge cases are handled explicitly: chirps cut by window edges (kept if
+    enough of the footprint is visible, otherwise ignore), overlapping chirps
+    of different fish (one footprint per fish), harmonics (fundamental only by
+    default; configurable).
+  - Per-chirp SNR, ΔF to the nearest fish and overlap flags are stored with
+    every label, for stratified evaluation.
 - `chirpdetector.models`: detector backend behind a small protocol (default
   ultralytics YOLO26, NMS-free; see decision 1); assignment model in PyTorch.
 - `chirpdetector.training`:
@@ -128,7 +159,7 @@ once at the workspace root.
   (N12); candidates = tracks alive at the chirp time (D5); a real rejection
   threshold (N4); one output table with schema and provenance, plus legacy
   `chirp_times`/`chirp_ids` arrays for the paper analysis code.
-- CLI: `chirpdetector build-dataset | train | evaluate | detect`.
+- CLI: `chirpdetector build-dataset | train | evaluate | detect | label-emitters`.
 
 ### Assignment model
 
@@ -156,19 +187,24 @@ and the assignment stage is already track-conditioned.
 
 - **Detection:** keep the 4 labelled recordings (335 chirps) as the locked test
   set and enlarge it with audian (specdetector workflow), prioritising
-  close-ΔF and overlapping-chirp regions. The 2023 Label Studio labels
-  (537 images, 7,416 boxes, 17 recordings) become real training/validation
-  data after conversion to s/Hz, if the pixel → time/frequency mapping can be
-  recovered.
-- **Emitter:** none exists (audit summary 1). Options, ranked by
-  cost/benefit:
-  1. hand-label the emitter on a stratified real subset where a human can
-     decide;
-  2. hybrid scenes: simulated chirping fish added to real recordings;
-  3. superposition of single-fish recordings on the same grid, if such data
-     exist (exact by linearity of the field);
-  4. 2022 trials with video + SLEAP: compare the chirp's spatial power
-     centroid with video positions.
+  close-ΔF and overlapping-chirp regions. The 2023 Label Studio labels are
+  not used (labelled on plain PNGs; mapping to time/frequency not
+  recoverable).
+- **Emitter:** none exists (audit summary 1); no single-fish or empty-tank
+  recordings exist either. Plan:
+  1. hand labels from a dedicated, keyboard-driven labelling tool
+     (`chirpdetector label-emitters`, local browser UI). One chirp per screen:
+     multi-resolution spectrogram snippet with candidate tracks overlaid in
+     colour, per-electrode power maps of the chirp vs each candidate's
+     baseline, keys 1–9 for the emitter, 0 for "can't tell", undo. Queue
+     stratified by ΔF and recording; writes audian-compatible CSV plus an
+     emitter column. Labelling can start before the new detector exists, on
+     v1 detections (`chirpdetector_bboxes.csv`) of the 33 trials; the model
+     never trains on these labels, so any trial can be used;
+  2. hybrid scenes: simulated chirping fish added to real recordings, with
+     geometry preserved and controlled SNR;
+  3. optional: 2022 trials with video + SLEAP, comparing the chirp's spatial
+     power centroid with video positions.
 
 ## Phases
 
@@ -179,15 +215,35 @@ and a short entry in `docs/`.
 |---|---|---|
 | P0 Foundations | Dead code deleted (one commit per repo); PEP 621 + uv_build, src layout; workspace wiring (editable); ruff, pyright, pytest, pre-commit, GitHub Actions (CPU) | `uv sync` at root; CI green on 3.13/3.14 |
 | P1 Data layer | `gridtools.io` for recordings, geometry, tracks, labels | loads all 33 trials and the 4 labelled recordings; round-trip tests |
-| P2 Simulator | `gridtools.sim` as above | tests: instantaneous frequency of synthesized EOD = f(t); ground-truth chirp time and box enclose the chirp energy; dipole falloff; bit-exact seed reproducibility; chirps at scene edges; sim-vs-real diagnostics report |
-| P3 Chirp model | fitted chirp families + curated template library | parameter distributions sim vs real plotted and reviewed |
-| P4 Detector | front end, dataset builder, training + evaluation subpackages, first bundle | grouped CV + locked real test; beats v1 (F1 0.866 at P ≈ 1.00) or a documented reason why not; ablation of front-end choices |
-| P5 Assignment | features, model, training, evaluation, real emitter labels | stratified sim metrics + real-subset metrics from the shipped bundle |
+| P1b Labelling tool | `chirpdetector label-emitters` on v1 detections | the author can label at a sustained pace; labels round-trip to CSV |
+| P2 Simulator | `gridtools.sim` as above | tests: instantaneous frequency of synthesized EOD = f(t); chirp re-rendering is exact; dipole falloff; bit-exact seed reproducibility; chirps at scene edges; sim-vs-real diagnostics report |
+| P3 Template library | curated, versioned real-chirp library | dedup and quality report; per-template metadata; distributions reviewed |
+| P4 Detector | front end, footprint-based ground-truth boxes, dataset builder, training + evaluation subpackages, first bundle | box tests (footprint contains the chirp energy; invisible chirps become ignore regions; edge and overlap cases); grouped CV + locked real test; beats v1 (F1 0.866 at P ≈ 1.00) or a documented reason why not; ablation of front-end choices |
+| P5 Assignment | features, model, training, evaluation on real emitter labels | stratified sim metrics + real-subset metrics from the shipped bundle |
 | P6 Re-detection | streaming inference, output schema, run on 33 trials | v1 → v2 diff report per trial and fish |
 | P7 Release | docs site, README quickstart, tagged releases, bundles archived (GitHub release or Zenodo) | a fresh clone reproduces P4–P6 from configs |
 
-Order: P0 → P1 → P2/P3 (interleaved) → P4 → P5 → P6 → P7. P4 can start on
-real labels and an early simulator once P1 exists.
+Order: P0 → P1 → P1b → P2/P3 (interleaved) → P4 → P5 → P6 → P7. Emitter
+labelling with the P1b tool runs in parallel with P2–P4.
+
+## Decisions (2026-11-12)
+
+1. License: ultralytics (AGPL-3.0) is acceptable; YOLO26 is the default
+   detector. RF-DETR stays an optional comparison in P4.
+2. Emitter ground truth: the author hand-labels with a fast dedicated tool
+   (P1b). No single-fish or empty-tank recordings exist.
+3. Re-detection uses the 2020 production tracks; wavetracker is not ready.
+4. The 2023 Label Studio labels are dropped.
+5. Chirps in the simulator are real chirps (templates), not parametric
+   models, which tend to be unrealistically smooth.
+6. Time–frequency trade-off: the long analysis window stays; shorter windows
+   are only added as extra channels if the ablation shows a gain.
+7. Ground-truth boxes are derived from each chirp's footprint in the
+   spectrogram (counterfactual re-rendering), with visibility-based ignore
+   regions.
+8. Reproducing the v1 training set is not a goal.
+9. gridtools `df7f504` tagged `paper-chirp-competition-v1` (pushed), matching
+   chirpdetector; `v2` branches pushed on both.
 
 ## Constraints
 
@@ -195,5 +251,4 @@ real labels and an early simulator once P1 exists.
   wavetracker-salience were using ~7.5 GB on 2026-11-12).
 - All bulk data on `/mnt/data1`; `/home` and `/mnt/data2` are nearly full.
 - `main` of both submodules stays untouched until v2 is ready; v1 stays
-  available as tag `paper-chirp-competition-v1` (chirpdetector) and should get
-  the same tag on gridtools `df7f504`.
+  available as tag `paper-chirp-competition-v1` on both repos.
