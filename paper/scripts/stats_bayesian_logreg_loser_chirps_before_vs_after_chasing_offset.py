@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset.py).
+# Changes: input/output under $PAPER_OUT/data/processed; the input is written by the
+# reconstructed make_chirps_around_chasing_obs.py (its old writer was never committed, audit O5).
 """
 Estimate P(loser chirp in the 10 s BEFORE chasing offset | at least one loser
 chirp in the 20 s window around chasing offset) using an intercept-only
@@ -13,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from stats_utils import parse_bambi_model_output, save_json, log_odds_to_prob
+from paper_config import PROCESSED
 
 
 HDI_PROB = 0.95
@@ -62,7 +66,7 @@ def _print_summary(summary, title):
 
 
 def main():
-    dataroot = Path("data/processed/chirp_event_correlations/data/chasing")
+    dataroot = PROCESSED / "chirp_event_correlations" / "data" / "chasing"
     files = list(dataroot.glob("*obs*"))
     if len(files) != 1:
         raise ValueError(f"Expected exactly one file with 'obs' in name, got {files}")
@@ -116,7 +120,7 @@ def main():
 
     # Persist outputs
     filename = Path(__file__).stem
-    savepath = Path("data/processed/")
+    savepath = PROCESSED
     savepath.mkdir(parents=True, exist_ok=True)
 
     trace.to_netcdf(savepath / f"{filename}_trace.nc")
