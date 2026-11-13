@@ -214,12 +214,16 @@ ablation is running, branch `v2-ablation-frontend`).
 
 ## 5. Sampler diagnostics (new fits)
 
-0 divergences in every fit. Max r̂ ≤ 1.010 everywhere except the hurdle
-presence model (1.018, on `1|interaction_id_sigma`; status ≤ 1.006) and the
-echo winner-after-loser model (1.013, Intercept); min bulk ESS ≥ 294
-(echo), ≥ 573 (hurdle presence), ≥ 803 (coupling), 4,775 (status), ≥ 1,183
-(the three M4 fits of fig:re_analysis; the other 56 receiver-effect fits were
-not checked individually).
+- Status, coupling (5), hurdle (2), echo (2), offset (2), before/after: 0
+  divergences. Max r̂ ≤ 1.010 except the hurdle presence model (1.018, on
+  `1|interaction_id_sigma`; status ≤ 1.006) and the echo winner-after-loser
+  model (1.013, Intercept). Min bulk ESS ≥ 294 (echo), ≥ 573 (hurdle
+  presence), ≥ 803 (coupling), 4,775 (status).
+- Receiver effect (59 Gamma fits, `slope_summary.csv`): max r̂ ≤ 1.01, min
+  bulk ESS ≥ 757 in all. Primary (recording) and fallback fits: 0 divergences.
+  Seven fits of the crossed loser × winner × recording sensitivity structure
+  have 1–8 divergences (M5 full 8, M2 untruncated 3, the others 1); the old run
+  had 1–3 in five fits of the same structure.
 
 ## 6. Operational notes
 
