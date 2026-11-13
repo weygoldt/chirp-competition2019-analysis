@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/plot_chirp_coupling.py).
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure().
 """
 Figure: coupling of chirp rate to competition intensity.
 
@@ -37,6 +39,7 @@ import pandas as pd
 from matplotlib.transforms import blended_transform_factory
 from scipy.stats import gaussian_kde
 
+from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
     set_light_style,
@@ -54,18 +57,16 @@ cm = 1 / 2.54
 # Configuration
 # ---------------------------------------------------------------------------
 HEATMAP_ALPH = 1
-C2_TRACE = Path("data/processed/chirp_coupling/negbin/C2_prev_ICI_and_D.nc")
-OBS_DATA = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/"
-    "data/chirp_effect_on_dominant_obs.csv"
+C2_TRACE = PROCESSED / "chirp_coupling" / "negbin" / "C2_prev_ICI_and_D.nc"
+OBS_DATA = (
+    PROCESSED / "chirp_effect_on_dominant_adaptive_window"
+    / "data" / "chirp_effect_on_dominant_obs.csv"
 )
 
 
 formats = ["pdf", "png", "svg"]
 filename = Path(__file__).stem
-targetpath = Path(
-    os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures") + "/" + filename
-)
+targetpath = figure(filename)
 
 # The fixed counting window is 16 s wide (-3, +13 s around chase offset).
 WINDOW_WIDTH_S = 16.0

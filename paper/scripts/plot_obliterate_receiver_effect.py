@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/plot_obliterate_receiver_effect.py).
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); the 'rows affected' percentage (hard-coded 6.1 %, from the v1 data) is computed from obs.csv.
 """
 Figure: receiver-effect decomposition (3 panels).
 
@@ -38,6 +40,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.transforms import blended_transform_factory
 
+from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
     set_light_style,
@@ -58,15 +61,25 @@ cm = 1 / 2.54  # for figsize in centimetres
 # Configuration
 # ---------------------------------------------------------------------------
 filename = Path(__file__).stem
-SLOPE_SUMMARY = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/"
-    "gamma_glmm_binary/slope_summary.csv"
+SLOPE_SUMMARY = (
+    PROCESSED / "chirp_effect_on_dominant_adaptive_window"
+    / "gamma_glmm_binary" / "slope_summary.csv"
 )
-RATE_DATA = Path("data/processed/loser_chirps_warped_chase/normalized_chirp_rate.csv")
-OUT_FIG = (
-    Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures"))
-    / f"{filename}.pdf"
+RATE_DATA = PROCESSED / "loser_chirps_warped_chase" / "normalized_chirp_rate.csv"  # never read
+OUT_FIG = figure(f"{filename}.pdf")
+OBS_DATA = (
+    PROCESSED / "chirp_effect_on_dominant_adaptive_window"
+    / "data" / "chirp_effect_on_dominant_obs.csv"
 )
+
+
+def contamination_pct() -> float:
+    """Share of chase rows whose post-offset loser-chirp flag differs between the
+    clipped and the unclipped window (was hard-coded as 6.1 %: 119 of 1,958 rows
+    of the v1 data)."""
+    obs = pd.read_csv(OBS_DATA)
+    differs = obs["loser_chirped_post_offset_clipped"] != obs["loser_chirped_post_offset_unclipped"]
+    return 100 * float(differs.mean())
 
 # PRIMARY_RE = "primary_actor_partner"
 PRIMARY_RE = "primary_recording"
@@ -547,7 +560,7 @@ def draw_schematic(ax: plt.Axes) -> None:
     ax.text(
         zone_mid,
         UNCLIP_Y[1] + 0.25,
-        "(6.1 \\% of rows affected)",
+        f"({contamination_pct():.1f} \\% of rows affected)",
         ha="center",
         va="bottom",
         fontsize=7,
@@ -811,9 +824,9 @@ def main() -> None:
     df = load_slope_summary()
 
     data = load_hybrid_rates(
-        onset_path="data/processed/event_time_rates/lchirps@agon.json",
-        warped_path="data/processed/event_time_rates/lchirps@warped_chase.json",
-        offset_path="data/processed/event_time_rates/lchirps@agoff.json",
+        onset_path=PROCESSED / "event_time_rates" / "lchirps@agon.json",
+        warped_path=PROCESSED / "event_time_rates" / "lchirps@warped_chase.json",
+        offset_path=PROCESSED / "event_time_rates" / "lchirps@agoff.json",
     )
 
     fig, ax_schematic, ax_forest = setup_plot()

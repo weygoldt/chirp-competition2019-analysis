@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/plot_re_analysis.py).
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure().
 """
 Random-effects justification — figure + terminal readout.
 
@@ -38,6 +40,7 @@ import seaborn as sns
 from matplotlib.transforms import blended_transform_factory
 from scipy.stats import gaussian_kde
 
+from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
     set_light_style,
@@ -58,29 +61,19 @@ cm = 1 / 2.54  # for figsize in centimetres
 # Paths
 # ---------------------------------------------------------------------------
 filename = Path(__file__).stem
-SLOPE_SUMMARY = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/"
-    "gamma_glmm_binary/slope_summary.csv"
-)
-VARIANCE_SUMMARY = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/"
-    "gamma_glmm_binary/variance_summary.csv"
-)
-EVENTS_DATA = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/data/"
-    "chirp_effect_on_dominant_obs.csv"
+_GAMMA = PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "gamma_glmm_binary"
+SLOPE_SUMMARY = _GAMMA / "slope_summary.csv"
+VARIANCE_SUMMARY = _GAMMA / "variance_summary.csv"
+EVENTS_DATA = (
+    PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "data"
+    / "chirp_effect_on_dominant_obs.csv"
 )
 # Directory holding the InferenceData NetCDF files written by the
 # stats pipeline. Filenames follow the {re}__{subset}__{model}.nc
 # convention. Optional: if a trace is missing, the figure falls back
 # to bars-only for that row.
-TRACE_DIR = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/gamma_glmm_binary"
-)
-OUT_FIG = (
-    Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures"))
-    / f"{filename}.pdf"
-)
+TRACE_DIR = _GAMMA
+OUT_FIG = figure(f"{filename}.pdf")
 
 
 # ---------------------------------------------------------------------------
