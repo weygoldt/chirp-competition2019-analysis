@@ -1,0 +1,128 @@
+"""
+Estimate whether loser/winner chirps occur in a fixed window around chasing
+offsets using a Bayesian Bernoulli intercept-only GLMM with a random
+intercept on recording.
+
+The estimand is the population-level probability that an event has at least
+one chirp from the focal role (loser or winner) in the analysis window
+(`*_chirps_fixed_m3p13`, i.e. ~-3 to +13 s relative to chasing offset).
+"""
+
+from pathlib import Path
+
+import arviz as az
+import bambi as bmb
+import numpy as np
+import pandas as pd
+
+from stats_utils import parse_bambi_model_output, log_odds_to_prob, save_json
+
+
+HDI_PROB = 0.95
+SEED = 20250101
+
+
+def _bernoulli_summary(p_draws, observed_fraction, n_events, hdi_prob=HDI_PROB):
+    """Posterior summaries on the probability scale for an intercept-only model."""
+    p_draws = np.asarray(p_draws).ravel()
+    lo, hi = az.hdi(p_draws, hdi_prob=hdi_prob).tolist()
+    return {
+        "n_events": int(n_events),
+        "observed_fraction": float(observed_fraction),
+        "posterior_mean": float(p_draws.mean()),
+        "posterior_median": float(np.median(p_draws)),
+        "hdi_prob": hdi_prob,
+        "hdi_lower": float(lo),
+        "hdi_upper": float(hi),
+    }
+
+
+def _print_summary(summary, title):
+    pct = int(round(summary["hdi_prob"] * 100))
+    width = max(60, len(title) + 4)
+    bar = "=" * width
+    print()
+    print(bar)
+    print(title)
+    print(bar)
+    print(f"  events (n)              {summary['n_events']}")
+    print(f"  observed fraction       {summary['observed_fraction']:.3f}")
+    print(
+        f"  posterior median        {summary['posterior_median']:.3f}   "
+        f"[{pct}% HDI: {summary['hdi_lower']:.3f}, {summary['hdi_upper']:.3f}]"
+    )
+    print(f"  posterior mean          {summary['posterior_mean']:.3f}")
+    print(bar)
+
+
+def _load_data():
+    dataroot = Path("data/processed/chirp_event_correlations_m3p13/data/chasing")
+    files = list(dataroot.glob("*obs*"))
+    if len(files) != 1:
+        raise ValueError(f"Expected exactly one file with 'obs' in name, got {files}")
+    return pd.read_csv(files[0])
+
+
+def fit_for_mode(df, mode, savepath):
+    if mode == "loser":
+        df = df.assign(chirped=df["n_loser_chirps_fixed_m3p13"] > 0)
+    elif mode == "winner":
+        df = df.assign(chirped=df["n_winner_chirps_fixed_m3p13"] > 0)
+    else:
+        raise ValueError(f"mode must be 'loser' or 'winner', got {mode!r}")
+
+    n_events = len(df)
+    observed_fraction = float(df["chirped"].mean())
+
+    bmb_model = bmb.Model(
+        formula="chirped ~ 1 + (1|recording)",
+        data=df,
+        family="bernoulli",
+        categorical=["recording"],
+    )
+
+    trace = bmb_model.fit(
+        tune=6000,
+        draws=1000,
+        chains=25,
+        cores=25,
+        target_accept=0.99,
+        random_seed=SEED,
+    )
+
+    intercept_draws = trace.posterior["Intercept"].to_numpy().ravel()
+    p_draws = log_odds_to_prob(intercept_draws)
+
+    summary = _bernoulli_summary(
+        p_draws,
+        observed_fraction=observed_fraction,
+        n_events=n_events,
+        hdi_prob=HDI_PROB,
+    )
+    _print_summary(
+        summary,
+        title=f"P({mode} chirp in fixed window around chasing offset)",
+    )
+
+    filename = Path(__file__).stem + "_" + mode
+    trace.to_netcdf(savepath / f"{filename}_trace.nc")
+    save_json(
+        {
+            "model_info": parse_bambi_model_output(bmb_model),
+            "posterior_summary": summary,
+        },
+        savepath / f"{filename}_summary.json",
+    )
+
+
+def main():
+    savepath = Path("data/processed/")
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    df = _load_data()
+    for mode in ("loser", "winner"):
+        fit_for_mode(df, mode, savepath)
+
+
+if __name__ == "__main__":
+    main()
