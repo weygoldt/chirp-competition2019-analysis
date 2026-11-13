@@ -1,0 +1,43 @@
+# Production detection run over the tube competition dataset
+# (/mnt/data2/2019_tube_competition, 50 recordings, 2019-11 to 2020-06).
+# Outputs: /mnt/data1/chirp_v2/detections/<name>/<recording>/...
+#   chirps_rtdetr.parquet, chunks_rtdetr.parquet, chirp_times_rtdetr.npy,
+#   chirp_ids_rtdetr.npy, meta.json, qc/, windows/; run.json, run.log,
+#   candidates.csv (labeller format) and columns.md in the run directory.
+[run]
+name = "competition2019_v2_20261113"
+out = "/mnt/data1/chirp_v2/detections"
+
+[models]
+# dual-head RT-DETRv2-r18: boxes + emitter EODf (weights 9fcdef3c)
+detector = "/mnt/data1/chirp_v2/runs/dualhead_r18_sim_v4_r1/final/bundle"
+# chirp-parameter decoder (retrained with box-midpoint matching, 2026-11-13), locked to that detector by hash (weights c0801c56)
+decoder = "/mnt/data1/chirp_v2/params/runs/v4-dualhead-sim-v4-r2/bundle"
+allow_detector_mismatch = false
+
+[detection]
+store_threshold = 0.05      # every detection down to 0.05 is stored
+operating_threshold = 0.5   # column `operating`; legacy arrays and QC use it
+postprocess = true          # flags harmonic copies / duplicates (rows kept)
+
+[assignment]
+tracks = "."                # the 2020 production wavetracker arrays in each trial dir
+tolerance_hz = 20.0
+max_gap_s = 10.0
+baseline_window_s = 1.0
+baseline_guard_s = 0.0
+
+[compute]
+device = "cuda"
+max_vram_fraction = 0.4
+chunk_tiles = 48            # 105.6 s per chunk
+click_workers = 2
+clean_processes = 4
+prefetch = 5
+
+[validation]
+qc = true
+windows = 10
+window_s = 10.0
+candidates_per_cell = 6
+seed = 0
