@@ -130,13 +130,16 @@ uv run python experiments/templates/build_splits_v1.py  # writes splits_v1.json 
 
 # 3. Background libraries
 uv run python -m gridtools.background build $CHIRP_DATA/background/v1 \
-    --datasets competition2019 competition2022 field_iriri2026 field_flona2025 field_flona2023 --workers 6 --seed 0
+    --datasets competition2019 competition2022 field_iriri2026 field_flona2025 field_flona2023 \
+    --root-2019 $CHIRP_REC_2019 --root-2022 $CHIRP_REC_2022 --root-iriri2026 $CHIRP_FIELD_IRIRI2026 \
+    --root-flona2025 $CHIRP_FIELD_FLONA2025 --root-flona2023 $CHIRP_FIELD_FLONA2023 --workers 6 --seed 0
 #    chirp screens: scripts/v1_screen.py (frozen v1 environment, see its docstring)
 #    -> $CHIRP_DATA/background/screens/v1; scripts/v2_screen.py bundle + screen -> screens/v2_yolo26s
 uv run python -m gridtools.background carry-over $CHIRP_DATA/background/v1 $CHIRP_DATA/background/v2 \
     --datasets field_flona2025 field_iriri2026
 uv run python -m gridtools.background build $CHIRP_DATA/background/v2 \
-    --config configs/background/v2.toml --datasets competition2019 competition2022
+    --config configs/background/v2.toml --datasets competition2019 competition2022 \
+    --root-2019 $CHIRP_REC_2019 --root-2022 $CHIRP_REC_2022
 
 # 4. Training scenes train_v4 (3,000 one-minute hybrid scenes)
 uv run gridtools sim run configs/scenes/train_v4_train.toml --seeds 5000:7400 --out $CHIRP_DATA/scenes/train_v4/train --workers 12
@@ -147,7 +150,9 @@ uv run gridtools sim run configs/scenes/train_v4_test.toml  --seeds 7700:8000 --
 uv run chirpdetector data build-scenes --out $CHIRP_FAST/datasets/sim_v4 \
     --split-dir train=$CHIRP_DATA/scenes/train_v4/train --split-dir val=$CHIRP_DATA/scenes/train_v4/val \
     --split-dir test=$CHIRP_DATA/scenes/train_v4/test --workers 8 --threads 2 --device cuda
-uv run chirpdetector data build-real --out $CHIRP_DATA/datasets/real_test_v1
+uv run chirpdetector data build-real --out $CHIRP_DATA/datasets/real_test_v1 \
+    --recording $CHIRP_REC_2019/2019-12-09-10_00 --recording $CHIRP_REC_2019/2020-06-03-10_10 \
+    --recording $CHIRP_REC_2022/raw/2022-05-12-10_00 --recording $CHIRP_REC_2022/raw/2022-06-01-10_00
 
 # 6. Detectors
 experiments/training/train_dualhead.sh experiments/training/dualhead_r18_sim_v4.toml \

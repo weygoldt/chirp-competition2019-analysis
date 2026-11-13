@@ -21,6 +21,12 @@ shell scripts):
     The frozen v1 detector benchmark of the chirp competition analysis
     (its ``results/boxes`` hold v1's boxes on the labelled regions).
     Default ``~/wrk/analyses/chirp_competition/detector_benchmark``.
+``GRIDTOOLS_TEMPLATES``
+    The chirp template library gridtools draws from (gridtools has no default
+    since it went public). Default ``$CHIRP_DATA/templates/v4``.
+``CHIRP_FIELD_FLONA2023``, ``CHIRP_FIELD_FLONA2025``, ``CHIRP_FIELD_IRIRI2026``
+    Field recordings for the background libraries (``--root-*`` of
+    ``python -m gridtools.background build``). Defaults: the paths on polarbear.
 
 Import from a script with::
 
@@ -33,7 +39,19 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-__all__ = ["DATA", "EXPERIMENTS", "FAST", "REC_2019", "REC_2022", "REPO", "V1_BENCHMARK"]
+__all__ = [
+    "DATA",
+    "EXPERIMENTS",
+    "FAST",
+    "FIELD_FLONA2023",
+    "FIELD_FLONA2025",
+    "FIELD_IRIRI2026",
+    "REC_2019",
+    "REC_2022",
+    "REPO",
+    "TEMPLATES",
+    "V1_BENCHMARK",
+]
 
 
 def _env(name: str, default: str) -> Path:
@@ -48,4 +66,13 @@ REC_2019 = _env("CHIRP_REC_2019", "/mnt/data2/2019_tube_competition")
 REC_2022 = _env("CHIRP_REC_2022", "/mnt/data2/2022_tube_competition")
 V1_BENCHMARK = _env(
     "CHIRP_V1_BENCHMARK", "~/wrk/analyses/chirp_competition/detector_benchmark"
+)
+TEMPLATES = _env("GRIDTOOLS_TEMPLATES", str(DATA / "templates" / "v4"))
+FIELD_FLONA2023 = _env("CHIRP_FIELD_FLONA2023", "/mnt/data1/efish/fielddata/flona2023")
+FIELD_FLONA2025 = _env(
+    "CHIRP_FIELD_FLONA2025", "/mnt/data1/efish/fielddata/flona2025_workspace/flona2025"
+)
+FIELD_IRIRI2026 = _env(
+    "CHIRP_FIELD_IRIRI2026",
+    "/run/media/weygoldt/data1/efish/fielddata/iriri2026/iriri2026_recordings",
 )
