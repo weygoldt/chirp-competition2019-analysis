@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src_paper/analyze_warped_chase_chirp_rates_trial.py).
+# Changes: chirps via analyze_event_time_rates_trial.load_data (chirps.load_chirps); data root
+# defaults to paper_config.DATA_ROOT; output under $PAPER_OUT; np.random.seed(SEED) (unseeded before).
 """
 Analyze the loser chirp rate in time-warped chase windows.
 
@@ -34,6 +37,7 @@ from analyze_event_time_rates_trial import (
     load_data,
 )
 from logger import get_logger
+from paper_config import DATA_ROOT, SEED, processed_dir
 
 logger = get_logger(__name__)
 
@@ -217,7 +221,8 @@ def null_warped_rate_bootstrap(
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
-def main(path: Path):
+def main(path: Path = DATA_ROOT):
+    np.random.seed(SEED)  # the resampling was unseeded in the old code
     trial_summary = pd.read_csv(path / "trial_summary.csv")
 
     per_trial_chase_windows = []
@@ -328,8 +333,7 @@ def main(path: Path):
             per_trial_rates[t] = per_chase_rates[mask].mean(axis=0)
 
     # --- Save ----------------------------------------------------------
-    datapath = Path("data/processed/event_time_rates")
-    datapath.mkdir(parents=True, exist_ok=True)
+    datapath = processed_dir("event_time_rates")
 
     flat_D = [D for D_list in per_trial_chase_D for D in D_list]
     flat_u = [u.tolist() for u_list in per_trial_chase_u for u in u_list]

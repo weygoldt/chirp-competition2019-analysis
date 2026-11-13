@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src_paper/stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets.py).
+# Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
+# start method for pymc on Python 3.14). Models, priors, sampler settings and seed unchanged.
 """
 Hurdle / two-part Bayesian GLMM for chirp activity around chase offsets,
 comparing observed activity against a shuffle-time null.
@@ -67,15 +70,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from paper_config import PROCESSED
 from stats_utils import parse_bambi_model_output
 
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-DATA_DIR = Path("data/processed/chirp_event_correlations_m3p13/data/chasing")
+DATA_DIR = PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
 OBS_FILE = DATA_DIR / "chirps_around_chasing_obs.csv"
-OUTDIR = Path("data/processed/chirp_event_correlations_m3p13/hurdle_shuffle_baseline")
+OUTDIR = PROCESSED / "chirp_event_correlations_m3p13" / "hurdle_shuffle_baseline"
 
 # Primary response: the m3p13 window. Listed as a list so other windows
 # can be appended later (e.g. 20s symmetric) for sensitivity checks.

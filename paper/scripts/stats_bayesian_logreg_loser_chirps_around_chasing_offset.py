@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/stats_bayesian_logreg_loser_chirps_around_chasing_offset.py).
+# Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
+# start method for pymc on Python 3.14). Model, priors, sampler settings and seed (20250101) unchanged.
 """
 Estimate whether loser/winner chirps occur in a fixed window around chasing
 offsets using a Bayesian Bernoulli intercept-only GLMM with a random
@@ -15,6 +18,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from paper_config import PROCESSED
 from stats_utils import parse_bambi_model_output, log_odds_to_prob, save_json
 
 
@@ -56,7 +60,7 @@ def _print_summary(summary, title):
 
 
 def _load_data():
-    dataroot = Path("data/processed/chirp_event_correlations_m3p13/data/chasing")
+    dataroot = PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
     files = list(dataroot.glob("*obs*"))
     if len(files) != 1:
         raise ValueError(f"Expected exactly one file with 'obs' in name, got {files}")
@@ -116,7 +120,7 @@ def fit_for_mode(df, mode, savepath):
 
 
 def main():
-    savepath = Path("data/processed/")
+    savepath = PROCESSED
     savepath.mkdir(parents=True, exist_ok=True)
 
     df = _load_data()

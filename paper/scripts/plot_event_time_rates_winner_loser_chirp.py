@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/plot_event_time_rates_winner_loser_chirp.py; made the paper PDF, 16 x 11 cm).
+# Changes: JSONs from $PAPER_OUT/data/processed/event_time_rates, figures via paper_config.figure (png, pdf, svg as before);
+# rate-axis limits extended (loser 10 -> 15, winner 4 -> 6 /min) because the v2 rates would be clipped.
 import json
 from pathlib import Path
 
@@ -12,12 +15,11 @@ from style import (
     loser_color,
 )
 from IPython import embed
+from paper_config import PROCESSED, figure
 
 
 filename = Path(__file__).stem
-targetpath = (
-    Path("/home/weygoldt/wrk/analyses/chirp_competition_paper/figures") / filename
-)
+targetpath = figure(filename)
 formats = ["png", "pdf", "svg"]
 mode = "light"  # "dark"
 pval_keys = {
@@ -298,7 +300,7 @@ def setup_plot():
 
 
 def load_data():
-    datapath = Path("data/processed/event_time_rates")
+    datapath = PROCESSED / "event_time_rates"
 
     lchirps_chase_wildcard = "lchirps@ag*.json"
     lchirps_contact_wildcard = "lchirps@con*.json"
@@ -433,7 +435,9 @@ def main():
 
     print(data[0].keys())
     xlims = -30, 30
-    yratelims = [(0, 10)] * 4 + [(0, 4)] * 4
+    # Extended for the v2 detections (was [(0, 10)] * 4 + [(0, 4)] * 4): the upper bands reach
+    # 12.9 /min (loser, A1) and 4.6 /min (winner, D2); new tops are the next multiple of the tick step.
+    yratelims = [(0, 15)] * 4 + [(0, 6)] * 4
     yeventlims = -0.5, np.max([len(d["centered_times"]) for d in data])
 
     fig, axs, texts = setup_plot()

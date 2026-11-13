@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/summarize_chirp_event_correlation_around_loser_chirps.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data root defaults to paper_config.DATA_ROOT;
+# output under $PAPER_OUT (it still clears its own output directory first). Seed, trial selection unchanged.
 import shutil
 from pathlib import Path
 
@@ -5,6 +8,9 @@ import numpy as np
 import pandas as pd
 import typer
 from rich.progress import track
+
+from chirps import load_chirps
+from paper_config import DATA_ROOT, PROCESSED
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -121,8 +127,7 @@ def extract_data_for_trial(
 
     trial_folder = data_path / trial_row["recording"]
 
-    chirp_times = np.load(trial_folder / "chirp_times_rcnn.npy")
-    chirp_ids = np.load(trial_folder / "chirp_ids_rcnn.npy")
+    chirp_times, chirp_ids = load_chirps(trial_folder)
 
     loser_chirp_times = chirp_times[chirp_ids == trial_row["lose_ID"]]
     winner_chirp_times = chirp_times[chirp_ids == trial_row["win_ID"]]
@@ -205,12 +210,12 @@ def get_data(
 
 
 @app.command()
-def main(data_path: Path):
+def main(data_path: Path = DATA_ROOT):
     """
     Main entry point. Generates random permutations of the data, then a non-random set.
     """
     filename = "winner_chirps_around_loser_chirps"
-    save_dir = Path("data/processed/chirp_event_correlations/data/loser_chirps")
+    save_dir = PROCESSED / "chirp_event_correlations" / "data" / "loser_chirps"
 
     if save_dir.exists() and any(save_dir.glob("*.csv")):
         print("Removing existing files.")

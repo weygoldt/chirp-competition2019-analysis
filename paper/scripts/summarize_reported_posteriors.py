@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src_paper/summarize_reported_posteriors.py).
+# Changes: inputs/output under $PAPER_OUT/data/processed; a missing Bernoulli trace is reported and
+# skipped (as the script already did for the Gamma GLMMs): the before/after-offset input has no writer (O5).
 """
 Posterior median and 95% HDI for every model-based number in the manuscript.
 
@@ -21,7 +24,9 @@ import arviz as az
 import numpy as np
 import pandas as pd
 
-PROC = Path("data/processed")
+from paper_config import PROCESSED
+
+PROC = PROCESSED
 GAMMA_DIR = PROC / "chirp_effect_on_dominant_adaptive_window/gamma_glmm_binary"
 COUPLING_DIR = PROC / "chirp_coupling/negbin"
 STATUS_DIR = PROC / "stats_bayesian_glmm_chirps_status_v3"
@@ -78,6 +83,9 @@ def main() -> None:
         ("before offset: P(loser chirps before offset)",
          "stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset_trace.nc"),
     ]:
+        if not (PROC / file).exists():
+            print(f"missing {PROC / file}")
+            continue
         rows.append(summary(name, invlogit(draws(PROC / file, "Intercept")), "probability"))
 
     # Inter-chase interval Gamma GLMMs: factor on the expected interval when the

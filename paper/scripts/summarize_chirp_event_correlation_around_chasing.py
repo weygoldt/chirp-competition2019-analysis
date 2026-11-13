@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src_paper/summarize_chirp_event_correlation_around_chasing.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data root defaults to paper_config.DATA_ROOT;
+# output under $PAPER_OUT (it still clears its own output directory first). Seeds unchanged.
 """
 Build per-chase rows of chirp counts in the fixed [-3, +13] s window
 around each chase offset, for both winner and loser chirps. Used
@@ -39,6 +42,8 @@ import typer
 from rich.progress import track
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
+from chirps import load_chirps
+from paper_config import DATA_ROOT, PROCESSED
 from summarize_submissive_chirp_effect_on_dominant import (
     BAD_RECORDINGS,  # noqa: F401  -- re-exported for visibility
     _merge_overlapping_chases,
@@ -79,12 +84,11 @@ def extract_data_for_trial(
     _, chasing_on_off_times, _, _ = load_and_convert_boris_events(
         trial_folder, trial_row["recording"], sr=20000
     )
-    chirp_times = np.load(trial_folder / "chirp_times_rcnn.npy")
-    chirp_ids = np.load(trial_folder / "chirp_ids_rcnn.npy")
+    chirp_times, chirp_ids = load_chirps(trial_folder)
 
     if np.isnan(chirp_times).any():
         raise ValueError(
-            f"{trial_row['recording']}: NaN values in chirp_times_rcnn.npy "
+            f"{trial_row['recording']}: NaN values in the chirp times "
             f"({int(np.isnan(chirp_times).sum())} of {len(chirp_times)})."
         )
 
@@ -187,14 +191,14 @@ def get_data(
 # ---------------------------------------------------------------------------
 @app.command()
 def main(
-    data_path: Path,
+    data_path: Path = DATA_ROOT,
     num_permutations: int = 1000,
     seed: int = 42,
 ):
     """Generate `num_permutations` shuffled CSVs and one observed CSV."""
 
     filename = "chirps_around_chasing"
-    save_dir = Path("data/processed/chirp_event_correlations_m3p13/data/chasing")
+    save_dir = PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
 
     if save_dir.exists() and any(save_dir.glob("*.csv")):
         print(f"Removing existing CSVs under {save_dir}.")

@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/plot_hurdle_decomposition.py).
+# Changes: inputs under $PAPER_OUT/data/processed, figure via paper_config.figure (pdf + svg as before).
 """
 Figure: hurdle-model decomposition of chirp activity vs shuffle null
 around chase offsets (m3p13 window).
@@ -41,6 +43,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from paper_config import PROCESSED, figure
 from style import (
     cm,
     letter_subplots,
@@ -56,14 +59,11 @@ set_light_style()
 # Configuration
 # ---------------------------------------------------------------------------
 RESP = "n_chirps_fixed_m3p13"
-DATA_DIR = Path("data/processed/chirp_event_correlations_m3p13/hurdle_shuffle_baseline")
+DATA_DIR = PROCESSED / "chirp_event_correlations_m3p13" / "hurdle_shuffle_baseline"
 SCORED_CSV = DATA_DIR / f"{RESP}_obs_with_shuffle_baselines.csv"
 PRESENCE_TRACE = DATA_DIR / f"{RESP}_hurdle_presence_trace.nc"
 POSITIVE_TRACE = DATA_DIR / f"{RESP}_hurdle_positive_trace.nc"
-OUT_FIG = (
-    Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures"))
-    / "plot_hurdle_decomposition.pdf"
-)
+OUT_FIG = figure("plot_hurdle_decomposition.pdf")
 
 # Forest x-axis: multipliers on linear scale.
 FOREST_XLIM = (0.0, 4.0)

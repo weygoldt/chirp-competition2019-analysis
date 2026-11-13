@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/stats_bayesian_logreg_echo_responses_new.py).
+# Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
+# start method for pymc on Python 3.14). Model, priors, sampler settings and seed unchanged.
 """Estimate P(chirp-after | other chirped) in two directions using
 intercept-only Bayesian GLMMs, and compare against a permutation-based
 chance level.
@@ -19,12 +22,13 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from paper_config import PROCESSED
 from stats_utils import log_odds_to_prob, parse_bambi_model_output, save_json
 
 CONFIGS = [
     {
         "tag": "loser_after_winner",
-        "dataroot": Path("data/processed/chirp_event_correlations/data/winner_chirps"),
+        "dataroot": PROCESSED / "chirp_event_correlations" / "data" / "winner_chirps",
         "raw_count_col": "loser_chirps_10s_after",
         "y_col": "loser_chirped_after",
         "pretty": "Loser chirped after winner chirped",
@@ -32,7 +36,7 @@ CONFIGS = [
     },
     {
         "tag": "winner_after_loser",
-        "dataroot": Path("data/processed/chirp_event_correlations/data/loser_chirps"),
+        "dataroot": PROCESSED / "chirp_event_correlations" / "data" / "loser_chirps",
         "raw_count_col": "winner_chirps_10s_after",
         "y_col": "winner_chirped_after",
         "pretty": "Winner chirped after loser chirped",
@@ -118,7 +122,7 @@ def _build_null_distribution(
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    savepath = Path("data/processed/")
+    savepath = PROCESSED
     results = []
 
     for cfg in CONFIGS:

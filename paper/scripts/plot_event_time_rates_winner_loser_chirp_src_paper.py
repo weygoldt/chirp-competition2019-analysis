@@ -1,3 +1,7 @@
+# Ported from chirp_competition d040123 (src_paper/plot_event_time_rates_winner_loser_chirp.py; 17.4 cm, prints the extrema the manuscript quotes).
+# Changes: JSONs from $PAPER_OUT/data/processed/event_time_rates, figures via paper_config.figure (png, pdf, svg as before),
+# written as <stem>_src_paper so it does not overwrite the paper version; rate-axis limits and ticks extended
+# (loser 8 -> 16, winner 4 -> 6 /min) because the v2 rates would be clipped.
 import argparse
 import json
 from pathlib import Path
@@ -13,12 +17,11 @@ from style import (
     loser_color,
 )
 from IPython import embed
+from paper_config import PROCESSED, figure
 
 
 filename = Path(__file__).stem
-targetpath = (
-    Path("/home/weygoldt/wrk/analyses/chirp_competition_paper/figures") / filename
-)
+targetpath = figure(filename)
 formats = ["png", "pdf", "svg"]
 mode = "light"  # "dark"
 pval_keys = {
@@ -229,24 +232,25 @@ def setup_plot():
         axs[i].set_yticks([0, 15])
         axs[i].set_yticklabels([0, 15])
 
-    axs[0].set_yticks([0, 4, 8])
-    axs[0].set_yticklabels([0, 4, 8])
+    # Ticks extended with the rate-axis limits for the v2 detections (were [0, 4, 8] and [0, 2, 4]).
+    axs[0].set_yticks([0, 4, 8, 12, 16])
+    axs[0].set_yticklabels([0, 4, 8, 12, 16])
 
-    axs[1].set_yticks([0, 4, 8])
-    axs[1].set_yticklabels([0, 4, 8])
+    axs[1].set_yticks([0, 4, 8, 12, 16])
+    axs[1].set_yticklabels([0, 4, 8, 12, 16])
 
-    axs[8].set_yticks([0, 2, 4])
-    axs[8].set_yticklabels([0, 2, 4])
+    axs[8].set_yticks([0, 2, 4, 6])
+    axs[8].set_yticklabels([0, 2, 4, 6])
 
-    axs[9].set_yticks([0, 2, 4])
-    axs[9].set_yticklabels([0, 2, 4])
+    axs[9].set_yticks([0, 2, 4, 6])
+    axs[9].set_yticklabels([0, 2, 4, 6])
 
     fig.align_ylabels()
     return fig, axs, texts
 
 
 def load_data():
-    datapath = Path("data/processed/event_time_rates")
+    datapath = PROCESSED / "event_time_rates"
 
     lchirps_chase_wildcard = "lchirps@ag*.json"
     lchirps_contact_wildcard = "lchirps@con*.json"
@@ -544,7 +548,9 @@ def main():
 
     print(data[0].keys())
     xlims = -30, 30
-    yratelims = [(0, 8)] * 4 + [(0, 4)] * 4
+    # Extended for the v2 detections (was [(0, 8)] * 4 + [(0, 4)] * 4): the upper bands reach
+    # 12.9 /min (loser, A1) and 4.6 /min (winner, D2); new tops are the next multiple of the tick step.
+    yratelims = [(0, 16)] * 4 + [(0, 6)] * 4
     yeventlims = -0.5, np.max([len(d["centered_times"]) for d in data])
 
     fig, axs, texts = setup_plot()
