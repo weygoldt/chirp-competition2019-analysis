@@ -108,6 +108,17 @@ results cite.
 competition recordings with `configs/detect/competition2019_v2.toml`
 (outputs `$CHIRP_DATA/detections/competition2019_v2_20261113/`).
 
+### README figures (`readme_figures/`)
+
+The overview figures of the two package READMEs, each in a light and a
+dark variant (`style.py`: Inter, crest colours, transparent background).
+`chirpdetector_figure.py` reads one window of the full 2019 run and its
+raw recording; `gridtools_figure.py` reads a scene simulated from
+`readme_scene.toml` (command in its docstring). Outputs go to
+`$CHIRP_DATA/readme_figures/out/` and are copied by hand to
+`packages/*/assets/overview-{light,dark}.png`; `preview.py` puts them on
+GitHub's page backgrounds for checking.
+
 ## Reproducing everything
 
 In order; every step names the result it produced. Commands for steps

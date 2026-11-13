@@ -1,0 +1,29 @@
+# The scene behind the gridtools README figure: three active fish, well
+# apart in frequency, on a 4 x 4 grid, chirping often, synthetic noise.
+# Every key not set here keeps the default of gridtools' shipped config.
+name = "readme"
+duration_s = 30.0
+
+[grid]
+layouts = [[4, 4]]
+real_layout_prob = 1.0
+spacing_m = [0.3, 0.3]
+reference_prob = 0.0
+
+[population]
+n_fish = [3, 3]
+close_pair_prob = 0.0
+ramp_prob = 0.0
+baseline_uniform_prob = 0.0
+
+[chirps]
+rate_hz = [0.3, 0.6]
+
+[movement]
+light_prob = 0.0
+
+[noise]
+harder_prob = 0.0
+
+[background]
+prob = 0.0
