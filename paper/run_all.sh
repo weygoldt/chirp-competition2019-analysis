@@ -82,6 +82,7 @@ chain_hurdle() {       # Fig. hurdle_decomposition (+ offset logistic regression
   heavy hurdle 24G stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets.py
   step plot_hurdle_decomposition.py
   heavy offset-logreg 24G stats_bayesian_logreg_loser_chirps_around_chasing_offset.py
+  step make_chirps_around_chasing_obs.py   # reconstructed writer (audit O5)
   heavy before-after 16G stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset.py
 }
 

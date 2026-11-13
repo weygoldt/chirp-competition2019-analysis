@@ -70,7 +70,7 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:chirp_assignment` → **new** `plot_v2_pipeline_explainer` | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
 | `fig:performances_supp_full` → **new** `plot_v2_performance` | v2figs | `v2_fig_extract assign-baseline` (root env), plot | `v2_figures/`, evaluation outputs under `$CHIRP_DATA` |
 | `fig:performances_supp` → **new** `plot_v2_failure_modes` | v2figs | plot | `v2_figures/` |
-| reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset`, `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
+| reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `make_chirps_around_chasing_obs` (reconstructed writer, audit O5), `stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset`, `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
 
 The sources and every plotted number of the three new v2 figures, with
 caption drafts, are in `v2_figures.md`. `compare_detection_counts.py`
