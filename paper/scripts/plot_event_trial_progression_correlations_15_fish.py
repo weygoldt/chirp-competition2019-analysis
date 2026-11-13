@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/plot_event_trial_progression_correlations_15_fish.py).
+# Changes: inputs from PROCESSED; figure (pdf/png/svg) via paper_config.figure().
 import os
 import json
 from pathlib import Path
@@ -8,6 +10,7 @@ import numpy as np
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from paper_config import PROCESSED, figure, processed
 from style import (
     baseline_color,
     letter_subplots,
@@ -21,9 +24,7 @@ set_light_style()
 
 formats = ["pdf", "png", "svg"]
 filename = Path(__file__).stem
-targetpath = (
-    Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures")) / filename
-)
+targetpath = figure(filename)
 
 rateplot_linekwargs = dict(lw=1, alpha=1, zorder=100)
 rateplot_fillkwargs = dict(alpha=0.5, zorder=99, lw=0)
@@ -427,8 +428,8 @@ def print_summary(data, timing_data):
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    data = load_data(Path("data/processed/trial_event_progressions_annotated_subset"))
-    with open("data/processed/agonistic_behavior_timing.json") as f:
+    data = load_data(PROCESSED / "trial_event_progressions_annotated_subset")
+    with open(processed("agonistic_behavior_timing.json")) as f:
         timing = json.load(f)
 
     # --- Summary statistics for manuscript ---

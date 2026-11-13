@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/plot_event_trial_progression_correlations_all_fish.py).
+# Changes: inputs from PROCESSED; figures (main and _supplement, pdf/png/svg) via paper_config.figure().
 import os
 import argparse
 import json
@@ -10,6 +12,7 @@ import numpy as np
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from paper_config import PROCESSED, figure, processed
 from style import (
     baseline_color,
     letter_subplots,
@@ -23,7 +26,6 @@ set_light_style()
 
 formats = ["pdf", "png", "svg"]
 filename = Path(__file__).stem
-FIGURE_DIR = Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures"))
 
 rateplot_linekwargs = dict(lw=1, alpha=1, zorder=100)
 rateplot_fillkwargs = dict(alpha=0.5, zorder=99, lw=0)
@@ -449,18 +451,16 @@ def main(annotated_only=False):
     # Choose input data and output figure names based on mode.
     if annotated_only:
         data_subdir = "trial_event_progressions_annotated_subset"
-        timing_file = Path(
-            "data/processed/agonistic_behavior_timing_annotated_subset.json"
-        )
+        timing_file = processed("agonistic_behavior_timing_annotated_subset.json")
         name_suffix = "_annotated_subset"
     else:
         data_subdir = "trial_event_progressions_all_fish"
-        timing_file = Path("data/processed/agonistic_behavior_timing.json")
+        timing_file = processed("agonistic_behavior_timing.json")
         name_suffix = ""
 
-    targetpath = FIGURE_DIR / f"{filename}{name_suffix}"
+    targetpath = figure(f"{filename}{name_suffix}")
 
-    data = load_data(Path("data/processed") / data_subdir)
+    data = load_data(PROCESSED / data_subdir)
     with open(timing_file) as f:
         timing = json.load(f)
 
@@ -524,7 +524,7 @@ if __name__ == "__main__":
         description=(
             "Plot temporal allocation of events (chirps, contacts, chasing) "
             "across trials. Default mode reads from "
-            "data/processed/trial_event_progressions_all_fish/ and produces "
+            "$PAPER_OUT/data/processed/trial_event_progressions_all_fish/ and produces "
             "the main figure with all available trials. Use --annotated-only "
             "to read from the paired-subset directory and save figures with "
             "an '_annotated_subset' suffix."
@@ -535,7 +535,7 @@ if __name__ == "__main__":
         action="store_true",
         help=(
             "Plot the paired-subset figure: reads from "
-            "data/processed/trial_event_progressions_annotated_subset/ and "
+            "$PAPER_OUT/data/processed/trial_event_progressions_annotated_subset/ and "
             "agonistic_behavior_timing_annotated_subset.json."
         ),
     )

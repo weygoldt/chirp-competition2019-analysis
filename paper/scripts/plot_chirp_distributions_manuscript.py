@@ -1,3 +1,9 @@
+# Ported from chirp_competition d040123 (src/plot_chirp_distributions_manuscript.py).
+# Changes: boxes from the v2 parquet (chirps.load_chirp_table, rows with keep) instead of the v1
+# chirpdetector_bboxes.csv: width = t_end_s - t_start_s, height = f_high_hz - track_hz,
+# trough = -(track_hz - f_low_hz) (track_hz replaces v1 emitter_eodf); recordings visited in sorted
+# order; data root DATA_ROOT; figure via paper_config.figure(). Limits extended for v2 data that the
+# old ones clipped: xlims 600 -> 900 ms, ylims/yticks 700 -> 900 Hz, hexbin LogNorm vmax 3000 -> 7000.
 import os
 from pathlib import Path
 
@@ -8,21 +14,20 @@ import seaborn as sns
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm
 
+from chirps import load_chirp_table
+from paper_config import DATA_ROOT, figure
 from style import circle_annotate, set_light_style, letter_subplots
 
 scriptname = Path(__file__).stem
-targetpath = (
-    Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures"))
-    / scriptname
-)
+targetpath = figure(scriptname)
 set_light_style()
 
 cmap = sns.color_palette("mako", as_cmap=True)
 cmap_dens = sns.color_palette("mako", as_cmap=True)
 # cmap_dens = sns.color_palette("magma", as_cmap=True)
 
-xlims = (0, 600)
-ylims = (0, 700)
+xlims = (0, 900)  # old (0, 600): v2 box widths reach 859 ms
+ylims = (0, 900)  # old (0, 700): v2 heights reach 892 Hz
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +93,7 @@ def setup_plot():
 
 
 def get_data():
-    path1 = Path("/mnt/data2/2019_tube_competition/")
+    path1 = DATA_ROOT
     # path2 = Path("data/raw/remote/leonie/")
     paths = [
         path1,
@@ -96,16 +101,18 @@ def get_data():
     ]
     dfs = []
     for path in paths:
-        dirs = list(path.iterdir())
+        dirs = sorted(path.iterdir())
         for dir in dirs:
             if dir.is_file():
                 continue
-            try:
-                df = pd.read_csv(dir / "chirpdetector_bboxes.csv")
-                dfs.append(df)
-                print(f"Found data in {dir}, dataframe length: {len(df)}")
-            except:
+            if not (dir / "chirps_rtdetr.parquet").exists():
                 print(f"WARNING: No data found in {dir}")
+                continue
+            # v2 detections; `keep` = the chirps of the legacy arrays
+            df = load_chirp_table(dir)
+            df = df[df["keep"]]
+            dfs.append(df)
+            print(f"Found data in {dir}, dataframe length: {len(df)}")
 
     n_datasets = len(dfs)
     if len(dfs) == 0:
@@ -150,10 +157,10 @@ def get_data():
     )
     print(f"Loaded data from {n_datasets} datasets in total")
 
-    # get widths and heights
-    widths = df.t2 - df.t1
-    heights = df.f2 - df.emitter_eodf
-    troughs = df.emitter_eodf - df.f1
+    # get widths and heights (v1: t2 - t1, f2 - emitter_eodf, emitter_eodf - f1)
+    widths = df.t_end_s - df.t_start_s
+    heights = df.f_high_hz - df.track_hz
+    troughs = df.track_hz - df.f_low_hz
     recordings = df.recording
 
     widths = np.array(widths)
@@ -183,7 +190,7 @@ def _format_axes(main_ax, top_ax, right_ax):
     """Apply shared axis limits and ticks to a main + marginals trio."""
     main_ax.set_xlim(xlims)
     main_ax.set_ylim(ylims)
-    main_ax.set_yticks(np.arange(0, 701, 100))
+    main_ax.set_yticks(np.arange(0, ylims[1] + 1, 100))
     top_ax.set_xlim(xlims)
     right_ax.set_ylim(ylims)
 
@@ -254,7 +261,7 @@ def plot_hexbin(axes, widths, heights):
         mincnt=1,
         linewidths=0.0,
         edgecolors="none",
-        norm=LogNorm(vmin=10, vmax=3000),
+        norm=LogNorm(vmin=10, vmax=7000),  # old vmax 3000; v2 max count per hexagon 6551
         rasterized=True,
     )
 
@@ -277,7 +284,7 @@ def plot_hexbin(axes, widths, heights):
 
     main_ax.set_xlim(xlims)
     main_ax.set_ylim(ylims)
-    main_ax.set_yticks(np.arange(0, 701, 100))
+    main_ax.set_yticks(np.arange(0, ylims[1] + 1, 100))
 
 
 # ---------------------------------------------------------------------------

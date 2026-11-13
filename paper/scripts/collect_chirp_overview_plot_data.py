@@ -1,11 +1,18 @@
+# Ported from chirp_competition d040123 (src/collect_chirp_overview_plot_data.py).
+# Changes: inputs read from $CHIRP_DATA/paper_rerun/inputs/new_chirpextractions (verbatim
+# copies of the old data/interrim arrays, see README.md there); output under PROCESSED.
 import numpy as np
+
+from paper_config import CHIRP_DATA, processed
+
+INPUTS = CHIRP_DATA / "paper_rerun" / "inputs" / "new_chirpextractions"
 
 
 def save_data():
-    chirppath = "data/interrim/new_chirpextractions/flattened_chirps.npy"
-    heightspath = "data/interrim/new_chirpextractions/flattened_heights.npy"
-    widthspath = "data/interrim/new_chirpextractions/flattened_widths.npy"
-    outputpath = "data/processed/chirp_overview_plot_data.npz"
+    chirppath = INPUTS / "flattened_chirps.npy"
+    heightspath = INPUTS / "flattened_heights.npy"
+    widthspath = INPUTS / "flattened_widths.npy"
+    outputpath = processed("chirp_overview_plot_data.npz")
 
     samplerate = 20000
     chirps = np.load(chirppath)

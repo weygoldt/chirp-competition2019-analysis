@@ -1,12 +1,16 @@
+# Ported from chirp_competition d040123 (src/plot_what_is_a_chirp_and_why_use_spetrograms.py).
+# Changes: spectrogram helpers from legacy_spectrogram (NumPy copy of gridtools v1/torchaudio);
+# input from PROCESSED; figure via paper_config.figure(); EOD noise seeded with SEED.
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from gridtools.utils.spectrograms import compute_spectrogram, to_decibel
+from legacy_spectrogram import compute_spectrogram, to_decibel
 from matplotlib import patches
 from PIL import Image
 from thunderfish.fakefish import wavefish_eods
 from pathlib import Path
 
+from paper_config import SEED, figure, processed
 from style import letter_subplots, set_light_style
 
 set_light_style()
@@ -14,9 +18,7 @@ samplerate = 20000
 duration = 2
 
 filename = Path(__file__).stem
-targetpath = (
-    Path("/home/weygoldt/wrk/analyses/chirp_competition_paper/figures/") / filename
-)
+targetpath = figure(filename)
 
 
 # def circle_annotate(ax, xy, xy_adjust_text, text):
@@ -131,7 +133,7 @@ targetpath = (
 
 
 def main():
-    dataset = np.load("data/processed/chirp_overview_plot_data.npz")
+    dataset = np.load(processed("chirp_overview_plot_data.npz"))
 
     chirps = dataset["chirps"]
     heights = dataset["heights"]
@@ -171,7 +173,8 @@ def main():
         + len(small_chirp) // 2
     ] += small_chirp
 
-    # make eods of the fish
+    # make eods of the fish (wavefish_eods adds noise from the global numpy RNG)
+    np.random.seed(SEED)
     eod_smallchirp = wavefish_eods("Alepto", f_smallchirp, samplerate)
     eod_longchirp = wavefish_eods("Alepto", f_longchirp, samplerate)
     eod1 = wavefish_eods("Alepto", f1, samplerate, noise_std=0.1)
@@ -227,8 +230,8 @@ def main():
     S_longchirp, _, _ = compute_spectrogram(
         soundscape_longchirp, samplerate, nfft=nfft, hop_length=hop_len
     )
-    S_smallchirp = to_decibel(S_smallchirp).cpu().numpy()
-    S_longchirp = to_decibel(S_longchirp).cpu().numpy()
+    S_smallchirp = to_decibel(S_smallchirp)
+    S_longchirp = to_decibel(S_longchirp)
 
     # convert specs to 255 int values
     S_smallchirp = (S_smallchirp - np.min(S_smallchirp)) / (

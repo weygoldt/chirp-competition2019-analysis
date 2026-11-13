@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/plot_competition_trial_overview.py).
+# Changes: input JSON from PROCESSED (rebuilt by make_competition_overview.py, chirps from
+# PAPER_DETECTIONS); figures via paper_config.figure().
 import json
 from pathlib import Path
 
@@ -5,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from thunderlab.powerspectrum import decibel
+
+from paper_config import figure, processed
 from style import (
     set_light_style,
     loser_color,
@@ -15,9 +20,7 @@ from style import (
 
 set_light_style()
 filename = Path(__file__).stem
-targetpath = (
-    Path("/home/weygoldt/wrk/analyses/chirp_competition_paper/figures") / filename
-)
+targetpath = figure(filename)
 
 
 def setup_plot():
@@ -73,7 +76,7 @@ def setup_plot():
 def main():
     fig, axes = setup_plot()
 
-    datapath = Path("data/processed/competition_overview_2020-06-09-10_00.json")
+    datapath = processed("competition_overview_2020-06-09-10_00.json")
 
     with open(datapath) as f:
         data = json.load(f)

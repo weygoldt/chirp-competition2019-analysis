@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src_paper/analyze_event_trial_progression_trial.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); base_path defaults to DATA_ROOT;
+# JSONs under PROCESSED; diagnostic PNGs under the figure directory (event_meta/).
 """
 Analysis of temporal allocation of events in trials.
 Uses a single trial as the statistically independent unit of analysis.
@@ -18,7 +21,9 @@ from scipy.stats import gaussian_kde
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
 from analyze_event_time_rates_trial import gaussian_kde as self_gaussian_kde
+from chirps import load_chirps
 from logger import get_logger
+from paper_config import DATA_ROOT, DETECTIONS, figure, processed_dir
 
 female_color, male_color = "#e74c3c", "#3498db"
 logger = get_logger(__name__)
@@ -308,7 +313,7 @@ def relative_rate_progression(all_event_t, title=""):
     # ax.set_xlim(0, 3)
     # ax.set_ylim(0, 5)
 
-    plt.savefig(f"figures/event_meta/{title}_progression.png", dpi=300)
+    plt.savefig(figure(f"event_meta/{title}_progression.png"), dpi=300)
     plt.show()
     plt.close()
     # exit()
@@ -379,9 +384,9 @@ def main(base_path, annotated_only=False):
             "only trials with BORIS annotations are included."
         )
     logger.info("Setting up directories")
-    path = Path("figures/event_meta")
+    path = figure("event_meta")
     path.mkdir(parents=True, exist_ok=True)
-    path = Path("figures/event_time_corr")
+    path = figure("event_time_corr")
     path.mkdir(parents=True, exist_ok=True)
 
     subdir = (
@@ -389,7 +394,7 @@ def main(base_path, annotated_only=False):
         if annotated_only
         else "trial_event_progressions_all_fish"
     )
-    out_dir = Path("data/processed") / subdir
+    out_dir = processed_dir(subdir)
 
     # Fixed seeds so that the null and bootstrap bands are reproducible.
     np.random.seed(42)
@@ -473,10 +478,9 @@ def main(base_path, annotated_only=False):
             all_ag_on_t.append(np.array([]))
             all_ag_off_t.append(np.array([]))
 
-        if not os.path.exists(os.path.join(trial_path, "chirp_times_rcnn.npy")):
+        if not os.path.exists(os.path.join(trial_path, f"chirp_times_{DETECTIONS}.npy")):
             continue
-        chirp_t = np.load(os.path.join(trial_path, "chirp_times_rcnn.npy"))
-        chirp_ids = np.load(os.path.join(trial_path, "chirp_ids_rcnn.npy"))
+        chirp_t, chirp_ids = load_chirps(trial_path)
         chirp_times = [
             chirp_t[chirp_ids == trial["win_ID"]],
             chirp_t[chirp_ids == trial["lose_ID"]],
@@ -593,14 +597,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "base_path",
-        help="Path to the directory containing trial_summary.csv and per-trial subdirectories.",
+        nargs="?",
+        default=str(DATA_ROOT),
+        help="Path to the directory containing trial_summary.csv and per-trial subdirectories (default: DATA_ROOT).",
     )
     parser.add_argument(
         "--annotated-only",
         action="store_true",
         help=(
             "Restrict analysis to BORIS-annotated trials. Writes output to "
-            "data/processed/trial_event_progressions_annotated_subset/."
+            "$PAPER_OUT/data/processed/trial_event_progressions_annotated_subset/."
         ),
     )
     args = parser.parse_args()

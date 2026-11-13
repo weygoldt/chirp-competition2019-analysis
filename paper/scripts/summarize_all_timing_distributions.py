@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src/summarize_all_timing_distributions.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data_path defaults to DATA_ROOT;
+# JSONs under PROCESSED.
 """
 This script extracts data to summarize inter-chirp intervals, chasing-durations, etc. to plot distributions of each
 """
@@ -11,6 +14,8 @@ import pandas as pd
 import typer
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
+from chirps import load_chirps
+from paper_config import DATA_ROOT, processed_dir
 
 # plt.style.use(["src/base.mplstyle", "src/light_background.mplstyle"])
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -111,8 +116,7 @@ def extract_data_for_trial(
     else:
         contact_times = np.array([])
         chasing_on_off_times = np.empty((0, 2))
-    chirp_times = np.load(trial_folder / "chirp_times_rcnn.npy")
-    chirp_ids = np.load(trial_folder / "chirp_ids_rcnn.npy")
+    chirp_times, chirp_ids = load_chirps(trial_folder)
 
     loser_chirp_times = chirp_times[chirp_ids == trial_row["lose_ID"]]
     winner_chirp_times = chirp_times[chirp_ids == trial_row["win_ID"]]
@@ -231,12 +235,12 @@ def get_data(
 
 
 @app.command()
-def main(data_path: Path):
+def main(data_path: Path = typer.Argument(DATA_ROOT)):
     """
     Main entry point. Generates random permutations of the data, then a non-random set.
     """
     filename = "agonistic_behavior_timing"
-    save_dir = Path("data/processed/")
+    save_dir = processed_dir()
 
     data_dict = get_data(data_path, randomize=False)
 
