@@ -26,6 +26,10 @@ dev = [
 # Not a library: this project only pins the environment the two packages
 # are developed and run in. Both are installed editable from the submodules.
 package = false
+# chirpdetector requires gridtools from GitHub (a direct reference, so that a
+# plain install from GitHub works); develop against the submodule instead.
+# The source below applies to this override too.
+override-dependencies = ["gridtools"]
 
 [tool.uv.sources]
 gridtools = { path = "packages/gridtools", editable = true }
@@ -39,6 +43,7 @@ markers = [
     "slow: long-running tests",
     "gpu: tests that need a CUDA device (skipped if absent)",
     "data: tests that need the recordings on /mnt/data2 (skipped if absent)",
+    "network: tests that download the published models (CHIRPDETECTOR_TEST_NETWORK=1)",
 ]
 
 [tool.ruff]

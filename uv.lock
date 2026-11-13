@@ -8,6 +8,9 @@ resolution-markers = [
     "sys_platform == 'darwin'",
 ]
 
+[manifest]
+overrides = [{ name = "gridtools", editable = "packages/gridtools" }]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.6"
@@ -198,6 +201,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "scipy" },
     { name = "torch" },
+    { name = "transformers" },
     { name = "typer" },
     { name = "ultralytics" },
 ]
@@ -212,7 +216,7 @@ label = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gridtools", editable = "packages/gridtools" },
+    { name = "gridtools", git = "https://github.com/weygoldt/gridtools?rev=main" },
     { name = "matplotlib", marker = "extra == 'label'", specifier = ">=3.11.2" },
     { name = "numpy", specifier = ">=2.5" },
     { name = "opencv-python", specifier = ">=4.12" },
@@ -220,6 +224,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=26" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "torch", specifier = ">=2.15" },
+    { name = "transformers", specifier = ">=5.22.2,<5.23" },
     { name = "transformers", marker = "extra == 'dualhead'", specifier = ">=5.22.2,<5.23" },
     { name = "typer", specifier = ">=0.29.1" },
     { name = "ultralytics", specifier = ">=8.4.211,<8.5" },
