@@ -30,9 +30,16 @@ chirpdetector run         the competition recordings -> one chirp table per reco
 | `scripts/` | `guarded` (RAM/VRAM-capped jobs), `oom_watchdog.py`, `v1_screen.py` and `v2_screen.py` (chirp screens of the background library) |
 | `docs/` | `status.md`, `plan.md` (decisions 1-24), `audit-2026-11.md` (what was wrong with v1) |
 
-Package documentation: [chirpdetector docs](packages/chirpdetector/docs/index.md),
-[gridtools docs](packages/gridtools/docs/index.md) (also built as sites,
-`make docs`).
+## Documentation
+
+- [chirpdetector documentation](https://github.com/weygoldt/chirpdetector/blob/main/docs/README.md)
+  (`packages/chirpdetector/docs/` in this checkout)
+- [gridtools documentation](https://github.com/weygoldt/gridtools/blob/main/docs/README.md)
+  (`packages/gridtools/docs/` in this checkout)
+- this project: [docs/status.md](docs/status.md) (what is final, decisions,
+  open items), [experiments/README.md](experiments/README.md) (every script
+  and how to reproduce each result), [docs/plan.md](docs/plan.md) and
+  [docs/audit-2026-11.md](docs/audit-2026-11.md)
 
 ## Install
 
@@ -41,7 +48,6 @@ git clone --recurse-submodules git@github.com:weygoldt/chirp_competition_upgrade
 cd chirp_competition_upgrade
 uv sync              # Python 3.14; both packages editable, with chirpdetector's dualhead and label extras
 make check           # ruff, ruff format --check, pyright and pytest of both packages
-make docs            # build both documentation sites (strict)
 ```
 
 Both submodules track `main`; `git submodule update --remote` moves them to

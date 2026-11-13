@@ -5,8 +5,8 @@ detector and decoder, their evaluations, the human benchmark, and the
 production run over the 2019/2020 tube competition recordings
 (`/mnt/data1/chirp_v2/detections/competition2019_v2_20261113/`: 50
 recordings, none failed). The pretrained models are published as the GitHub
-release `models-v1` of chirpdetector. Both packages are documented
-(`packages/*/docs`, `make docs`); the results with their reports are in the
+release `models-v1` of chirpdetector. Both packages are documented in
+Markdown (`packages/*/docs/README.md`); the results with their reports are in the
 [README](../README.md#results), every step to reproduce them in
 [experiments/README.md](../experiments/README.md).
 
@@ -23,7 +23,7 @@ release `models-v1` of chirpdetector. Both packages are documented
 | decoder | weights `c0801c56…`, on the dual-head's boxes; calibrated and raw estimates (the manuscript's chirp-parameter figure uses the calibrated ones) | `$CHIRP_DATA/params/runs/v4-dualhead-sim-v4-r2/bundle`; release `models-v1` |
 | post-processing | harmonic copies and duplicates flagged; re-attribution automatic (on for the emitter head) | `chirpdetector.postprocess` |
 | production config | store 0.05, operate 0.5, assignment 20 Hz at onset, 10-s track gaps | `configs/detect/competition2019_v2.toml` |
-| default detector in code | `dualhead` (training config); YOLO26 is `type = "ultralytics-yolo"` | chirpdetector `docs` branch |
+| default detector in code | `dualhead` (training config); YOLO26 is `type = "ultralytics-yolo"`; the pipeline defaults to the released models | chirpdetector `main` |
 
 ## Decisions
 
@@ -59,18 +59,14 @@ short:
 
 For the author:
 
-- **Merge order.** The chirpdetector `docs` branch documents the
-  pretrained-model interface of the `v2-pretrained` branch (`chirpdetector
-  models`, `chirpdetector.pretrained`, `"default"` bundles, the
-  `CHIRPDETECTOR_*` variables, the plain `uv pip install
-  "git+https://github.com/weygoldt/chirpdetector"` with gridtools as a git
-  dependency). Merge `v2-pretrained` first or together, and check those
-  commands against it; they were not run (the branch had no commits when
-  the docs were written). Until then the fallback install is
-  `uv pip install --no-sources "gridtools @ git+…" "chirpdetector[dualhead,label] @ git+…"`.
-- **Publish the documentation sites.** GitHub Pages of both packages still
-  serves the v1 documentation. After merging, run `mkdocs gh-deploy` in each
-  package (command in their `docs/development.md`).
+- **Install from GitHub.** chirpdetector now depends on gridtools by git
+  reference, so `uv pip install "git+https://github.com/weygoldt/chirpdetector"`
+  works once `main` is pushed (a dry run from the merged checkout resolved
+  gridtools from GitHub). The documented `models` commands and
+  `chirpdetector run --out OUT RECORDING` were run against the merged code.
+- **gh-pages.** The `gh-pages` branches of both packages still serve the v1
+  documentation sites; v2 documents itself in Markdown on GitHub. Deleting
+  or replacing those branches is the author's call.
 - **Host the libraries.** gridtools needs the template library v4 (and the
   background library v2 for hybrid scenes) to simulate anything; both exist
   only on this machine. A stranger cannot run `gridtools sim run` until they
