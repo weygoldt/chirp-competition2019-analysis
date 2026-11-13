@@ -1,3 +1,8 @@
+# Ported from chirp_competition d040123 (src_paper/analyze_event_time_rates_trial.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); output under $PAPER_OUT;
+# data root defaults to paper_config.DATA_ROOT; np.random.seed(SEED) at the start of main
+# (unseeded before); --ag-events selects the BORIS-trial configuration with the six
+# behaviour centrings (the old repo produced those JSONs by editing the module).
 """
 Analyze the chirp (or other event) rate around agonistic time points.
 Assumes a single trial is a statistically independent unit.
@@ -18,6 +23,8 @@ from rich.progress import track
 from IPython import embed
 
 from logger import get_logger
+from chirps import load_chirps
+from paper_config import DATA_ROOT, SEED, processed_dir
 
 logger = get_logger(__name__)
 
@@ -215,8 +222,7 @@ def load_data(trial_path: Path, trial_row: pd.Series, skip_ag_events=False):
 
     logger.info("Loading and converting communication events.")
 
-    chirp_t = np.load(trial_path / "chirp_times_rcnn.npy")
-    chirp_ids = np.load(trial_path / "chirp_ids_rcnn.npy")
+    chirp_t, chirp_ids = load_chirps(trial_path)
     loser_chirp_times = chirp_t[chirp_ids == trial_row["lose_ID"]]
     winner_chirp_times = chirp_t[chirp_ids == trial_row["win_ID"]]
 
@@ -542,7 +548,19 @@ def eventrate_jackknife_trial_per_population(*args, **kwargs):
     )
 
 
-def main(path: Path):
+def main(path: Path = DATA_ROOT, ag_events: bool = False):
+    """Event rates around centring events.
+
+    Default: chirp-on-chirp centrings on all good trials (SKIP_AG_EVENTS =
+    True, as committed). ``--ag-events``: the configuration of the run that
+    made the agon/agoff/contacts JSONs of the old repo (SKIP_AG_EVENTS = False,
+    i.e. only trials with BORIS annotations, and the six behaviour centrings
+    that are commented out below), selected here by a flag instead of by
+    editing the module.
+    """
+    global SKIP_AG_EVENTS
+    SKIP_AG_EVENTS = not ag_events
+    np.random.seed(SEED)  # the resampling was unseeded in the old code
     trial_summary = pd.read_csv(path / "trial_summary.csv")
 
     data = CompetitionTimes(
@@ -611,6 +629,15 @@ def main(path: Path):
         # ("wrises", "lrises"),
         # ("lrises", "wrises"),
     ]
+    if ag_events:
+        centerings = [
+            ("agoff", "lchirps"),
+            ("agoff", "wchirps"),
+            ("agon", "lchirps"),
+            ("agon", "wchirps"),
+            ("contacts", "lchirps"),
+            ("contacts", "wchirps"),
+        ]
 
     centered_data = {}
 
@@ -719,8 +746,7 @@ def main(path: Path):
             "trial_identifiers": identifiers,
         }
 
-        datapath = Path("data/processed/event_time_rates")
-        datapath.mkdir(parents=True, exist_ok=True)
+        datapath = processed_dir("event_time_rates")
         with open(datapath / f"{c2}@{c1}.json", "w") as f:
             json.dump(data_json, f)
 
