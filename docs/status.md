@@ -64,9 +64,10 @@ For the author:
   works once `main` is pushed (a dry run from the merged checkout resolved
   gridtools from GitHub). The documented `models` commands and
   `chirpdetector run --out OUT RECORDING` were run against the merged code.
-- **gh-pages.** The `gh-pages` branches of both packages still serve the v1
-  documentation sites; v2 documents itself in Markdown on GitHub. Deleting
-  or replacing those branches is the author's call.
+- **GitHub Pages.** v2 documents itself in Markdown on GitHub. The v1
+  documentation sites were served from the packages' `gh-pages` branches,
+  which were no longer on the remotes at the end of 2026-11-13; check the
+  repositories' Pages settings.
 - **Host the libraries.** gridtools needs the template library v4 (and the
   background library v2 for hybrid scenes) to simulate anything; both exist
   only on this machine. A stranger cannot run `gridtools sim run` until they
