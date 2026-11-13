@@ -108,6 +108,13 @@ results cite.
 competition recordings with `configs/detect/competition2019_v2.toml`
 (outputs `$CHIRP_DATA/detections/competition2019_v2_20261113/`).
 
+`copy_detections_to_trials.py`: copies each recording's
+`chirps_rtdetr.parquet`, `chirp_{times,ids}_rtdetr.npy` and `meta.json` (as
+`chirps_rtdetr_meta.json`) from that run into `$CHIRP_REC_2019/<recording>/`
+(done 2026-11-13 for all 50 recordings). Never overwrites: identical files
+are skipped, different ones stop the script. Verifies sha256 and the counts
+in `meta.json`; manifest `<run>/trial_copies_manifest.csv`.
+
 ### README figures (`readme_figures/`)
 
 The overview figures of the two package READMEs, each in a light and a
