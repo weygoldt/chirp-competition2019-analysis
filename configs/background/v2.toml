@@ -27,6 +27,11 @@ edge_s = 60.0
 segments_per_recording = 30
 fill = true
 
+# 2022 windows hold 29 segments: pack them (earliest first) instead of
+# stratifying, which leaves gaps shorter than a segment
+[selection_by_dataset.competition2022]
+pack = true
+
 # Author's rule: only the inactive period, with 30 min of padding, measured
 # from the recording's end; never earlier than 3 h dark + 30 min after the
 # start (Methods: the first 3 h of every recording are dark), so recordings
