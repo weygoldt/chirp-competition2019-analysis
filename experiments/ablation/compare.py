@@ -375,6 +375,43 @@ def real_section(root: Path, emitters_dir: Path):
     return pd.DataFrame(rows), pd.DataFrame(mcnemar), pd.DataFrame(review)
 
 
+def benchmark_section(root: Path, n_boot: int, seed: int = 0) -> pd.DataFrame | None:
+    """Blind benchmark (optional): both arms scored as models by label-benchmark score."""
+    path = root / "benchmark" / "report" / "items.csv"
+    if not path.exists():
+        return None
+    d = pd.read_csv(path, low_memory=False)
+    d = d[d["scored"].astype(bool)]
+    true = d[d["truth"] == "chirp"]
+    neg = d[d["truth"] != "chirp"]
+    metrics = json.loads((root / "benchmark" / "report" / "metrics.json").read_text())["point"]
+    rng = np.random.default_rng(seed)
+    rows = []
+    for name, table, col, key in (
+        ("recall on true chirps", true, "chirp", "recall"),
+        ("chirp found with the right emitter", true, "emitter_ok", "emitter_recall"),
+        ("false-alarm rate, all negatives", neg, "false_alarm", "false_alarm"),
+    ):
+        x = {a: table[f"{a}_{col}"].astype(float).to_numpy() for a in ARMS}
+        r = {"metric": name, "stratum": "all"}
+        for a in ARMS:
+            k, n = float(x[a].sum()), len(x[a])
+            r[f"{a}_k"], r[f"{a}_n"], r[a] = int(k), n, k / n
+            assert abs(r[a] - metrics[f"{key}_{a}"]) < 1e-12, (name, a, r[a], metrics[f"{key}_{a}"])
+            r[f"{a}_lo"], r[f"{a}_hi"] = wilson(k, n)
+        idx = rng.integers(0, len(table), size=(n_boot, len(table)))
+        diff = x["B"][idx].mean(axis=1) - x["A"][idx].mean(axis=1)
+        r["diff"] = r["B"] - r["A"]
+        r["diff_lo"], r["diff_hi"] = np.percentile(diff, [2.5, 97.5])
+        r["p_boot_B_gt_A"] = float(np.mean(diff > 0))
+        only_a = int(((x["A"] == 1) & (x["B"] == 0)).sum())
+        only_b = int(((x["A"] == 0) & (x["B"] == 1)).sum())
+        r["A_only"], r["B_only"] = only_a, only_b
+        r["exact_mcnemar_p"] = stats.binomtest(only_a, only_a + only_b, 0.5).pvalue if only_a + only_b else 1.0
+        rows.append(r)
+    return pd.DataFrame(rows)
+
+
 def md_table(df: pd.DataFrame) -> str:
     def cell(v):
         if isinstance(v, float):
@@ -514,6 +551,13 @@ def main() -> None:
     md += ["", md_rows(real, ["label_set", "metric"]), ""]
     md += ["Labels found by one arm only (exact McNemar):", "", md_table(mcn), ""]
     md += ["False positives at >= 0.5 on the 365 labels vs the author's reviewed boxes:", "", md_table(review), ""]
+    bench = benchmark_section(args.root, args.n_boot)
+    if bench is not None:
+        bench.to_csv(out / "benchmark.csv", index=False)
+        md += ["## Blind benchmark (1,010 simulated items; scored true chirps and negatives), score >= 0.5", ""]
+        md.append("Per-arm CIs Wilson; B - A bootstrap over items (paired). A_only / B_only: items where only that arm has the event of the row (detected, right emitter, false alarm); exact McNemar.")
+        md += ["", md_rows(bench, ["metric"]), ""]
+        md += [md_table(bench[["metric", "A_only", "B_only", "exact_mcnemar_p"]]), ""]
     (out / "tables.md").write_text("\n".join(md) + "\n")
     summary = {
         "n_boot": args.n_boot,
@@ -523,6 +567,7 @@ def main() -> None:
         "real": real.to_dict(orient="records"),
         "real_mcnemar": mcn.to_dict(orient="records"),
         "real_fp_review": review.to_dict(orient="records"),
+        "benchmark": None if bench is None else bench.to_dict(orient="records"),
         "inputs": {a: str(args.root / a) for a in ARMS},
         "datasets": {"A": str(args.sim_a), "B": str(args.sim_b)},
     }
