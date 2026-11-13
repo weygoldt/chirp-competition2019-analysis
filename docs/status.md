@@ -59,20 +59,13 @@ short:
 
 For the author:
 
-- **Install from GitHub.** chirpdetector now depends on gridtools by git
-  reference, so `uv pip install "git+https://github.com/weygoldt/chirpdetector"`
-  works once `main` is pushed (a dry run from the merged checkout resolved
-  gridtools from GitHub). The documented `models` commands and
-  `chirpdetector run --out OUT RECORDING` were run against the merged code.
-- **GitHub Pages.** v2 documents itself in Markdown on GitHub. The v1
-  documentation sites were served from the packages' `gh-pages` branches,
-  which were no longer on the remotes at the end of 2026-11-13; check the
-  repositories' Pages settings.
 - **Host the libraries.** gridtools needs the template library v4 (and the
   background library v2 for hybrid scenes) to simulate anything; both exist
   only on this machine. A stranger cannot run `gridtools sim run` until they
   are published (e.g. Zenodo), and the shipped scene config should then
-  point to the published location.
+  point to the published location. The author decided on 2026-11-13 to
+  hold the template library back for now (it is derived from unpublished
+  recordings).
 - **The v1 -> v2 diff** per trial and fish (plan, goal 3 and phase P6) is not
   written yet; the production run it needs is complete.
 - **Real emitter ground truth** does not exist; assignment accuracy and
@@ -83,8 +76,11 @@ For the author:
   zip and its checksum.
 - **Front-end ablation.** Decision 6 asked whether the extra windows help;
   no ablation report was found among the run directories.
-- **Release tags** of both packages (plan P7) and a test of reproducing P4-P6
-  from a fresh clone are not done.
+- **Reproducing P4-P6 from a fresh clone** (plan P7) is not tested. Both
+  packages are released as `v2.0.0` (tags on GitHub, 2026-11-13);
+  chirpdetector requires gridtools `v2.0.0`, and installing chirpdetector
+  from GitHub pulls the pretrained models on first use. The docs are
+  Markdown in each repository; the v1 `gh-pages` sites are deleted.
 
 Found while documenting (not fixed; code behaviour):
 
