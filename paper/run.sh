@@ -5,7 +5,7 @@
 # - working directory = the output root ($PAPER_OUT), so any relative path in
 #   the ported code lands there, never in a repository;
 # - MPLBACKEND=Agg: the old scripts' plt.show() calls do not block;
-# - log to $PAPER_OUT/logs/<script>.log.
+# - log to $PAPER_OUT/logs/<script>[_$PAPER_LOG_TAG].log.
 # Heavy steps are wrapped by run_all.sh in scripts/guarded (RAM cap).
 set -euo pipefail
 PAPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,11 +16,14 @@ script="$1"; shift
 export CHIRP_DATA PAPER_DETECTIONS PAPER_OUT
 export MPLBACKEND=Agg PYTHONUNBUFFERED=1
 mkdir -p "$PAPER_OUT/logs"
-log="$PAPER_OUT/logs/$(basename "$script" .py).log"
+# PAPER_LOG_TAG: suffix for the log name when a script runs more than once
+log="$PAPER_OUT/logs/$(basename "$script" .py)${PAPER_LOG_TAG:+_$PAPER_LOG_TAG}.log"
 unset VIRTUAL_ENV
 cd "$PAPER_OUT"
 echo "[$(date -Is)] $script $* (detections $PAPER_DETECTIONS, out $PAPER_OUT, paper $(git -C "$PAPER" rev-parse --short HEAD))" | tee "$log"
+set +e  # record the exit status in the log even when the script fails
 uv run --project "$PAPER" --python 3.14 python "$PAPER/scripts/$script" "$@" < /dev/null 2>&1 | tee -a "$log"
 status=${PIPESTATUS[0]}
+set -e
 echo "[$(date -Is)] exit $status" | tee -a "$log"
 exit "$status"
