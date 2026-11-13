@@ -1,0 +1,36 @@
+# YOLO26s on sim_v3 (2026-11-12): all scenes hybrid (simulated fish on real
+# background segments); no synthetic-noise-only scenes in training, early
+# stopping or best-epoch selection (author's decision). Same settings as
+# yolo26s_sim_v2 otherwise. Final fit only: train groups to fit, val groups for
+# early stopping and best-epoch selection.
+seed = 0
+deterministic = true
+device = "cuda"
+max_vram_fraction = 0.3
+score_threshold = 0.5
+
+[model]
+type = "ultralytics-yolo"
+architecture = "yolo26s"
+pretrained = true
+
+[optim]
+epochs = 80
+batch = 32
+optimizer = "AdamW"
+lr0 = 0.001
+lrf = 0.01
+schedule = "cosine"
+warmup_epochs = 1.0
+weight_decay = 0.0005
+momentum = 0.937
+patience = 15
+amp = true
+workers = 8
+
+[augment]
+time_flip = 0.0
+
+[cv]
+n_folds = 0
+final_fit = true

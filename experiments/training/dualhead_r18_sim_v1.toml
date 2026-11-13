@@ -1,0 +1,44 @@
+# Dual-head RT-DETRv2-r18 (boxes + emitter EODf) on sim_v1 (2026-11-12).
+# Final fit only: train groups to fit, val groups for early stopping and
+# best-epoch selection (fitness = AP x assignment accuracy). The GPU is
+# shared with the YOLO26 run: cap 0.3 (~4.9 GB); batch 16 peaks at ~3.1 GiB.
+seed = 0
+# deformable attention (grid_sample) has no deterministic backward on CUDA
+deterministic = false
+device = "cuda"
+max_vram_fraction = 0.3
+score_threshold = 0.5
+
+[model]
+type = "dualhead"
+architecture = "rtdetr_v2_r18vd"
+pretrained = true
+num_queries = 300
+num_denoising = 100
+max_det = 50
+emitter_loss_weight = 10.0
+backbone_lr_scale = 0.1
+grad_clip = 0.1
+ema_decay = 0.9999
+time_shift_px = 32
+val_max_images = 2000
+
+[optim]
+epochs = 30
+batch = 16
+optimizer = "AdamW"
+lr0 = 0.0001
+lrf = 0.05
+schedule = "cosine"
+warmup_epochs = 0.5
+weight_decay = 0.0001
+patience = 6
+amp = true
+workers = 8
+
+[augment]
+time_flip = 0.0
+
+[cv]
+n_folds = 0
+final_fit = true
