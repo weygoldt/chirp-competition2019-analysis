@@ -1,0 +1,37 @@
+# Dry run of the production pipeline on two full recordings (2026-11-13):
+# 2019-11-25-09_59 (dense, 9 electrodes) and 2020-05-18-10_00 (sparse, 15).
+# r2: after the postprocess merge, with the retrained decoder.
+[run]
+name = "dryrun_20261113_r2"
+out = "/mnt/data1/chirp_v2/detections"
+
+[models]
+detector = "/mnt/data1/chirp_v2/runs/dualhead_r18_sim_v4_r1/final/bundle"
+decoder = "/mnt/data1/chirp_v2/params/runs/v4-dualhead-sim-v4-r2/bundle"
+
+[detection]
+store_threshold = 0.05
+operating_threshold = 0.5
+postprocess = true
+
+[assignment]
+tracks = "."
+tolerance_hz = 20.0
+max_gap_s = 10.0
+baseline_window_s = 1.0
+baseline_guard_s = 0.0
+
+[compute]
+device = "cuda"
+max_vram_fraction = 0.4
+chunk_tiles = 48
+click_workers = 2
+clean_processes = 4
+prefetch = 5
+
+[validation]
+qc = true
+windows = 10
+window_s = 10.0
+candidates_per_cell = 6
+seed = 0
