@@ -32,8 +32,19 @@ too.
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 from pathlib import Path
+
+# Python 3.14 changed the default start method on Linux from "fork" to
+# "forkserver", which re-imports the main module in every worker. The old
+# scripts run their analysis at module level (no __main__ guard), so pymc's
+# parallel chains would re-run the script. Restore the 3.12 default; every
+# ported script imports this module before sampling.
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:  # already set in this process
+    pass
 
 
 def _env(name: str, default: str | Path) -> Path:
