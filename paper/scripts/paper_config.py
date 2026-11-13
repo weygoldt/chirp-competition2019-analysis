@@ -51,6 +51,9 @@ PROCESSED = OUT / "data" / "processed"
 RESULTS = OUT / "results"
 FIGURES = _env("PAPER_FIGURE_DIR", OUT / "figures")
 
+# Seed for scripts that were unseeded in the old analysis (seeded ones keep theirs).
+SEED = 42
+
 # The manuscript's figure directory; nothing may be written there.
 _FORBIDDEN = Path("~/wrk/analyses/chirp_competition_paper/figures").expanduser().resolve()
 _OLD_REPO = Path("~/wrk/analyses/chirp_competition").expanduser().resolve()
@@ -72,6 +75,13 @@ def processed(*parts: str) -> Path:
     """A path under ``$PAPER_OUT/data/processed``; parent directories are created."""
     p = _check(PROCESSED.joinpath(*parts))
     p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def processed_dir(*parts: str) -> Path:
+    """A directory under ``$PAPER_OUT/data/processed``; it is created."""
+    p = _check(PROCESSED.joinpath(*parts))
+    p.mkdir(parents=True, exist_ok=True)
     return p
 
 

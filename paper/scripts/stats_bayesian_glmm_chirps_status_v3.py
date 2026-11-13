@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src/stats_bayesian_glmm_chirps_status_v3.py).
+# Changes: input/output under $PAPER_OUT/data/processed (the old save path was hard-coded into the old repo); random_seed=SEED for the fit and np.random.seed(SEED) before the new-group predictions (both unseeded before). Model, priors and sampler settings unchanged.
 """
 Test whether chirps differ between winner and loser (negative binomial GLMM).
 
@@ -18,6 +20,7 @@ import seaborn as sns
 import xarray as xr
 
 from stats_utils import parse_bambi_model_output
+from paper_config import SEED, processed, processed_dir
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +170,7 @@ def report_count_multipliers(
 # Load and preprocess data
 # ---------------------------------------------------------------------------
 # Load and preprocess data
-df = pd.read_csv("data/processed/trial_summary_long.csv")
+df = pd.read_csv(processed("trial_summary_long.csv"))
 df["rises_z"] = (df["rises"] - df["rises"].mean()) / df["rises"].std()
 df["size_z"] = (df["size"] - df["size"].mean()) / df["size"].std()
 
@@ -243,6 +246,7 @@ idata = model.fit(
     cores=30,
     target_accept=0.99,
     max_treedepth=15,
+    random_seed=SEED,
 )
 
 print(model)
@@ -319,6 +323,7 @@ new_data = pd.DataFrame(
     }
 )
 
+np.random.seed(SEED)
 new_idata = model.predict(
     idata,
     data=new_data,
@@ -367,10 +372,7 @@ plt.show()
 # Persist outputs (column names and JSON keys unchanged)
 # ---------------------------------------------------------------------------
 
-savepath = Path(
-    f"/home/weygoldt/wrk/analyses/chirp_competition/data/processed/{Path(__file__).stem}"
-)
-savepath.mkdir(exist_ok=True)
+savepath = processed_dir(Path(__file__).stem)
 
 df_final.to_csv(savepath / "predictions.csv", sep=",", index=False)
 

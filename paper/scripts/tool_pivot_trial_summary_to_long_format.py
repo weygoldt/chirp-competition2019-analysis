@@ -1,6 +1,9 @@
+# Ported from chirp_competition d040123 (src/tool_pivot_trial_summary_to_long_format.py).
+# Changes: reads the trial summary with recounted chirps (make_trial_summary.py) from $PAPER_OUT; writes trial_summary_long.csv there (the to_csv was commented out in the old copy; the old output matched it).
 import pandas as pd
 import pathlib
 from analyze_event_time_rates_trial import is_good_trial
+from paper_config import DATA_ROOT, processed
 
 
 def main(path: pathlib.Path):
@@ -11,7 +14,7 @@ def main(path: pathlib.Path):
     drop_indices = []
     for i in range(len(df)):
         row = df.iloc[i]
-        dataset_path = path.parent / row["recording"]
+        dataset_path = DATA_ROOT / row["recording"]
         if not is_good_trial(dataset_path, row, skip_ag_events=True):
             drop_indices.append(i)
 
@@ -78,10 +81,10 @@ def main(path: pathlib.Path):
     print("Dataframe columns: ---------")
     print(df.columns)
 
-    targetpath = pathlib.Path("data/processed/trial_summary_long.csv")
-    # df.to_csv(targetpath)
+    targetpath = processed("trial_summary_long.csv")
+    df.to_csv(targetpath)
 
 
 if __name__ == "__main__":
-    path = pathlib.Path("/mnt/data2/2019_tube_competition/trial_summary.csv")
+    path = processed("trial_summary.csv")  # make_trial_summary.py: chirp counts of PAPER_DETECTIONS
     main(path)

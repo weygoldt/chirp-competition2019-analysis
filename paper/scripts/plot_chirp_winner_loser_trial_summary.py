@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src/plot_chirp_winner_loser_trial_summary.py).
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); seeded jitter.
 import os
 import json
 from pathlib import Path
@@ -10,6 +12,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from paper_config import PROCESSED, SEED, figure
 from style import (
     letter_subplots,
     loser_color,
@@ -28,10 +31,8 @@ bad_recordings = [
 
 filename = Path(__file__).stem
 # Model reported in the manuscript: trial-level random intercept only (v3).
-MODEL_DIR = "data/processed/stats_bayesian_glmm_chirps_status_v3"
-targetpath = (
-    Path(os.environ.get("PAPER_FIGURE_DIR", "/home/weygoldt/wrk/analyses/chirp_competition_paper/figures")) / filename
-)
+MODEL_DIR = str(PROCESSED / "stats_bayesian_glmm_chirps_status_v3")
+targetpath = figure(filename)
 formats = ["png", "pdf", "svg"]
 
 fm_colors = {"m": "w", "f": "grey"}
@@ -67,7 +68,7 @@ def setup_plot():
 # Top panel: paired scatter + posterior KDEs + boxplots
 # ---------------------------------------------------------------------------
 def plot_data(ax):
-    df = pd.read_csv("data/processed/trial_summary_long.csv", index_col=0)
+    df = pd.read_csv(PROCESSED / "trial_summary_long.csv", index_col=0)
     pred_df = pd.read_csv(f"{MODEL_DIR}/predictions.csv")
     # v3 stores labels; map them to the codes used in trial_summary_long.csv
     pred_df["status"] = pred_df["status"].map({"loser": 0, "winner": 1})
@@ -88,7 +89,7 @@ def plot_data(ax):
     print(f"Median factor: {med_lose / med_win:.2f}")
 
     # paired scatter with connecting lines
-    jitter = np.random.uniform(-0.05, 0.05, len(winlose))
+    jitter = np.random.default_rng(SEED).uniform(-0.05, 0.05, len(winlose))
     for i, wl in enumerate(winlose):
         slope = np.diff(wl)
         positions = [0.25 + jitter[i], 0.75 + jitter[i]]
