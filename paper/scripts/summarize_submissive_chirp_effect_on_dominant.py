@@ -1,3 +1,6 @@
+# Ported from chirp_competition d040123 (src_paper/summarize_submissive_chirp_effect_on_dominant.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data root default DATA_ROOT;
+# output under $PAPER_OUT (it still clears its own output directory first, as before).
 """
 Build per-chase-event summary rows from BORIS annotations and RCNN chirp
 detections.
@@ -49,6 +52,8 @@ import pandas as pd
 import typer
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
+from chirps import load_chirps
+from paper_config import DATA_ROOT, PROCESSED
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
 
@@ -161,8 +166,7 @@ def extract_chasing_data_for_trial(
     contact_times, chasing_on_off_times, _, _ = load_and_convert_boris_events(
         trial_folder, trial_row["recording"], sr=20000
     )
-    chirp_times = np.load(trial_folder / "chirp_times_rcnn.npy")
-    chirp_ids = np.load(trial_folder / "chirp_ids_rcnn.npy")
+    chirp_times, chirp_ids = load_chirps(trial_folder)
 
     if np.isnan(chirp_times).any():
         raise ValueError(
@@ -378,12 +382,10 @@ def get_data(
 # ---------------------------------------------------------------------------
 @app.command()
 def main(
-    data_path: Path,
+    data_path: Path = DATA_ROOT,
     num_permutations: int = 300,
     seed: int = 42,
-    save_dir: Path = Path(
-        "data/processed/chirp_effect_on_dominant_adaptive_window/data"
-    ),
+    save_dir: Path = PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "data",
 ) -> None:
     """Generate permutation baselines and one observed dataset."""
     filename = "chirp_effect_on_dominant"
