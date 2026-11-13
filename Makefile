@@ -1,6 +1,6 @@
 PACKAGES := packages/gridtools packages/chirpdetector
 
-.PHONY: sync check lint typecheck test
+.PHONY: sync check lint typecheck test paper-test
 
 sync:
 	uv sync
@@ -16,3 +16,7 @@ test:
 	uv run pytest -q $(PACKAGES)
 
 check: lint typecheck test
+
+# The manuscript analysis (paper/, own uv project): loader tests only.
+paper-test:
+	cd paper && unset VIRTUAL_ENV && uv run pytest -q

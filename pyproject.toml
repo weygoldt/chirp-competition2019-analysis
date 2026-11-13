@@ -50,8 +50,10 @@ markers = [
 line-length = 88
 target-version = "py314"
 # experiments/ holds the scripts as they were run (only their paths were
-# made portable); they are provenance, not maintained code.
-extend-exclude = ["experiments"]
+# made portable); they are provenance, not maintained code. paper/ holds the
+# manuscript analysis ported like-for-like from the old analysis repo, with
+# its own environment (paper/pyproject.toml) and tests (make paper-test).
+extend-exclude = ["experiments", "paper"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF", "PT"]
