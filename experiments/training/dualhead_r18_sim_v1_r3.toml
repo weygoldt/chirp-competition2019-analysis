@@ -1,0 +1,50 @@
+# Dual-head RT-DETRv2-r18 (boxes + emitter EODf) on sim_v1 (2026-11-12), run 3.
+# Continues run 1 (dualhead_r18_sim_v1_r1: 5 epochs from COCO, best = epoch 5,
+# val fitness 0.870), which was stopped when other jobs saturated the /mnt/data1
+# HDD (loader at 16-25 img/s). Run 3 reads the NVMe copy of sim_v1 (same
+# content_sha256) and trains up to 10 more epochs from run 1's selected EMA
+# weights (sha256 f5faab8647e9...), cosine from lr0 again with a short warm-up.
+# Final fit only: train groups to fit, val groups for early stopping and
+# best-epoch selection (fitness = AP x assignment accuracy). The GPU is
+# shared with two YOLO26 runs: cap 0.3 (~4.9 GB); batch 16 peaks at ~3.1 GiB.
+seed = 1  # run 1 used 0; a different shuffle for the continued epochs
+# deformable attention (grid_sample) has no deterministic backward on CUDA
+deterministic = false
+device = "cuda"
+max_vram_fraction = 0.3
+score_threshold = 0.5
+
+[model]
+type = "dualhead"
+architecture = "rtdetr_v2_r18vd"
+pretrained = true
+weights = "/mnt/data1/chirp_v2/runs/dualhead_r18_sim_v1_r1/final/dualhead/best.pt"
+num_queries = 300
+num_denoising = 100
+max_det = 50
+emitter_loss_weight = 10.0
+backbone_lr_scale = 0.1
+grad_clip = 0.1
+ema_decay = 0.9999
+time_shift_px = 32
+val_max_images = 2000
+
+[optim]
+epochs = 10
+batch = 16
+optimizer = "AdamW"
+lr0 = 0.0001
+lrf = 0.05
+schedule = "cosine"
+warmup_epochs = 0.1
+weight_decay = 0.0001
+patience = 4
+amp = true
+workers = 8
+
+[augment]
+time_flip = 0.0
+
+[cv]
+n_folds = 0
+final_fit = true

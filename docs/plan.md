@@ -1,6 +1,8 @@
 # Plan: chirp pipeline v2 (gridtools + chirpdetector)
 
-Status: draft, 2026-11-12. Findings behind each decision: `docs/audit-2026-11.md`.
+Status: finished, 2026-11-13 (drafted 2026-11-12); what is final and what is
+open: `docs/status.md`. Findings behind each decision: `docs/audit-2026-11.md`.
+v2 is merged into `main` of both packages; the `v2` branches are historical.
 
 ## Goals and success criteria
 

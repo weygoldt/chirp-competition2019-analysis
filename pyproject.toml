@@ -49,6 +49,9 @@ markers = [
 [tool.ruff]
 line-length = 88
 target-version = "py314"
+# experiments/ holds the scripts as they were run (only their paths were
+# made portable); they are provenance, not maintained code.
+extend-exclude = ["experiments"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF", "PT"]

@@ -1,0 +1,27 @@
+# Chirp-parameter decoder, production settings (chirpdetector.params.training).
+seed = 0
+device = "auto"
+max_vram_fraction = 0.1
+workers = 5
+scene_background = "hybrid"   # author's rule: no synthetic-noise-only scenes
+
+[boxes]
+mode = "footprint"            # reference: jittered footprint boxes (no detector)
+jitter_t_s = 0.010
+jitter_f_hz = 5.0
+
+[crop]
+size = [96, 96]
+margin_rel = 0.15
+canvas_s = 3.2
+
+[optim]
+epochs = 40
+batch = 256
+lr = 0.002
+patience = 8
+min_score = 0.25
+
+[calibration]
+method = "inverse-median"
+min_score = 0.0
