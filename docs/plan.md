@@ -309,6 +309,40 @@ labelling with the P1b tool runs in parallel with P2–P4.
     (train/val/test disjoint), new seeds (train 2000-4399, val 4400-4699,
     test 4700-4999). The same rule applies to the chirp-parameter decoder.
     Models fitted on sim_v1/sim_v2 are kept on disk only for reference.
+21. Background library v2 (2026-11-13, author's rules plus defaults the
+    author accepted): competition backgrounds come only from the fish's
+    inactive (light) period with 30 min padding, i.e. the last 2.5 h of
+    the ~6 h 2019 recordings and the last 0.5 h of the ~4 h 2022
+    recordings (never earlier than 3.5 h after the start). A candidate
+    60-s segment is kept only if a re-run of the v1 production detector
+    (frozen v1 code and weights; at score >= 0.5 it reproduces all 88,535
+    saved v1 boxes) finds nothing at score >= 0.1 within the segment +-1 s,
+    and neither does a sim-trained YOLO26s at >= 0.2. Recordings with more
+    than 20 v1 chirps per hour in their window are dropped entirely
+    (20 of 47 screened 2019 recordings, 1 of 17 from 2022); in many of
+    them fish keep chirping after lights-on (real chirps, not artifacts).
+    The four hand-labelled recordings never enter the library (locked
+    test set). Field segments (fish-free) carry over from v1.
+22. Fish-disjoint chirp templates (2026-11-13): train/val/test scenes draw
+    templates of disjoint individuals or template groups
+    (templates/v4/splits_v1.json; 80/10/10 of groups, stratified so that
+    val and test hold small, big and long chirps; the long-chirp fish g6f5
+    pinned to train, g6f1 provides the test long chirps). Simulated test
+    numbers therefore measure new fish. train_v4/sim_v4 combine
+    Decisions 20-22 (seeds train 5000-7399, val 7400-7699, test
+    7700-7999).
+23. Final models (2026-11-13): dual-head RT-DETRv2-r18 on sim_v4
+    (runs/dualhead_r18_sim_v4_r1, best epoch 16) as the production
+    detector, assigning each chirp to the live track nearest its predicted
+    emitter EODf; the chirp-parameter decoder trained on its boxes
+    (params/runs/v4-dualhead-sim-v4). YOLO26s on sim_v4 is kept as the
+    box-only reference. The decoder outputs both calibrated and raw
+    estimates; the manuscript's chirp-parameter figure uses the
+    calibrated values (author).
+24. Post-processing (2026-11-13, author approved): second-harmonic copies
+    of chirps (emitter at twice a live track's EODf with no track of its
+    own) and duplicate boxes on one chirp are flagged and dropped after
+    assignment, never silently.
 
 ## Constraints
 
