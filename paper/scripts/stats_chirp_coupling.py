@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/stats_chirp_coupling.py).
+# Changes: input/output under $PAPER_OUT/data/processed. Models, priors, sampler settings and seed unchanged.
 """
 Coupling models — how do chirp rates track competition intensity?
 
@@ -37,16 +39,19 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from paper_config import PROCESSED
+
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 # ---------------------------------------------------------------------------
 # Paths & config
 # ---------------------------------------------------------------------------
-IN_DATA = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/data/chirp_effect_on_dominant_obs.csv"
+IN_DATA = (
+    PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "data"
+    / "chirp_effect_on_dominant_obs.csv"
 )
-OUT_DIR = Path("data/processed/chirp_coupling/negbin")
+OUT_DIR = PROCESSED / "chirp_coupling" / "negbin"
 TRACE_DIR = OUT_DIR
 OUT_CSV = OUT_DIR / "slope_summary.csv"
 LOO_MODELS = ("C0_intercept", "C1_prev_ICI", "C2_prev_ICI_and_D")

@@ -1,3 +1,5 @@
+# Ported from chirp_competition d040123 (src_paper/stats_chirp_affects_chasing.py).
+# Changes: input/output under $PAPER_OUT/data/processed. Models, priors, subsets, sampler settings and seed unchanged.
 """
 Bayesian Gamma GLMMs: does loser chirp presence in the fixed [-3, +13] s
 window around a chasing offset change the dominant's chasing dynamics?
@@ -66,17 +68,17 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from paper_config import PROCESSED
+
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-DATA_PATH = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/data/"
-    "chirp_effect_on_dominant_obs.csv"
+DATA_PATH = (
+    PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "data"
+    / "chirp_effect_on_dominant_obs.csv"
 )
-OUT_DIR = Path(
-    "data/processed/chirp_effect_on_dominant_adaptive_window/gamma_glmm_binary"
-)
+OUT_DIR = PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "gamma_glmm_binary"
 
 PRIMARY_PREDICTOR = "loser_chirped_fixed_m3p13"
 TAIL_PREDICTOR = "loser_chirped_chase_tail"
