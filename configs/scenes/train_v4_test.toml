@@ -1,0 +1,29 @@
+# Training scenes v4, test split (2026-11-13): final training data.
+# - Hybrid only: every scene on a real background segment (Decision 20).
+# - Background library v2: competition segments only from the fish's inactive
+#   period (2019: last 2.5 h, 2022: last 0.5 h of the recording) and only if
+#   they pass a low-threshold re-run of the v1 production detector (plus a
+#   recording-level chirp-rate gate and a v2 YOLO screen); field segments as in v1.
+# - Fish-disjoint chirp templates: this split draws only templates of its own
+#   fish/groups (templates/v4/splits_v1.json; g6f5 pinned to train).
+# Background recordings split as in train_v2/train_v3 (disjoint across splits).
+name = "train_v4_test"
+duration_s = 60.0
+
+[population]
+close_pair_prob = 0.3
+
+[chirps]
+rate_hz = [0.05, 0.25]
+template_split = "test"
+template_splits = "/mnt/data1/chirp_v2/templates/v4/splits_v1.json"
+
+[background]
+library = "/mnt/data1/chirp_v2/background/v2"
+prob = 1.0
+unscreened_weight = 0.3
+max_real_gap_db = 30.0
+include_groups = ["competition2019/2019-11-27-10_00", "competition2019/2019-12-03-10_01", "competition2019/2020-03-11-09_56", "competition2019/2020-06-04-10_00", "competition2019/2020-06-11-10_00", "competition2022/2022-05-10-10_00", "competition2022/2022-06-29-10_00", "field_flona2025/site_9", "field_iriri2026/iriri01_lago-de-pedro/grid02"]
+
+[plot]
+enabled = false
