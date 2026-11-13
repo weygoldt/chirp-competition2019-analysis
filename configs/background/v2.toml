@@ -1,0 +1,70 @@
+# Background library v2 (2026-11-13): competition segments only from the
+# fish's inactive (light) period, screened for chirps by the v1 production
+# detector at a low threshold and by a v2 YOLO26s model.
+#
+#   python -m gridtools.background carry-over /mnt/data1/chirp_v2/background/v1 \
+#       /mnt/data1/chirp_v2/background/v2 --datasets field_flona2025 field_iriri2026
+#   python -m gridtools.background build /mnt/data1/chirp_v2/background/v2 \
+#       --config configs/background/v2.toml --datasets competition2019 competition2022
+#
+# Screens: scripts/v1_screen.py (frozen v1 environment) and
+# scripts/v2_screen.py write the screen directories below.
+seed = 0
+workers = 6
+exclude_labelled = true
+fish_free_per_recording = 2
+# the saved v1 detections (score >= 0.5) are replaced by the v1 screen
+use_saved_detections = false
+
+[selection]
+segment_s = 60.0
+# denser grid than v1 (15 s) so the 30-min 2022 windows still fill up
+step_s = 5.0
+# margin of hand labels and review vetoes; the screens have their own
+margin_s = 1.0
+# the recording's end: the screens' coverage decides (v1 stops 16-31 s early)
+edge_s = 60.0
+segments_per_recording = 30
+fill = true
+
+# 2022 windows hold 29 segments: pack them (earliest first) instead of
+# stratifying, which leaves gaps shorter than a segment
+[selection_by_dataset.competition2022]
+pack = true
+
+# Author's rule: only the inactive period, with 30 min of padding, measured
+# from the recording's end; never earlier than 3 h dark + 30 min after the
+# start (Methods: the first 3 h of every recording are dark), so recordings
+# stopped early get a shorter window instead of one reaching into the dark.
+[windows.competition2019]
+# ~6 h recordings, inactive = last 3 h
+last_s = 9000.0
+min_start_s = 12600.0
+min_duration_s = 14400.0
+
+[windows.competition2022]
+# ~4 h recordings, inactive = last 1 h
+last_s = 1800.0
+min_start_s = 12600.0
+min_duration_s = 10800.0
+
+# Reject a candidate if a screen box overlaps [start - 1 s, stop + 1 s].
+[[screens]]
+name = "v1"
+root = "/mnt/data1/chirp_v2/background/screens/v1"
+threshold = 0.1
+margin_s = 1.0
+
+[[screens]]
+name = "v2"
+root = "/mnt/data1/chirp_v2/background/screens/v2_yolo26s"
+threshold = 0.2
+margin_s = 1.0
+
+# Drop recordings with more than 20 v1 boxes (score >= 0.5) per hour of
+# their window: at v1's recall of 0.76 a v1-clean 60-s segment of such a
+# recording still carries ~0.1 expected missed chirps.
+[gate]
+screen = "v1"
+threshold = 0.5
+max_rate_per_h = 20.0
