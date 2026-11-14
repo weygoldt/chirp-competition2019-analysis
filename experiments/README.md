@@ -130,6 +130,15 @@ every stored table and legacy array from the unpatched tracks. Outputs
 `overview_trials.csv`; per recording `chirps_rtdetr_gapfill.parquet` with
 `gapfill_changed`, legacy arrays, `meta.json`, `tracks_gapfill.npz`).
 
+`make_threshold_variant.py`: the gap-filled run at a stricter operating
+threshold, for the robustness check of the manuscript analyses (2026-11-14,
+author's decision: primary threshold stays 0.5). Only `chirp` changes
+(`score >= threshold & kept`); post-processing and assignment are reused;
+`--verify` first reproduces the source's legacy arrays at its own threshold.
+At 0.9: `$CHIRP_DATA/detections/competition2019_v2_20261113_gapfill_t090/`
+(120,808 -> 86,990 legacy chirps in the 50 recordings), copied with
+`--suffix _gapfill_t090`.
+
 ### README figures (`readme_figures/`)
 
 The overview figures of the two package READMEs, each in a light and a
