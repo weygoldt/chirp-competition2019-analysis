@@ -126,6 +126,8 @@ the semantics and the commands: `$CHIRP_DATA/labels/real_v1/README.md`.
 | `real_labels/serve.sh` | `labels/real_v1_labels/` | start / resume the labeller (systemd user service) |
 | `real_labels/score_session.py` | `labels/real_v1/report/` | the scores, once labels exist |
 | `real_labels/fake_labels.py` | (a test directory) | machine-made labels for a smoke test of the scorer only |
+| `real_labels/compare_production.py` | `detections/competition2019_v2_t001/compare_production.csv` | the t001 rows >= 0.05 against the production run |
+| `real_labels/screenshot.py` | | headless-Firefox screenshot of the running labeller (checks that an item renders) |
 
 ### README figures (`readme_figures/`)
 
