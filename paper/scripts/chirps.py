@@ -35,8 +35,15 @@ def load_chirps(trial_path: str | Path, source: str | None = None) -> tuple[np.n
     return times, ids
 
 
-def load_chirp_table(trial_path: str | Path) -> pd.DataFrame:
-    """All v2 detections of one recording with a ``keep`` column (the legacy selection)."""
-    df = pd.read_parquet(Path(trial_path) / "chirps_rtdetr.parquet")
+def load_chirp_table(trial_path: str | Path, source: str | None = None) -> pd.DataFrame:
+    """All v2 detections of one recording with a ``keep`` column (the legacy selection).
+
+    Reads ``chirps_<source>.parquet`` (``source`` defaults to ``DETECTIONS``;
+    v2 sources only: ``rtdetr``, ``rtdetr_gapfill``).
+    """
+    source = source or DETECTIONS
+    if not source.startswith("rtdetr"):
+        raise ValueError(f"no parquet for detection source {source!r} (v2 sources only)")
+    df = pd.read_parquet(Path(trial_path) / f"chirps_{source}.parquet")
     df["keep"] = df["chirp"] & df["track_id"].notna() & (df["pp_drop_reason"] == "")
     return df

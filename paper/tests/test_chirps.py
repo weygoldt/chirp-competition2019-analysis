@@ -18,7 +18,7 @@ def test_recordings_found():
 @pytest.mark.parametrize("rec", RECORDINGS, ids=lambda p: p.name)
 def test_parquet_keep_equals_legacy_arrays(rec):
     times, ids = load_chirps(rec, "rtdetr")
-    df = load_chirp_table(rec)
+    df = load_chirp_table(rec, "rtdetr")
     kept = df[df["keep"]].sort_values("t_center_s", kind="stable")
     np.testing.assert_array_equal(kept["t_center_s"].to_numpy(), times)
     np.testing.assert_array_equal(kept["track_id"].to_numpy(), ids)
