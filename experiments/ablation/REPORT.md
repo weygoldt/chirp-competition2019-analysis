@@ -61,6 +61,11 @@ Labels found by one arm only: 1 (A) vs 2 (B), exact McNemar p = 1. Of B's
 24 false positives on the 365 labels, 5 lie where the author never reviewed
 a box (A's were all reviewed), which can only favour A.
 
+Assignment on real data has no ground truth; the arms agree: of the 378
+chirps both detected at ≥ 0.5 in the labelled regions, 371 (98.1%) go to the
+same fish; all 7 disagreements are in 2019-12-09-10_00 (fish ~20 Hz apart);
+predicted emitter EODf differs by a median 1.46 Hz (90th percentile 3.89 Hz).
+
 **Blind benchmark** (1,010 simulated items: 536 chirps, 409 negatives):
 
 | metric | A | B | B − A [95% CI] |
