@@ -113,7 +113,22 @@ competition recordings with `configs/detect/competition2019_v2.toml`
 `chirps_rtdetr_meta.json`) from that run into `$CHIRP_REC_2019/<recording>/`
 (done 2026-11-13 for all 50 recordings). Never overwrites: identical files
 are skipped, different ones stop the script. Verifies sha256 and the counts
-in `meta.json`; manifest `<run>/trial_copies_manifest.csv`.
+in `meta.json`; manifest `<run>/trial_copies_manifest.csv`. `--run` and
+`--suffix` copy another run's files, e.g. the gap-filled patch below with
+`--run $CHIRP_DATA/detections/competition2019_v2_20261113_gapfill --suffix
+_gapfill` (`chirps_rtdetr_gapfill.parquet`, `chirp_{times,ids}_rtdetr_gapfill.npy`,
+`chirps_rtdetr_gapfill_meta.json`).
+
+`gapfill_reassign.py`: dataset patch of that run (2026-11-14; chirpdetector
+unchanged). Fills the interior gaps (10-300 s, EODf jump <= 15 Hz) of the two
+trial fish's wavetracker tracks by linear interpolation on the tracker's
+time grid and reruns chirpdetector's post-processing and assignment on the
+stored detections (no re-detection). An equivalence test first reproduces
+every stored table and legacy array from the unpatched tracks. Outputs
+`$CHIRP_DATA/detections/competition2019_v2_20261113_gapfill/` (`README.md`,
+`equivalence.csv`, `gaps_gapfill.csv`, `transitions.csv`,
+`overview_trials.csv`; per recording `chirps_rtdetr_gapfill.parquet` with
+`gapfill_changed`, legacy arrays, `meta.json`, `tracks_gapfill.npz`).
 
 ### README figures (`readme_figures/`)
 

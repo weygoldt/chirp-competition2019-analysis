@@ -12,6 +12,17 @@ the dataset gets a copy of the files the analysis reads:
 ``meta.npy`` or a later ``meta.json``.) ``qc/`` and ``windows/`` stay in the
 run directory.
 
+``--run`` names the source run; ``--suffix`` the suffix of its file names
+(default none). The gap-filled patch of the production run
+(``gapfill_reassign.py``) is copied with ``--run
+$CHIRP_DATA/detections/competition2019_v2_20261113_gapfill --suffix
+_gapfill``:
+
+    <run>/<rec>/chirps_rtdetr_gapfill.parquet  -> <dest>/<rec>/chirps_rtdetr_gapfill.parquet
+    <run>/<rec>/chirp_times_rtdetr_gapfill.npy -> <dest>/<rec>/chirp_times_rtdetr_gapfill.npy
+    <run>/<rec>/chirp_ids_rtdetr_gapfill.npy   -> <dest>/<rec>/chirp_ids_rtdetr_gapfill.npy
+    <run>/<rec>/meta.json                      -> <dest>/<rec>/chirps_rtdetr_gapfill_meta.json
+
 Idempotent and conservative, because the recording directories hold raw data:
 
 - a destination file that already exists with the same sha256 is skipped;
@@ -35,7 +46,7 @@ Usage (repository root, workspace environment):
 
     uv run python experiments/production/copy_detections_to_trials.py \
         [--run $CHIRP_DATA/detections/competition2019_v2_20261113] \
-        [--dest $CHIRP_REC_2019] [--dry-run]
+        [--suffix SUFFIX] [--dest $CHIRP_REC_2019] [--dry-run]
 """
 
 from __future__ import annotations
@@ -44,6 +55,7 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 import shutil
 import sys
 from datetime import datetime
@@ -55,12 +67,18 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from paths import DATA, REC_2019  # noqa: E402
 
-FILES = (
-    ("chirps_rtdetr.parquet", "chirps_rtdetr.parquet"),
-    ("chirp_times_rtdetr.npy", "chirp_times_rtdetr.npy"),
-    ("chirp_ids_rtdetr.npy", "chirp_ids_rtdetr.npy"),
-    ("meta.json", "chirps_rtdetr_meta.json"),
-)
+
+def files(suffix: str = "") -> tuple[tuple[str, str], ...]:
+    """(source, destination) file names of one recording."""
+    return (
+        (f"chirps_rtdetr{suffix}.parquet", f"chirps_rtdetr{suffix}.parquet"),
+        (f"chirp_times_rtdetr{suffix}.npy", f"chirp_times_rtdetr{suffix}.npy"),
+        (f"chirp_ids_rtdetr{suffix}.npy", f"chirp_ids_rtdetr{suffix}.npy"),
+        ("meta.json", f"chirps_rtdetr{suffix}_meta.json"),
+    )
+
+
+FILES = files()
 MARGIN_BYTES = 1 << 30
 CHUNK = 1 << 20
 
@@ -80,15 +98,15 @@ def copy_exclusive(src: Path, dst: Path) -> None:
     shutil.copystat(src, dst)
 
 
-def check_counts(rec_dir: Path, meta: dict) -> list[str]:
+def check_counts(rec_dir: Path, meta: dict, suffix: str = "") -> list[str]:
     """Consistency of the copied files with meta.json; returns problems."""
     problems = []
     n_legacy = int(meta["legacy"]["n"])
-    times = np.load(rec_dir / "chirp_times_rtdetr.npy")
-    ids = np.load(rec_dir / "chirp_ids_rtdetr.npy")
+    times = np.load(rec_dir / f"chirp_times_rtdetr{suffix}.npy")
+    ids = np.load(rec_dir / f"chirp_ids_rtdetr{suffix}.npy")
     if not (len(times) == len(ids) == n_legacy):
         problems.append(f"legacy arrays {len(times)}/{len(ids)} != legacy.n {n_legacy}")
-    table = pq.read_table(rec_dir / "chirps_rtdetr.parquet", columns=["chirp", "track_id"])
+    table = pq.read_table(rec_dir / f"chirps_rtdetr{suffix}.parquet", columns=["chirp", "track_id"])
     if table.num_rows != int(meta["counts"]["stored"]):
         problems.append(f"parquet rows {table.num_rows} != counts.stored {meta['counts']['stored']}")
     df = table.to_pandas()
@@ -101,11 +119,20 @@ def check_counts(rec_dir: Path, meta: dict) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
-        "--run", type=Path, default=DATA / "detections" / "competition2019_v2_20261113"
+        "--run", type=Path, default=DATA / "detections" / "competition2019_v2_20261113",
+        help="source run directory",
+    )
+    ap.add_argument(
+        "--suffix", default="",
+        help="suffix of the run's file names, e.g. _gapfill (default: none)",
     )
     ap.add_argument("--dest", type=Path, default=REC_2019)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9_-]*", args.suffix):
+        print(f"ERROR: suffix {args.suffix!r}: letters, digits, '_' and '-' only")
+        return 2
+    names = files(args.suffix)
 
     recs = sorted(
         p.name
@@ -122,7 +149,7 @@ def main() -> int:
         if not dest_dir.is_dir():
             missing.append(rec)
             continue
-        for src_name, dst_name in FILES:
+        for src_name, dst_name in names:
             src, dst = args.run / rec / src_name, dest_dir / dst_name
             digest = sha256(src)
             if dst.exists():
@@ -194,7 +221,7 @@ def main() -> int:
         )
     for rec in recs:
         meta = json.loads((args.run / rec / "meta.json").read_text())
-        failed += [f"{rec}: {p}" for p in check_counts(args.dest / rec, meta)]
+        failed += [f"{rec}: {p}" for p in check_counts(args.dest / rec, meta, args.suffix)]
 
     with manifest.open("w", newline="") as f:
         f.write(f"# written {now} by {Path(__file__).name}\n")
