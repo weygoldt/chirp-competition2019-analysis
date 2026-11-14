@@ -108,7 +108,7 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   the two fish warm on the cool spectrogram (EOD$f_1$ peach, EOD$f_2$ rose;
   dataviz validator on the spectrogram's black: CVD separation 21 dE,
   contrast >= 3:1); models on white: RT-DETR dual-head blue (thicker line),
-  YOLO26s teal, YOLOv8l grey, human expert coral (validator: all checks
+  YOLO26s teal, human expert coral (validator: all checks
   pass; teal has 2.45:1 contrast on white and is always in the key);
   box-position-only assignment grey open circles; real decoder chirps black.
 - **Spectrogram symbols** (Figs. 1 and 3; one key in Fig. 3): box in the
@@ -128,8 +128,7 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   Fig. 2: "Real recordings"/"Simulated"); grouping by spacing, no brackets
   or stage headings; no project terms (v1/v2, production, sim_v4, decoder,
   labeller): models are "RT-DETR dual-head", "YOLO26s (boxes only)",
-  "YOLOv8l" (the YOLOv8-large detector of the previous analysis, "v1" in
-  the evaluation files), "human expert". White labels that would sit on a
+  "human expert". White labels that would sit on a
   faint noise line get a dark backing (`DARK_BACK`). Checked for every
   figure: no text overlapping another text (programmatic), no text touching
   a line, box or marker (300-dpi PNGs inspected region by region).
@@ -214,13 +213,13 @@ Source: `detections/competition2019_v2_20261113/2020-05-29-10_00/chirps_rtdetr.p
 
 Names in the figure: "RT-DETR dual-head" = `dualhead_r18_sim_v4_r1` (the
 production detector); "YOLO26s (boxes only)" = `yolo26s_sim_v4_r1`;
-"YOLOv8l" = `v1` (the detector of the previous analysis); "human expert" =
+"human expert" =
 the blind labeller of the benchmark; "box position only" = nearest live
 track to the box's lower edge + 41.15 Hz.
 
 | panel | number | source |
 |---|---|---|
-| A real, n = 365 labels | dual-head P 0.938, R 0.992 (TP 362, FP 24, FN 3); YOLO26s 0.947 / 0.984 (359 / 20 / 6); v1 1.000 / 0.701 (256 / 0 / 109). Curves end at the lowest stored score (v1 0.27, YOLO26s 0.06, dual-head 0.05) | `eval/real_labels_365/<model>/items.csv` (counted); curves `pr_curve.csv` level "all" |
+| A real, n = 365 labels | dual-head P 0.938, R 0.992 (TP 362, FP 24, FN 3); YOLO26s 0.947 / 0.984 (359 / 20 / 6). Recall axis 0.80-1.00 (both operating points at recall >= 0.98); curves start at precision ~1 at low recall and end at the lowest stored score (YOLO26s 0.06, dual-head 0.05) | `eval/real_labels_365/<model>/items.csv` (counted); curves `pr_curve.csv` level "all" |
 | B sim test after post-processing, 9,401 chirps | dual-head 0.976 / 0.957 (8,999 / 225 / 402); YOLO26s 0.989 / 0.952 (8,948 / 101 / 453) | `runs/<model>/eval_postprocess/sim_test_after/items.csv`; curves `pr_curve.csv` |
 | C benchmark, 536 true chirps (1,010 items) | recall expert 0.924, dual-head 0.963; by SNR (<-20, -20..-10, -10..0, 0..10, >=10 dB; n 85, 123, 130, 100, 98): expert 0.671, 0.959, 0.946, 0.990, 1.000; dual-head 0.835, 0.992, 0.962, 1.000, 1.000. Right emitter among true chirps: expert 0.812, dual-head 0.868 (not plotted) | `labels/benchmark/report_v2/items.csv` (truth == chirp & scored; unweighted) |
 | D correct emitter by ΔF (TP at >= 0.5, scenes with >= 2 live fish, n = 8,901) | emitter head: <10 Hz 0.881 (n 5,605), 10-25 0.982 (2,218), 25-50 0.994 (659), 50-100 1.000 (299), >=100 1.000 (120); box edge + 41.15 Hz: 0.578, 0.716, 0.836, 0.866, 0.983. Plotted population: head 0.920, box edge + offset 0.647. All 8,999 TPs (incl. 98 in single-fish scenes): head 0.921, box edge + offset 0.651, raw box edge 0.402 | `data/processed/v2_figures/assign_baseline.csv` (recomputed: kept predictions of `sim_test_predictions_flagged.parquet`, scene tracks, `assign_by_frequency`, items of `sim_test_after`) |
@@ -346,8 +345,9 @@ ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
 - Fig. 1E: the legend's "trace" line is drawn in the small chirp's fish
   colour (the big chirp's trace is peach, its fish's colour).
 - Fig. 2C plots only the human expert vs RT-DETR dual-head; the benchmark
-  also scored YOLO26s (recall 0.974) and YOLOv8l (0.438)
-  (`report_v2/report.md`), not plotted.
+  also scored YOLO26s (recall 0.974) (`report_v2/report.md`), not plotted.
+- Fig. 2 no longer shows the detector of the previous analysis (author's
+  decision, 2026-11-14; its evaluation stays in `eval/real_labels_365/v1`).
 - Fig. 1 B/C display levels make the chirps visible by saturating the
   baselines; the relative brightness of baseline and chirp is therefore not
   shown (A shows it).
@@ -419,14 +419,14 @@ and parameter estimation (E, F).* Models as in the key: RT-DETR dual-head,
 the detector used for all analyses (an RT-DETR detector with a second head
 that predicts the emitter's baseline EOD$f$ for each box); YOLO26s, a
 detector trained on the same data that predicts boxes only (reference);
-YOLOv8l, the detector of the previous analysis; one human expert. Circles
+one human expert. Circles
 in A and B, operating threshold (score >= 0.5). *A*, precision against
 recall over the detection score threshold on 365 hand-labelled chirps in
 six regions of four held-out recordings of _A. leptorhynchus_ dyads (2019,
 2020 and 2022 competitions; no labelled recording was used for training or
 model selection). At the operating threshold: RT-DETR dual-head precision
-0.938, recall 0.992 (362 of 365 labels found); YOLO26s 0.947, 0.984;
-YOLOv8l 1.000, 0.701. The labels prioritised clearly visible chirps, so
+0.938, recall 0.992 (362 of 365 labels found); YOLO26s 0.947, 0.984. The
+labels prioritised clearly visible chirps, so
 faint unlabelled chirps count as false positives (precision is
 underestimated) and recall refers to the more visible chirps. A detection
 matched a label if its centre lay within 100 ms and the boxes overlapped in

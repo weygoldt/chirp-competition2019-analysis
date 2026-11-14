@@ -96,14 +96,12 @@ DARK_BACK = {"bbox": dict(boxstyle="square,pad=0.12", fc=SPEC_BG, ec="none", alp
 MODEL_COLORS = {
     "dualhead": BLUE,  # RT-DETR with a second head for the emitter's EODf
     "yolo26s": TEAL,  # YOLO26s, boxes only (reference)
-    "v1": GREY,  # YOLOv8l, the detector of the previous analysis
     "human": CORAL,  # human expert (blind benchmark)
     "edge": GREY,  # assignment from the box position only
 }
 MODEL_LABELS = {
     "dualhead": "RT-DETR dual-head",
     "yolo26s": "YOLO26s (boxes only)",
-    "v1": "YOLOv8l",
     "human": "human expert",
 }
 

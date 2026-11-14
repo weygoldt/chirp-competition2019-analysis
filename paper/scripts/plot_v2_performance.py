@@ -9,9 +9,8 @@ per-threshold data:
 
 A   Real recordings, hand labels (365 chirps in 6 labelled regions of 4
     held-out recordings): precision against recall over the score threshold
-    for the RT-DETR dual-head detector (production), YOLO26s (boxes only,
-    reference) and YOLOv8l (the detector of the previous analysis; "v1" in
-    the evaluation files). Curves: ``pr_curve.csv`` (level "all") of
+    for the RT-DETR dual-head detector (production) and YOLO26s (boxes only,
+    reference). Curves: ``pr_curve.csv`` (level "all") of
     ``eval/real_labels_365/<model>``; operating points (score >= 0.5):
     counted from that evaluation's ``items.csv``.
 B   Simulated held-out test scenes (unseen fish on unseen background
@@ -90,9 +89,10 @@ def pr_panel(ax, models, base, kind, report, ylabel=True):
         ax.plot(op["recall"], op["precision"], "o", ms=OP_MS, mfc=col, mec="k",
                 mew=0.6, zorder=5, clip_on=False)
     ax.set_xlabel("Recall")
-    ax.set_xlim(0.65, 1.004)
+    ax.set_xlim(0.8, 1.004)
     ax.set_ylim(0.85, 1.006)
-    ax.set_xticks([0.7, 0.8, 0.9, 1.0])
+    ax.set_xticks([0.8, 0.85, 0.9, 0.95, 1.0])
+    ax.set_xticklabels(["0.8", "", "0.9", "", "1.0"])
     ax.set_yticks([0.85, 0.9, 0.95, 1.0])
     if ylabel:
         ax.set_ylabel("Precision")
@@ -261,9 +261,8 @@ def main() -> None:
     ax_f = C.axes_cm(fig, 13.75, y2, sq, sq)
 
     # --- detection ---------------------------------------------------------
-    real_dir = {"dualhead": "dualhead_r18_sim_v4_r1", "yolo26s": "yolo26s_sim_v4_r1",
-                "v1": "v1"}
-    pr_panel(ax_a, ["v1", "yolo26s", "dualhead"], lambda m: C.REAL_EVAL / real_dir[m],
+    real_dir = {"dualhead": "dualhead_r18_sim_v4_r1", "yolo26s": "yolo26s_sim_v4_r1"}
+    pr_panel(ax_a, ["yolo26s", "dualhead"], lambda m: C.REAL_EVAL / real_dir[m],
              "real", report)
     pr_panel(ax_b, ["yolo26s", "dualhead"], lambda m: C.PP_EVAL[m] / "sim_test_after",
              "sim", report, ylabel=False)
@@ -302,7 +301,7 @@ def main() -> None:
     handles = [Line2D([], [], color=C.MODEL_COLORS[m], lw=1.5 if m == "dualhead" else 1.0,
                       marker="o", ms=OP_MS - 0.6, mfc=C.MODEL_COLORS[m], mec="k", mew=0.6,
                       label=C.MODEL_LABELS[m])
-               for m in ("dualhead", "yolo26s", "v1", "human")]
+               for m in ("dualhead", "yolo26s", "human")]
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.0), ncol=4,
                frameon=False, fontsize="small", handlelength=1.6, columnspacing=1.8,
                handletextpad=0.5)
