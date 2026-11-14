@@ -4,15 +4,19 @@ Paths of the v2 production run and its evaluations, the cached spectrogram
 snippets written by ``v2_fig_extract.py``, and one visual language for all
 three figures (see "Figure style" in ``paper/v2_figures.md``):
 
-- spectrograms in seaborn's ``mako`` (the paper's spectrogram colormap), a
-  frequency axis offset from the image, no time axis but white scale bars;
-- detections drawn as boxes in the colour of the fish they were assigned to
-  (EOD$f_1$ = higher-frequency fish of the panel, orange; EOD$f_2$, reddish
-  purple), with the predicted emitter EOD$f$ as a circle; white boxes:
-  unassigned; dashed grey: removed by post-processing; dotted white: below
-  the operating threshold; white triangles: hand labels;
-- one colour per model in the performance figure (dual-head = production);
-- pipeline stage boxes, brackets and arrows drawn in figure centimetres.
+- one palette from seaborn's ``mako`` (cool: spectrograms, detectors,
+  densities) and its companion ``flare`` (warm: the two fish, the human
+  expert), plus greys for references;
+- spectrograms in ``mako`` (capped below white, so that white annotations
+  stand out), display levels from the crop (background percentile ->
+  chirp-pixel percentile), a frequency axis offset from the image, no time
+  axis but white scale bars;
+- detections as boxes in the colour of the fish they were assigned to
+  (EOD$f_1$ = higher-frequency fish of the panel, peach; EOD$f_2$, rose),
+  the predicted emitter EOD$f$ as a circle; white boxes: unassigned; dashed
+  grey: removed by post-processing; dotted white: below the operating
+  threshold; black triangles above the image: hand labels;
+- annotation arrows with one gentle curvature and a gap at both ends.
 
 Environment: ``paper/.venv`` (imports ``style``, which needs seaborn).
 """
@@ -28,6 +32,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import ConnectionPatch, FancyArrowPatch, FancyBboxPatch, Rectangle
 
 import paper_config
@@ -54,12 +59,30 @@ OPERATING = 0.5  # the run's operating threshold
 TOLERANCE_HZ = 20.0  # assignment tolerance of the run
 
 # ---------------------------------------------------------------------------
-# colours and styles
+# palette: mako (cool) + flare (warm), greys
 # ---------------------------------------------------------------------------
-SPEC_CMAP = sns.color_palette("mako", as_cmap=True)
-# fish colours: Okabe-Ito orange and reddish purple, both visible on mako
-# (checked: CVD separation 19 dE, contrast >= 3:1 on the spectrogram's black)
-FISH_COLORS = ("#E69F00", "#CC79A7")
+_MAKO = sns.color_palette("mako", as_cmap=True)
+_FLARE = sns.color_palette("flare", as_cmap=True)
+BLUE = "#3e4d93"  # mako 0.35
+TEAL = "#3eb4ad"  # mako 0.70
+PEACH = "#eca479"  # flare 0.05
+CORAL = "#e2655c"  # flare 0.30
+ROSE = "#c2456a"  # flare ~0.5
+GREY = "#a0a0a0"
+INK = "k"
+MUTED = "#6e6e6e"  # secondary text
+
+# spectrograms: mako without its near-white top, so that white marks stand out
+SPEC_CMAP = LinearSegmentedColormap.from_list("mako_capped", _MAKO(np.linspace(0, 0.93, 256)))
+SPEC_BG = SPEC_CMAP(0.0)  # the spectrogram's black, for key swatches
+# densities: light mint -> the detector blue (the same mako, reversed)
+DENSITY_CMAP = LinearSegmentedColormap.from_list(
+    "mako_density", _MAKO(np.linspace(0.92, 0.35, 256)))
+
+# the two fish of a panel (warm, distinct from the cool spectrogram; checked
+# with the dataviz validator on the spectrogram's black: CVD separation
+# 21 dE, contrast >= 3:1)
+FISH_COLORS = (PEACH, ROSE)
 DROPPED_COLOR = "#c8c8c8"  # boxes removed by post-processing (dashed)
 DROPPED_LS = (0, (3, 1.6))
 UNASSIGNED_COLOR = "white"
@@ -67,30 +90,42 @@ MISSED_LS = (0, (1, 1.2))  # detections below the operating threshold (dotted)
 BOX_LW = 0.9
 ANNOT_FS = "small"  # 6.7 pt at the 8-pt base; nothing in the figures is smaller
 ANNOT = {"color": "white", "fontsize": ANNOT_FS}
-ARROW = {"arrowstyle": "-|>", "color": "white", "lw": 0.7, "mutation_scale": 5,
-         "shrinkA": 1.5, "shrinkB": 1.5}
-INK = "k"
-MUTED = "#6e6e6e"  # secondary text (n per bin, notes)
-SPEC_BG = SPEC_CMAP(0.0)  # the spectrogram's black, for legend swatches
+DARK_BACK = {"bbox": dict(boxstyle="square,pad=0.12", fc=SPEC_BG, ec="none", alpha=0.8)}
 
 # performance figure: one colour per model, the same in every panel
-# (mako blue/teal of the paper's chirp/baseline colours, flare coral, grey)
 MODEL_COLORS = {
-    "dualhead": "#395d9c",  # v2 dual-head RT-DETR, the production detector
-    "yolo26s": "#3497a9",  # v2 YOLO26s, box-only reference
-    "v1": "#a0a0a0",  # v1, the detector of the original analysis
-    "human": "#e5715e",  # expert labeller (blind benchmark)
-    "edge": "#a0a0a0",  # box-only assignment rule
+    "dualhead": BLUE,  # RT-DETR with a second head for the emitter's EODf
+    "yolo26s": TEAL,  # YOLO26s, boxes only (reference)
+    "v1": GREY,  # YOLOv8l, the detector of the previous analysis
+    "human": CORAL,  # human expert (blind benchmark)
+    "edge": GREY,  # assignment from the box position only
 }
 MODEL_LABELS = {
-    "dualhead": "v2 dual-head (production)",
-    "yolo26s": "v2 YOLO26s (boxes only)",
-    "v1": "v1 (original analysis)",
-    "human": "expert labeller",
+    "dualhead": "RT-DETR dual-head",
+    "yolo26s": "YOLO26s (boxes only)",
+    "v1": "YOLOv8l",
+    "human": "human expert",
 }
-# light fills of the paper (obliterate figure): stage boxes, highlights
-FILL_GREY = "#F1EFE8"
-FILL_TEAL = "#E1F5EE"
+
+# annotation arrows: one gentle curvature, a gap at both ends
+ARC = 0.2
+
+
+def arrowprops(color="white", rad: float = ARC, shrink_a: float = 2.0,
+               shrink_b: float = 2.5) -> dict:
+    return dict(arrowstyle="-|>", color=color, lw=0.7, mutation_scale=5,
+                shrinkA=shrink_a, shrinkB=shrink_b, connectionstyle=f"arc3,rad={rad}")
+
+
+ARROW = arrowprops()
+
+
+def annotate(ax, text, xy, xytext, *, color="white", rad: float = ARC, ha="center",
+             va="center", fontsize=ANNOT_FS, shrink_a=2.0, shrink_b=2.5, **kw):
+    """Text with a gently curved arrow that stops short of its target."""
+    return ax.annotate(text, xy=xy, xytext=xytext, ha=ha, va=va, color=color,
+                       fontsize=fontsize,
+                       arrowprops=arrowprops(color, rad, shrink_a, shrink_b), **kw)
 
 
 def rc_tweaks() -> None:
@@ -128,6 +163,21 @@ def fig_cm(fig):
     """Transform: figure centimetres -> display (for annotations in cm)."""
     W, H = fig.get_size_inches() / CM
     return mpl.transforms.Affine2D().scale(1 / W, 1 / H) + fig.transFigure
+
+
+def letters_cm(fig, axes_and_offsets):
+    """``style.letter_subplots`` with offsets in cm from each axes' upper left corner."""
+    from style import letter_subplots
+
+    W, H = fig.get_size_inches() / CM
+    axs, xo, yo, lets = [], [], [], []
+    for ax, let, dx, dy in axes_and_offsets:
+        bb = ax.get_position()
+        axs.append(ax)
+        lets.append(let)
+        xo.append(-dx / (bb.width * W))
+        yo.append(1 + dy / (bb.height * H))
+    letter_subplots(axs, letters=lets, xoffset=xo, yoffset=yo)
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +237,7 @@ def fish_order(snip: dict, t0: float, t1: float) -> list[int]:
 
 
 def fish_colors(snip: dict, t0: float, t1: float) -> tuple[dict, list[int]]:
-    """{track id: colour} (EOD$f_1$ orange, EOD$f_2$ purple) and the order."""
+    """{track id: colour} (EOD$f_1$ peach, EOD$f_2$ rose) and the order."""
     order = fish_order(snip, t0, t1)
     return {tid: FISH_COLORS[i % 2] for i, tid in enumerate(order)}, order
 
@@ -208,6 +258,34 @@ def spec_crop(snip: dict, t0: float, t1: float, f0: float, f1: float, channel):
     return img, ext
 
 
+def chirp_levels(snip: dict, t0: float, t1: float, f0: float, f1: float,
+                 rows: pd.DataFrame, *, channel: int = 0, q_bg: float = 85,
+                 q_chirp: float = 99, guard_hz: float = 15.0) -> tuple[float, float]:
+    """Display levels that make the chirps visible.
+
+    vmin: the ``q_bg`` percentile of the whole crop (mostly background);
+    vmax: the ``q_chirp`` percentile of the pixels inside the crop's
+    operating chirp boxes, excluding rows within ``guard_hz`` of a live
+    track (the baselines, which then saturate). Falls back to (0.3, 0.95).
+    """
+    img, _ = spec_crop(snip, t0, t1, f0, f1, channel)
+    t, f = snip["times_s"], snip["freqs_hz"]
+    lo = float(np.percentile(img, q_bg))
+    vals = []
+    tracks = [track_median(snip, tid, t0 - 5, t1 + 5) for tid in fish_order(snip, t0 - 5, t1 + 5)]
+    for r in rows[rows.operating & rows.chirp].itertuples():
+        it = (t >= max(r.t_start_s, t0)) & (t <= min(r.t_end_s, t1))
+        jf = (f >= max(r.f_low_hz, f0)) & (f <= min(r.f_high_hz, f1))
+        for hz in tracks:
+            jf &= np.abs(f - hz) > guard_hz
+        if it.any() and jf.any():
+            vals.append(snip["img"][channel][np.ix_(jf, it)].astype(float).ravel())
+    if not vals:
+        return 0.3, 0.95
+    hi = float(np.percentile(np.concatenate(vals), q_chirp))
+    return lo, max(hi, lo + 0.1)
+
+
 def show_spec(
     ax,
     snip: dict,
@@ -220,11 +298,12 @@ def show_spec(
     vmin: float | None = 0.3,
     vmax: float | None = 0.95,
     t_ref: float | None = None,
-) -> None:
+) -> tuple[float, float]:
     """Draw one channel of a snippet, time relative to ``t_ref`` (default t0).
 
     ``vmin``/``vmax`` are levels of the normalised image (0-1 = the front
     end's 60-dB range); None: the 40th / 99.8th percentile of the crop.
+    Returns the levels used.
     """
     t_ref = t0 if t_ref is None else t_ref
     img, ext = spec_crop(snip, t0, t1, f0, f1, channel)
@@ -245,6 +324,7 @@ def show_spec(
     )
     ax.set_xlim(t0 - t_ref, t1 - t_ref)
     ax.set_ylim(f0, f1)
+    return vmin, vmax
 
 
 def show_rgb(ax, snip: dict, t0: float, t1: float, f0: float, f1: float,
@@ -301,8 +381,13 @@ def draw_box(ax, row: pd.Series, t_ref: float, ec, ls="-", lw: float = BOX_LW,
         )
     )
     if marker and np.isfinite(row.emitter_hz):
-        ax.plot(row.t_center_s - t_ref, row.emitter_hz, "o", ms=ms, mfc=ec,
-                mec="k", mew=0.45, zorder=zorder + 1)
+        # markers are never cut at the border: draw unclipped, but only if
+        # their centre lies inside the visible image
+        x, y = row.t_center_s - t_ref, row.emitter_hz
+        (xa, xb), (ya, yb) = ax.get_xlim(), ax.get_ylim()
+        if xa <= x <= xb and ya <= y <= yb:
+            ax.plot(x, y, "o", ms=ms, mfc=ec, mec="k", mew=0.45, zorder=zorder + 1,
+                    clip_on=False)
 
 
 def draw_missed(ax, row: pd.Series, t_ref: float, lw: float = BOX_LW) -> None:
@@ -327,10 +412,12 @@ def draw_detections(ax, rows: pd.DataFrame, colors: dict, t_ref: float, *,
     return out
 
 
-def label_marks(ax, times, y, ms: float = 3.6, **kw) -> None:
-    """Hand labels: white downward triangles at the chirps' centre times."""
-    ax.plot(times, np.full(len(times), y), "v", ms=ms, mfc="white", mec="k",
-            mew=0.4, zorder=20, clip_on=False, **kw)
+def label_marks(ax, times, ms: float = 3.4, pad_pt: float = 3.5) -> None:
+    """Hand labels: black downward triangles just above the image."""
+    tr = mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    tr = tr + mpl.transforms.ScaledTranslation(0, pad_pt / 72, ax.figure.dpi_scale_trans)
+    ax.plot(times, np.ones(len(times)), "v", ms=ms, mfc="k", mec="k", mew=0.4,
+            zorder=20, clip_on=False, transform=tr)
 
 
 def scalebar(ax, x1: float, y: float, length: float, label: str, *,
@@ -365,18 +452,16 @@ def spec_yaxis(ax, ticks=None, ylabel: bool = True, labels: bool = True) -> None
         ax.set_ylabel("Frequency [Hz]")
 
 
-# kept for the old call sites
-def clean_spec_axes(ax, ylabel: bool = True) -> None:
-    spec_yaxis(ax, ylabel=ylabel)
+def no_yaxis(ax) -> None:
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
 
 
 def zoom_connect(fig, ax_from, rect, ax_to, *, color="white", to_color="k",
                  corners=("right", "left"), lw: float = 0.6, ls=(0, (2, 1.5))):
-    """Mark ``rect`` = (x0, y0, x1, y1) in ``ax_from`` and connect it to ``ax_to``.
-
-    corners: which sides to connect ("right"->"left": rect's right edge to the
-    target's left edge; "bottom"->"top").
-    """
+    """Mark ``rect`` = (x0, y0, x1, y1) in ``ax_from`` and connect it to ``ax_to``."""
     x0, y0, x1, y1 = rect
     ax_from.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec=color, lw=lw,
                                 ls=ls, zorder=15))
@@ -394,7 +479,7 @@ def zoom_connect(fig, ax_from, rect, ax_to, *, color="white", to_color="k",
 
 
 # ---------------------------------------------------------------------------
-# keys, stage boxes, brackets, arrows (figure centimetres)
+# keys and connectors (figure centimetres)
 # ---------------------------------------------------------------------------
 def text_width_cm(fig, text: str, fontsize=ANNOT_FS) -> float:
     t = fig.text(0, 0, text, fontsize=fontsize)
@@ -404,75 +489,79 @@ def text_width_cm(fig, text: str, fontsize=ANNOT_FS) -> float:
 
 
 def key_strip(fig, x: float, y: float, items: list[tuple[str, dict, str]], *,
-              gap: float = 0.35, sw_w: float = 0.5, sw_h: float = 0.32) -> float:
-    """Draw a one-line key of spectrogram symbols at (x, y) cm (vertical centre).
+              gap: float = 0.35, sw_w: float = 0.5, sw_h: float = 0.32,
+              measure: bool = False) -> float:
+    """A one-line key of spectrogram symbols at (x, y) cm (vertical centre).
 
-    Each item: (kind, style, text) with kind in "box", "dot", "track",
-    "label", "band", "boxdot"; the symbol is drawn on a small swatch of the
-    spectrogram's black so that it looks as in the panels. Returns the x
-    after the last item (cm).
+    Each item: (kind, style, text) with kind in "box", "boxdot", "dot",
+    "track", "label" (hand label, drawn on white as above the images),
+    "qmark"; the other symbols are drawn on a swatch of the spectrogram's
+    black so that they look as in the panels. Returns the x after the last
+    item (cm); ``measure``: only measure.
     """
     W, H = fig.get_size_inches() / CM
     for kind, st, text in items:
-        ax = fig.add_axes((x / W, (y - sw_h / 2) / H, sw_w / W, sw_h / H))
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_facecolor(SPEC_BG)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for s in ax.spines.values():
-            s.set_visible(False)
-        c = st.get("color", "white")
-        if kind in ("box", "boxdot"):
-            ax.add_patch(Rectangle((0.22, 0.16), 0.56, 0.68, fill=False, ec=c,
-                                   ls=st.get("ls", "-"), lw=BOX_LW))
-            if kind == "boxdot":
-                ax.plot(0.5, 0.36, "o", ms=2.6, mfc=c, mec="k", mew=0.45)
-        elif kind == "dot":
-            ax.plot(0.5, 0.5, "o", ms=2.8, mfc=c, mec="k", mew=0.45)
-        elif kind == "track":
-            ax.plot([0.08, 0.92], [0.5, 0.5], color=c, lw=0.8)
-        elif kind == "label":
-            ax.plot(0.5, 0.55, "v", ms=3.6, mfc="white", mec="k", mew=0.4)
-        elif kind == "band":
-            ax.axhspan(0.2, 0.8, color=c, alpha=0.35, lw=0)
-            ax.plot([0.08, 0.92], [0.5, 0.5], color=c, lw=0.8)
-        fig.text((x + sw_w + 0.08) / W, y / H, text, ha="left", va="center_baseline",
-                 fontsize=ANNOT_FS)
+        if not measure:
+            ax = fig.add_axes((x / W, (y - sw_h / 2) / H, sw_w / W, sw_h / H))
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_facecolor("white" if kind == "label" else SPEC_BG)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for s in ax.spines.values():
+                s.set_visible(False)
+            c = st.get("color", "white")
+            if kind in ("box", "boxdot"):
+                ax.add_patch(Rectangle((0.22, 0.16), 0.56, 0.68, fill=False, ec=c,
+                                       ls=st.get("ls", "-"), lw=BOX_LW))
+                if kind == "boxdot":
+                    ax.plot(0.5, 0.36, "o", ms=2.6, mfc=c, mec="k", mew=0.45)
+            elif kind == "dot":
+                ax.plot(0.5, 0.5, "o", ms=2.8, mfc=c, mec="k", mew=0.45)
+            elif kind == "track":
+                ax.plot([0.08, 0.92], [0.5, 0.5], color=c, lw=0.8)
+            elif kind == "label":
+                ax.plot(0.5, 0.5, "v", ms=3.4, mfc="k", mec="k", mew=0.4)
+            elif kind == "qmark":
+                ax.text(0.5, 0.5, "?", ha="center", va="center", color="white",
+                        fontsize=ANNOT_FS, fontweight="bold")
+            fig.text((x + sw_w + 0.08) / W, y / H, text, ha="left", va="center_baseline",
+                     fontsize=ANNOT_FS)
         x = x + sw_w + 0.08 + text_width_cm(fig, text) + gap
-    return x
-
-
-def bracket(fig, x0: float, x1: float, y: float, text: str, *, tick: float = 0.12,
-            fontsize="medium", color=INK, lw: float = 0.6, pad: float = 0.06) -> None:
-    """Horizontal bracket from x0 to x1 cm at y cm, ticks down, text centred above."""
-    tr = fig_cm(fig)
-    fig.add_artist(plt.Line2D([x0, x0, x1, x1], [y - tick, y, y, y - tick], color=color,
-                              lw=lw, transform=tr, solid_joinstyle="miter"))
-    fig.text((x0 + x1) / 2, y + pad, text, ha="center", va="bottom",
-             fontsize=fontsize, color=color, transform=tr)
-
-
-def stage_box(fig, x: float, y: float, w: float, h: float, letter: str | None,
-              title: str, detail: str, *, fc=FILL_GREY, ec=INK) -> None:
-    """Rounded stage box (the paper's schematic style) with a bold letter + text."""
-    tr = fig_cm(fig)
-    fig.add_artist(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.1",
-                                  fc=fc, ec=ec, lw=0.8, transform=tr))
-    head = (rf"\textbf{{{letter}}}\enspace " if letter else "") + title
-    fig.text(x + w / 2, y + h * 0.68, head, ha="center", va="center", fontsize="small",
-             transform=tr)
-    fig.text(x + w / 2, y + h * 0.3, detail, ha="center", va="center", fontsize="small",
-             color=MUTED, transform=tr)
+    return x - gap
 
 
 def flow_arrow(fig, x0: float, y0: float, x1: float, y1: float, *, color=INK,
-               lw: float = 0.8, rad: float = 0.0, ms: float = 7) -> None:
+               lw: float = 0.7, rad: float = 0.0, ms: float = 6) -> None:
     """Arrow between two points in figure cm."""
     fig.add_artist(FancyArrowPatch((x0, y0), (x1, y1), transform=fig_cm(fig),
                                    arrowstyle="-|>", mutation_scale=ms, color=color,
                                    lw=lw, connectionstyle=f"arc3,rad={rad}",
                                    shrinkA=0, shrinkB=0))
+
+
+def rounded_clip(ax, radius: float = 0.12, ec="#bdbdbd", lw: float = 0.6):
+    """Clip everything in ``ax`` to a rounded rectangle (thumbnails); returns the frame."""
+    W, H = ax.figure.get_size_inches() / CM
+    bb = ax.get_position()
+    w_cm, h_cm = bb.width * W, bb.height * H
+    patch = FancyBboxPatch((0, 0), 1, 1, transform=ax.transAxes,
+                           boxstyle=f"round,pad=0,rounding_size={radius / max(w_cm, h_cm)}",
+                           mutation_aspect=w_cm / h_cm, fc="none", ec="none")
+    ax.add_patch(patch)
+    for art in list(ax.images) + list(ax.lines) + list(ax.patches) + list(ax.collections):
+        if art is not patch:
+            art.set_clip_path(patch)
+    frame = FancyBboxPatch((0, 0), 1, 1, transform=ax.transAxes,
+                           boxstyle=f"round,pad=0,rounding_size={radius / max(w_cm, h_cm)}",
+                           mutation_aspect=w_cm / h_cm, fc="none", ec=ec, lw=lw,
+                           zorder=30, clip_on=False)
+    ax.add_patch(frame)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    return frame
 
 
 # ---------------------------------------------------------------------------

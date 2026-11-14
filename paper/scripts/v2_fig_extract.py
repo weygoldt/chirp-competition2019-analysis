@@ -20,6 +20,10 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     (emitter's field pattern, other fish projected out, pulse-pair estimator
     with a 1-ms adaptive window) and per-EOD-period frequencies from the
     upward zero crossings of the same combined signal. ``traces.npz``.
+``raw``
+    The raw voltage of the electrode with the largest RMS during the
+    front-end example (``f1_fe_e``), for the "recording" thumbnail of
+    Fig. 1. ``raw.npz``.
 ``assign-baseline``
     Emitter assignment on the simulated test scenes after post-processing,
     per true positive at score >= 0.5: the emitter head (as evaluated) and
@@ -214,6 +218,24 @@ def traces() -> None:
     np.savez_compressed(OUT / "traces.npz", meta=json.dumps(meta), **out)
 
 
+def raw() -> None:
+    from gridtools.io import open_recording
+
+    rec_name, t0, t1 = SNIPPETS["f1_fe_e"]
+    recording = open_recording(REC_2019 / rec_name)
+    block = recording.read_time(t0, t1)
+    rms = np.sqrt(np.mean((block - block.mean(0)) ** 2, axis=0))
+    ch = int(np.argmax(rms))
+    np.savez_compressed(
+        OUT / "raw.npz",
+        signal=block[:, ch].astype(np.float32),
+        samplerate_hz=float(recording.samplerate_hz),
+        meta=json.dumps({"recording": rec_name, "t_start_s": t0, "t_end_s": t1,
+                         "channel": ch, "rms": rms.round(6).tolist()}),
+    )
+    log.info("raw: %s %.1f-%.1f s, channel %d of %d", rec_name, t0, t1, ch, len(rms))
+
+
 def assign_baseline() -> None:
     from chirpdetector.data import load_dataset
     from chirpdetector.evaluation import assign_by_frequency
@@ -276,7 +298,7 @@ def assign_baseline() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("steps", nargs="+", choices=["snippets", "traces", "assign-baseline"])
+    parser.add_argument("steps", nargs="+", choices=["snippets", "traces", "raw", "assign-baseline"])
     parser.add_argument("--only", nargs="*", help="snippet names (default: all)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
@@ -286,6 +308,8 @@ def main() -> None:
             snippets(args.only)
         elif step == "traces":
             traces()
+        elif step == "raw":
+            raw()
         else:
             assign_baseline()
 
