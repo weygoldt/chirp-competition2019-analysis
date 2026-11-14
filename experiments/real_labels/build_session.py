@@ -15,10 +15,13 @@ Items (blind browser labeller, the simulated benchmark's view):
    0.5, ``N_FLAGGED`` in all, by reason x dataset, cells as above.
 3. Recall windows: 2-s zones (``ZONE_S``) on a grid of non-overlapping
    slots, drawn per dataset with probability proportional to
-   ``c_m + mean(c)``, where ``c_m`` is the number of chirps (kept, score >=
-   0.5) of the slot's recording minute (a defensive mixture: half uniform,
-   half proportional to the minute's activity). The weighting uses
-   minute counts only, never the detections inside a slot. ``n`` draws with
+   ``c_m + WINDOW_UNIFORM * mean(c)``, where ``c_m`` is the number of chirps
+   (kept, score >= 0.5) of the slot's recording minute (a defensive
+   mixture: 80 % of the probability mass proportional to the minute's
+   activity, 20 % uniform, so that quiet minutes, where missed chirps may
+   hide, keep a chance). Chirping is sparse (5 % of the 2-s slots of 2022
+   hold a detection), so a uniform draw would give few chirps; the
+   weighting uses minute counts only, never the detections inside a slot. ``n`` draws with
    replacement per dataset (repeated draws dropped), so ``pi = 1 - (1 -
    p)^n``, recorded with ``p``.
 4. Hidden repeats (test-retest): ``N_REPEAT_CANDIDATES`` candidates and
@@ -88,6 +91,7 @@ N_FLAGGED = 50
 FLAGGED_MIN_SCORE = 0.5
 N_WINDOWS = {"competition2019": 125, "competition2022": 75}
 ZONE_S = 2.0
+WINDOW_UNIFORM = 0.25  # weight of the uniform part: c_m + 0.25 mean(c)
 N_REPEAT_CANDIDATES = 40
 N_REPEAT_WINDOWS = 10
 MIN_REPEAT_GAP = 150
@@ -316,7 +320,7 @@ def sample_windows(frame: pd.DataFrame, rng: np.random.Generator) -> pd.DataFram
     for ds, n in N_WINDOWS.items():
         f = frame[frame["dataset"] == ds].reset_index(drop=True)
         c = f["minute_chirps"].to_numpy(float)
-        size = c + c.mean()
+        size = c + WINDOW_UNIFORM * c.mean()
         p = size / size.sum()
         draws = rng.choice(len(f), size=n, replace=True, p=p)
         uniq = np.unique(draws)
