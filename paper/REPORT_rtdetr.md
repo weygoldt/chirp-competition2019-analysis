@@ -190,8 +190,12 @@ the post-processed true positives (0.921; < 10 Hz: 0.881; box edge 0.651) —
 quote one consistently. (2) On real long chirps the decoder's FWHM is a median
 24.5 ms longer than the trace reference (simulation predicts 13.6 ms) and its
 heights sit above the trace peaks in the explainer's panel E; unresolved.
-The multi-window front end is shown as a design; it was never ablated (an
-ablation is running, branch `v2-ablation-frontend`).
+The multi-window front end is shown as a design. Ablation (2026-11-14, branch
+`v2-ablation-frontend`, `$CHIRP_DATA/runs/ablation_frontend/report.md`): against the
+long window alone it is ~1 pp better in precision/F1/assignment on simulated test
+scenes (F1 96.6 vs 95.8%) but has the lower AP, and is indistinguishable on the 365
+real labels (F1 96.4 vs 96.5%) and the blind benchmark; one run per arm. Describe it
+as comparable, not as an improvement.
 
 ## 4. Where the port differs from the old code
 

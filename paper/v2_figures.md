@@ -212,10 +212,11 @@ its baseline, extracted from the raw recording (line: spatially filtered,
 1-ms smoothed estimate; grey dots: frequency of single EOD periods). Width
 bars are centred on the trace's own crossings.
 
-(Note for the text: the multi-window front end is a design choice; no
-ablation compared it with a single-window front end (docs/status.md,
-"Front-end ablation"), so neither caption nor text should claim that the
-extra channels improve detection.)
+(Note for the text: the multi-window front end is a design choice. The
+front-end ablation of 2026-11-14 (`$CHIRP_DATA/runs/ablation_frontend/report.md`)
+found no practically relevant benefit of the extra channels (≤ 1 pp on simulated
+data, none on real labels; one run per arm), so neither caption nor text should
+claim that they improve detection.)
 
 **Pipeline v2 performance (replaces the YOLOv8 cross-validation figure).**
 *A*, precision against recall over the detection score threshold on 365
