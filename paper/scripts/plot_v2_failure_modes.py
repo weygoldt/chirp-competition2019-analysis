@@ -16,10 +16,10 @@ A   2019-12-09-10_00, 4312-4328 s, inside a hand-labelled test region:
     right, with the crop's own display contrast); two detections have no
     label ("?").
 B   2019-12-04-10_00, 7468-7488 s: the wavetracker track of the lower fish
-    has a 140-s gap while the fish keeps chirping; the chirps in the gap
-    are detected but left unassigned (no live track within 20 Hz). A
-    self-contained panel: the gap-filled run (competition2019_v2_20261113_
-    gapfill) will replace its content.
+    has a 140-s gap while the fish keeps chirping. With PAPER_DETECTIONS=
+    rtdetr_gapfill (the paper's dataset) the gap is bridged by linear
+    interpolation (dashed) and the chirps in it are assigned; with rtdetr
+    (unpatched) the track ends and they stay unassigned.
 C   Two assignments between fish < 7 Hz apart: (left) one chirp between two
     fish 2.7 Hz apart, assigned with confidence 0.53; (right) two chirps
     77 ms apart between fish 6.4 Hz apart, shown in the 51-ms channel where
@@ -57,6 +57,7 @@ MISSED_A = 4080  # 2019-12-09-10_00, score 0.33, on a hand-labelled chirp
 CLOSE_1 = 14783  # 2019-12-09-10_00
 CLOSE_2 = (2974, 2975)  # 2020-03-13-10_00
 W, H = 17.4, 12.05  # figure size [cm]
+DRAWN: set[str] = set()  # box styles drawn in the panels (the key lists only these)
 
 
 def hand_labels(recording: str) -> pd.DataFrame:
@@ -106,6 +107,7 @@ def panel_labelled(ax, ax_zoom, fig, report):
     C.show_spec(ax, snip, t0, t1, f0, f1, vmin=lv[0], vmax=lv[1])
     C.draw_tracks(ax, snip, colors, t0, t1)
     drawn = C.draw_detections(ax, rows, colors, t0)
+    DRAWN.update(drawn.drawn_as.dropna())
     labels = hand_labels(m["recording"])
     labels = labels[(labels.t_end_s > t0) & (labels.t_start_s < t1)]
     kept = drawn[drawn.drawn_as.isin(["assigned", "unassigned"])]
@@ -131,7 +133,7 @@ def panel_labelled(ax, ax_zoom, fig, report):
     zf0, zf1 = 685, 845
     C.show_spec(ax_zoom, snip, zt0, zt1, zf0, zf1, vmin=lv[0], vmax=lv[1])
     C.draw_tracks(ax_zoom, snip, colors, zt0, zt1)
-    C.draw_detections(ax_zoom, rows, colors, zt0)
+    DRAWN.update(C.draw_detections(ax_zoom, rows, colors, zt0).drawn_as.dropna())
     C.draw_missed(ax_zoom, miss, zt0)
     zl = lab_c[(lab_c > zt0) & (lab_c < zt1)]
     C.label_marks(ax_zoom, zl - zt0)
@@ -159,6 +161,12 @@ def panel_labelled(ax, ax_zoom, fig, report):
 # B: track gap (self-contained; content follows the gap-filled run)
 # ---------------------------------------------------------------------------
 def panel_trackgap(ax, report):
+    """The 140-s gap in the track of the lower fish (2019-12-04).
+
+    Source run (PAPER_DETECTIONS=rtdetr): the track ends, the chirps in the
+    gap stay unassigned. Gap-filled run (rtdetr_gapfill): the gap is bridged
+    by linear interpolation (dashed) and the chirps in it are assigned.
+    """
     snip = C.load_snippet("f3_trackgap")
     m = snip["meta"]
     t0, t1 = m["t_start_s"], m["t_end_s"]
@@ -170,39 +178,54 @@ def panel_trackgap(ax, report):
     C.show_spec(ax, snip, t0, t1, f0, f1, vmin=lv[0], vmax=lv[1])
     C.draw_tracks(ax, snip, colors, t0, t1, lw=0.8)
     drawn = C.draw_detections(ax, rows, colors, t0)
+    DRAWN.update(drawn.drawn_as.dropna())
     lower = order[-1]
     tt, ff = snip["tracks"][lower]
-    inside = tt[(tt >= t0 - 15) & (tt <= t1 + 15)]
+    detected = ~snip["filled"][lower]
+    inside = tt[detected & (tt >= t0 - 15) & (tt <= t1 + 15)]
     end = float(inside[inside <= t1].max())
-    # the gap itself (the cache holds the tracks only +- 15 s around the
-    # snippet): the run's track-gap table (track_gaps/gaps.csv)
-    gaps = pd.read_csv(C.RUN / "track_gaps" / "gaps.csv")
-    g = gaps[(gaps.recording == m["recording"]) & (gaps.fish_id == lower)
-             & ((gaps.start_s - end).abs() < 0.01)].iloc[0]
-    resume = float(g.end_s)
-    rec_rows = C.detections(m["recording"])
     f_end = float(ff[tt == end][0])
-    ax.plot(end - t0, f_end, "|", ms=6, mew=1.0, color=colors[lower], zorder=6)
-    # label below the band, left of the track's end; dark backing over the
-    # faint noise line there
-    C.annotate(ax, "track ends", xy=(end - t0, f_end - 4), xytext=(end - t0 - 0.9, 655),
-               rad=0.2, ha="right", shrink_b=3, **C.DARK_BACK)
-    un = drawn[drawn.drawn_as == "unassigned"].sort_values("t_center_s")
+    rec_rows = C.detections(m["recording"])
+    if C.GAPFILL:
+        # the gap and what the patch did with it: the run's patched tracks
+        z = np.load(C.RUN / m["recording"] / "tracks_gapfill.npz")
+        k = int(np.flatnonzero((z["gap_fish_id"] == lower)
+                               & (np.abs(z["gap_start_s"] - end) < 0.01))[0])
+        gap = {"start_s": float(z["gap_start_s"][k]), "end_s": float(z["gap_end_s"][k]),
+               "f_before_hz": float(z["gap_f_before_hz"][k]),
+               "f_after_hz": float(z["gap_f_after_hz"][k]), "action": str(z["gap_action"][k])}
+        x = end - t0 + 3.6
+        C.annotate(ax, "interpolated", xy=(x - 0.5, f_end - 3), xytext=(x, 652), rad=-0.2,
+                   ha="left", shrink_b=3, **C.DARK_BACK)
+    else:
+        # the gap in the source run's track-gap table (track_gaps/gaps.csv;
+        # the cache holds the tracks only +- 15 s around the snippet)
+        gaps = pd.read_csv(C.SOURCE_RUN / "track_gaps" / "gaps.csv")
+        g = gaps[(gaps.recording == m["recording"]) & (gaps.fish_id == lower)
+                 & ((gaps.start_s - end).abs() < 0.01)].iloc[0]
+        gap = g[["fish", "kind", "start_s", "end_s", "duration_s", "chirps_in_gap",
+                 "chirps_unassigned", "rescuable_by_interp"]].to_dict()
+        ax.plot(end - t0, f_end, "|", ms=6, mew=1.0, color=colors[lower], zorder=6)
+        # label below the band, left of the track's end; dark backing over
+        # the faint noise line there
+        C.annotate(ax, "track ends", xy=(end - t0, f_end - 4), xytext=(end - t0 - 0.9, 655),
+                   rad=0.2, ha="right", shrink_b=3, **C.DARK_BACK)
+    in_gap = drawn[(drawn.t_center_s > gap["start_s"]) & (drawn.t_center_s < gap["end_s"])
+                   & drawn.drawn_as.isin(["assigned", "unassigned"])]
     fish_labels(ax, snip, colors, order, t0 - 15, t1, 1.15, dy=(22, -22))
     C.scalebar(ax, t1 - t0 - 0.15, 662, 1.0, "1 s")
     C.spec_yaxis(ax, ticks=[700, 800])
     report["B"] = {
         "recording": m["recording"], "window_s": [t0, t1], "levels": lv,
+        "detections": C.DETECTIONS,
         "track_id": int(lower), "track_last_detection_s": end,
-        "track_next_detection_s": resume,
-        "gap_s": resume - end,
-        "gap_table": g[["fish", "kind", "start_s", "end_s", "duration_s", "chirps_in_gap",
-                        "chirps_unassigned", "rescuable_by_interp"]].to_dict(),
-        "n_assigned_in_window": int((drawn.drawn_as == "assigned").sum()),
-        "n_unassigned_in_window": int(len(un)),
-        "unassigned": un[["chirp_id", "t_center_s", "score", "emitter_hz",
-                          "nearest_track_hz", "assign_status"]].round(2)
+        "gap": gap, "gap_s": float(gap["end_s"] - gap["start_s"]),
+        "chirps_in_gap_in_window": in_gap[["chirp_id", "t_center_s", "score", "emitter_hz",
+                                           "track_id", "assign_status",
+                                           "assign_confidence"]].round(3)
         .to_dict(orient="records"),
+        "n_assigned_in_window": int((drawn.drawn_as == "assigned").sum()),
+        "n_unassigned_in_window": int((drawn.drawn_as == "unassigned").sum()),
         "recording_chirps_beyond_tolerance": int(
             (rec_rows.chirp & (rec_rows.assign_status == "beyond_tolerance")).sum()),
         "recording_chirps": int(rec_rows.chirp.sum()),
@@ -230,7 +253,7 @@ def panel_close(ax, name, ids, half, channel, report, key, *, word: bool):
         lv = (None, None)
     lv = C.show_spec(ax, snip, t0, t1, f0, f1, channel=channel, vmin=lv[0], vmax=lv[1])
     C.draw_tracks(ax, snip, colors, t0, t1, lw=0.7)
-    C.draw_detections(ax, win, colors, t0)
+    DRAWN.update(C.draw_detections(ax, win, colors, t0).drawn_as.dropna())
     # confidences above the highest of the boxes, in the colour of their box
     ytxt = float(sel.f_high_hz.max()) + 6
     for r in sel.itertuples():
@@ -301,18 +324,6 @@ def main() -> None:
     report: dict = {}
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
 
-    # key (the symbols of the pipeline figure), centred
-    items = [
-        ("boxdot", {"color": C.FISH_COLORS[0]}, r"EOD$f_1$"),
-        ("boxdot", {"color": C.FISH_COLORS[1]}, r"EOD$f_2$"),
-        ("boxdot", {"color": "white"}, "unassigned"),
-        ("box", {"color": "white", "ls": C.MISSED_LS}, "below threshold"),
-        ("label", {}, "hand label"),
-        ("qmark", {}, "no hand label"),
-    ]
-    width = C.key_strip(fig, 0.0, H - 0.3, items, measure=True)
-    C.key_strip(fig, (W - width) / 2, H - 0.3, items)
-
     ax_a = C.axes_cm(fig, 1.45, 7.9, 11.55, 3.25)
     ax_az = C.axes_cm(fig, 13.75, 7.9, 3.45, 3.25)
     ax_b = C.axes_cm(fig, 1.45, 4.25, 15.75, 3.05)
@@ -325,6 +336,21 @@ def main() -> None:
     panel_close(ax_c2, "g_close_9394", CLOSE_2, 0.45, 1, report, "C2", word=False)
     C.spec_yaxis(ax_c1, ticks=[700, 800])
     C.no_yaxis(ax_c2)  # same frequency range as C left
+
+    # key (the symbols of the pipeline figure, only those drawn), centred
+    items = [
+        ("boxdot", {"color": C.FISH_COLORS[0]}, r"EOD$f_1$"),
+        ("boxdot", {"color": C.FISH_COLORS[1]}, r"EOD$f_2$"),
+        ("boxdot", {"color": "white"}, "unassigned"),
+        ("box", {"color": "white", "ls": C.MISSED_LS}, "below threshold"),
+        ("label", {}, "hand label"),
+        ("qmark", {}, "no hand label"),
+    ]
+    if "unassigned" not in DRAWN:
+        items = [it for it in items if it[2] != "unassigned"]
+    width = C.key_strip(fig, 0.0, H - 0.3, items, measure=True)
+    C.key_strip(fig, (W - width) / 2, H - 0.3, items)
+    report["key"] = [it[2] for it in items]
 
     prevalence(report)
     C.letters_cm(fig, [(ax_a, "A", 1.2, 0.3), (ax_b, "B", 1.2, 0.3),

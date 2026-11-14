@@ -41,7 +41,19 @@ CM = 1 / 2.54
 FIG_WIDTH = 17.4 * CM  # width of the manuscript's full-width figures
 
 CHIRP_DATA = Path("/mnt/data1/chirp_v2")
-RUN = CHIRP_DATA / "detections" / "competition2019_v2_20261113"
+# the detections follow PAPER_DETECTIONS (paper_config): the production run,
+# or its dataset patch with the trial fish's track gaps filled (interior gaps
+# 10-300 s with an EODf jump <= 15 Hz, linear interpolation)
+RUNS = {
+    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet"),
+    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill",
+                       "chirps_rtdetr_gapfill.parquet"),
+}
+DETECTIONS = paper_config.DETECTIONS
+GAPFILL = DETECTIONS == "rtdetr_gapfill"
+SOURCE_RUN = CHIRP_DATA / "detections" / RUNS["rtdetr"][0]
+RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
+PARQUET = RUNS[DETECTIONS][1]
 REAL_EVAL = CHIRP_DATA / "eval" / "real_labels_365"
 REAL_LABELS = REAL_EVAL / "labels"
 PP_EVAL = {
@@ -183,8 +195,8 @@ def letters_cm(fig, axes_and_offsets):
 # ---------------------------------------------------------------------------
 @cache
 def detections(recording: str) -> pd.DataFrame:
-    """All stored rows of one recording of the production run."""
-    return pd.read_parquet(RUN / recording / "chirps_rtdetr.parquet")
+    """All stored rows of one recording of the run (PAPER_DETECTIONS)."""
+    return pd.read_parquet(RUN / recording / PARQUET)
 
 
 @cache
@@ -207,6 +219,12 @@ def load_snippet(name: str) -> dict:
     off = snip["track_offsets"]
     snip["tracks"] = {
         int(tid): (snip["track_times_s"][a:b], snip["track_freqs_hz"][a:b])
+        for tid, a, b in zip(snip["track_ids"], off[:-1], off[1:], strict=True)
+    }
+    # interpolated samples of the gap-filled tracks (absent in older caches)
+    filled = snip.get("track_filled", np.zeros(len(snip["track_times_s"]), bool))
+    snip["filled"] = {
+        int(tid): filled[a:b].astype(bool)
         for tid, a, b in zip(snip["track_ids"], off[:-1], off[1:], strict=True)
     }
     return snip
@@ -381,13 +399,22 @@ def draw_tracks(
         m = (tt >= t0 - 0.5) & (tt <= t1 + 0.5)
         if m.sum() < 2:
             continue
-        # break the line at gaps longer than 1 s
         tm, fm = tt[m], ff[m].astype(float)
+        fl = snip.get("filled", {}).get(tid, np.zeros(len(tt), bool))[m]
+        # detected samples: solid, broken at gaps longer than 1 s
+        td, fd = np.where(fl, np.nan, tm), np.where(fl, np.nan, fm)
         gaps = np.flatnonzero(np.diff(tm) > 1.0)
-        tm = np.insert(tm, gaps + 1, np.nan)
-        fm = np.insert(fm, gaps + 1, np.nan)
-        ax.plot(tm - t_ref, fm, color=colors[tid], lw=lw, alpha=alpha, zorder=2,
+        td = np.insert(td, gaps + 1, np.nan)
+        fd = np.insert(fd, gaps + 1, np.nan)
+        ax.plot(td - t_ref, fd, color=colors[tid], lw=lw, alpha=alpha, zorder=2,
                 solid_capstyle="butt")
+        if fl.any():
+            # interpolated samples (gap-filled tracks): dashed, joined to the
+            # neighbouring detections
+            keep = fl | np.r_[fl[1:], False] | np.r_[False, fl[:-1]]
+            ti, fi = np.where(keep, tm, np.nan), np.where(keep, fm, np.nan)
+            ax.plot(ti - t_ref, fi, color=colors[tid], lw=lw, alpha=alpha, zorder=2,
+                    ls=(0, (2.5, 1.5)), dash_capstyle="butt")
 
 
 def box_style(row: pd.Series, colors: dict) -> dict | None:

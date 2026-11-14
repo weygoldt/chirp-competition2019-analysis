@@ -34,7 +34,8 @@ Display levels of B-D: chirp_levels() (85th percentile of the crop -> 99th
 percentile of the chirp pixels away from the baselines).
 
 Inputs: the snippet/trace/raw cache of ``v2_fig_extract.py`` (run it first,
-in the upgrade env) and the run's ``chirps_rtdetr.parquet``.
+in the upgrade env) and the run's chirp table (``C.RUN``/``C.PARQUET``,
+chosen by PAPER_DETECTIONS).
 
 Environment: ``paper/.venv``::
 

@@ -61,7 +61,16 @@ import paper_config
 log = logging.getLogger("v2_fig_extract")
 
 CHIRP_DATA = Path("/mnt/data1/chirp_v2")
-RUN = CHIRP_DATA / "detections" / "competition2019_v2_20261113"
+# the detections follow PAPER_DETECTIONS (paper_config): the production run,
+# or its dataset patch with the trial fish's track gaps filled
+RUNS = {
+    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet"),
+    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill",
+                       "chirps_rtdetr_gapfill.parquet"),
+}
+DETECTIONS = paper_config.DETECTIONS
+RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
+PARQUET = RUNS[DETECTIONS][1]
 BUNDLE = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "final" / "bundle"
 REC_2019 = Path("/mnt/data2/2019_tube_competition")
 SIM_V4 = Path("~/chirp_v2_fast/datasets/sim_v4").expanduser()
@@ -95,21 +104,47 @@ TRACE_CHIRPS: dict[str, tuple[str, int]] = {
 }
 
 
+def _run_tracks(rec_name: str) -> list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]:
+    """The tracks the run assigned to: (ident, times, freqs, filled) per track.
+
+    The wavetracker tracks of the recording; for the gap-filled run, the two
+    trial fish's tracks are replaced by the patched ones of
+    ``<run>/<rec>/tracks_gapfill.npz`` (``filled``: interpolated samples).
+    """
+    from gridtools.io import load_tracks
+
+    out = {}
+    for tr in load_tracks(REC_2019 / rec_name):
+        out[int(tr.ident)] = (np.asarray(tr.times_s, float), np.asarray(tr.freqs_hz, float),
+                              np.zeros(len(tr.times_s), bool))
+    patched = RUN / rec_name / "tracks_gapfill.npz"
+    if DETECTIONS == "rtdetr_gapfill" and patched.exists():
+        z = np.load(patched)
+        times = z["times"][z["idx_v"]]
+        for ident in np.unique(z["ident_v"][np.isfinite(z["ident_v"])]):
+            m = z["ident_v"] == ident
+            order = np.argsort(times[m], kind="stable")
+            out[int(ident)] = (times[m][order], z["fund_v"][m][order], z["filled"][m][order])
+    return [(k, *v) for k, v in out.items()]
+
+
 def _tracks_window(tracks, t0: float, t1: float) -> dict[str, np.ndarray]:
-    ids, offsets, times, freqs = [], [0], [], []
-    for track in tracks:
-        m = (track.times_s >= t0) & (track.times_s <= t1)
+    ids, offsets, times, freqs, filled = [], [0], [], [], []
+    for ident, tt, ff, fl in tracks:
+        m = (tt >= t0) & (tt <= t1)
         if not m.any():
             continue
-        ids.append(track.ident)
-        times.append(track.times_s[m])
-        freqs.append(track.freqs_hz[m])
+        ids.append(ident)
+        times.append(tt[m])
+        freqs.append(ff[m])
+        filled.append(fl[m])
         offsets.append(offsets[-1] + int(m.sum()))
     return {
         "track_ids": np.asarray(ids, dtype=np.int64),
         "track_offsets": np.asarray(offsets, dtype=np.int64),
         "track_times_s": np.concatenate(times) if times else np.zeros(0),
         "track_freqs_hz": np.concatenate(freqs) if freqs else np.zeros(0),
+        "track_filled": np.concatenate(filled) if filled else np.zeros(0, bool),
     }
 
 
@@ -117,7 +152,7 @@ def snippets(names: list[str] | None = None) -> None:
     from chirpdetector.bundle import load_bundle
     from chirpdetector.inference.spans import span_bounds, span_spectrogram
     from chirpdetector.spectrogram import normalize, reference_level_db
-    from gridtools.io import load_tracks, open_recording
+    from gridtools.io import open_recording
 
     bundle = load_bundle(BUNDLE)
     config = bundle.spectrogram
@@ -131,7 +166,7 @@ def snippets(names: list[str] | None = None) -> None:
         spec = span_spectrogram(bundle, recording, start, stop, device="cpu")
         img = normalize(spec, config).cpu().numpy().astype(np.float16)
         if rec_name not in track_cache:
-            track_cache[rec_name] = load_tracks(REC_2019 / rec_name)
+            track_cache[rec_name] = _run_tracks(rec_name)
         tw = _tracks_window(track_cache[rec_name], t0 - 15.0, t1 + 15.0)
         meta = {
             "recording": rec_name,
@@ -145,6 +180,8 @@ def snippets(names: list[str] | None = None) -> None:
             and int(recording.n_channels) >= 9,
             "bundle": str(BUNDLE),
             "weights_sha256": bundle.weights_sha256,
+            "detections": DETECTIONS,
+            "run": str(RUN),
         }
         np.savez_compressed(
             OUT / f"{name}.npz",
@@ -169,8 +206,17 @@ def traces() -> None:
     out: dict[str, np.ndarray] = {}
     meta: dict[str, dict] = {}
     for key, (rec_name, chirp_id) in TRACE_CHIRPS.items():
-        table = pd.read_parquet(RUN / rec_name / "chirps_rtdetr.parquet")
+        table = pd.read_parquet(RUN / rec_name / PARQUET)
         row = table.set_index("chirp_id").loc[chirp_id]
+        # the harvest uses the wavetracker tracks; with the gap-filled run this
+        # is only valid if the chirp does not lie in a filled gap of its fish
+        patched = RUN / rec_name / "tracks_gapfill.npz"
+        if patched.exists():
+            g = np.load(patched)
+            inside = ((g["gap_fish_id"] == row.track_id) & (g["gap_action"] == "filled")
+                      & (g["gap_start_s"] < row.t_end_s) & (g["gap_end_s"] > row.t_start_s))
+            if inside.any():
+                raise RuntimeError(f"{rec_name} chirp {chirp_id} lies in a filled track gap")
         recording, _ = open_recording_lenient(REC_2019 / rec_name)
         tracks = load_tracks(REC_2019 / rec_name)
         box = pd.Series(

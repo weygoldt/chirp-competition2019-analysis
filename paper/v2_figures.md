@@ -13,6 +13,27 @@ redesign, 2026-11-14, before the author's second design round).
 | `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 17.4 x 12.4 cm |
 | `plot_v2_failure_modes` | `plot_pipeline_performances_manuscript_supplement.pdf` | `scripts/plot_v2_failure_modes.py` | 17.4 x 12.05 cm |
 
+## Detections and output roots
+
+The figures follow `PAPER_DETECTIONS` (`paper_config`), as the rest of the
+paper rerun:
+
+| `PAPER_DETECTIONS` | detections (per recording) | tracks | output root (`PAPER_OUT`) |
+|---|---|---|---|
+| `rtdetr_gapfill` (the dataset the paper uses) | `detections/competition2019_v2_20261113_gapfill/<rec>/chirps_rtdetr_gapfill.parquet` | wavetracker tracks, with the two trial fish's tracks replaced by `<rec>/tracks_gapfill.npz` (interior gaps 10-300 s with an EOD$f$ jump <= 15 Hz filled by linear interpolation; `filled` marks the interpolated samples) | `/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill` |
+| `rtdetr` (production run, unpatched) | `detections/competition2019_v2_20261113/<rec>/chirps_rtdetr.parquet` | wavetracker tracks | `/mnt/data1/chirp_v2/paper_rerun/rtdetr` |
+
+`v2_fig_extract.py` caches the tracks of the selected run (field
+`track_filled` in each snippet; `meta.detections`/`meta.run`), and the plot
+scripts read `C.RUN`/`C.PARQUET`; interpolated track samples are drawn
+dashed. The patch changes, among the examples of the three figures, only the
+chirps of Fig. 3B (2019-12-04, chirps 4303-4305: unassigned -> fish 8); all
+other shown rows have `gapfill_changed` = False, and Figs. 1 and 2 render
+pixel-identical from both runs (Fig. 2 does not depend on the run at all:
+simulations and the hand-label evaluation; `assign_baseline.csv` is
+byte-identical in both roots). With `PAPER_DETECTIONS=rtdetr` the scripts
+reproduce the kept `rtdetr` renders pixel for pixel (checked 2026-11-14).
+
 ## How to run
 
 1. Cache the raw-data inputs (upgrade repo env: chirpdetector/gridtools;
@@ -32,10 +53,14 @@ redesign, 2026-11-14, before the author's second design round).
    `raw` (new) caches 1.2 s of the raw voltage of one electrode for the
    "Recording" thumbnail of Fig. 1. The snippet `g_missed_1208` is no
    longer plotted.
+   For the gap-filled dataset prefix both commands with
+   `PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill`
+   (`run_all.sh` exports both; its `v2figs` chain runs the same steps).
 2. Plot (paper env; ~20 s each on a cold LaTeX cache, ~3 s warm):
 
    ```sh
    cd paper && unset VIRTUAL_ENV
+   # export PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill
    uv run python scripts/plot_v2_pipeline_explainer.py
    uv run python scripts/plot_v2_performance.py
    uv run python scripts/plot_v2_failure_modes.py
@@ -257,7 +282,23 @@ ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
   `eval/real_labels_365/labels/2019_tube_competition/2019-12-09-10_00/traces-grid1-editable-labels.csv`
   (the missed one is one of the 30 labels the author added in the v2 FP
   review, note `confirmed ...#v4fp-yolo-119`).
-- B: `2019-12-04-10_00`, 7468-7488 s. Track 8 (the loser, ~700 Hz) has an
+- B, gap-filled run (`rtdetr_gapfill`, the paper's dataset): the same
+  window; the gap of track 8 (7477.81-7618.05 s, 140.2 s; EOD$f$ 700.7 Hz
+  before, 699.5 Hz after; action "filled") from
+  `competition2019_v2_20261113_gapfill/2019-12-04-10_00/tracks_gapfill.npz`
+  (gap table) is bridged by linear interpolation (dashed in the figure);
+  the three chirps of the window inside the gap (4303, 4304, 4305) are now
+  assigned to fish 8 (confidence 0.999, 0.999, 0.994); the window has 11
+  assigned and no unassigned chirps; the recording has 12 beyond-tolerance
+  chirps of 1,099 (source run: 97 of 1,100). The key of Fig. 3 lists only
+  symbols drawn, so "unassigned" is absent in this version. Gap numbers
+  (33 analysed trials): 1,328 interior gaps > 10 s in the trial fish's
+  tracks, in 56 of 66 fish (`competition2019_v2_20261113/track_gaps/README.md`);
+  1,275 filled (8.87 h), 53 left because the EOD$f$ jump exceeds 15 Hz,
+  none longer than 300 s; unassigned chirps 1,599 -> 924 (whole
+  recordings), 1,260 -> 761 (first 3 h)
+  (`competition2019_v2_20261113_gapfill/README.md`).
+- B, source run (`rtdetr`): `2019-12-04-10_00`, 7468-7488 s. Track 8 (the loser, ~700 Hz) has an
   interior gap 7477.81-7618.05 s (140.2 s; 18 chirps in the gap, all
   unassigned, all 18 assignable after linear interpolation of the track):
   `detections/competition2019_v2_20261113/track_gaps/gaps.csv` (the snippet
@@ -286,11 +327,15 @@ ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
   emitter under a Student-t error model of the predicted emitter EOD$f$
   fitted on simulated test scenes (chirpdetector `docs/pipeline.md`); an
   upper bound on real data (tracks add the tracker's error).
-- Prevalence in the 33 analysed trials (all `chirp` rows): 49,433 chirps;
+- Prevalence in the 33 analysed trials (all `chirp` rows; printed by the
+  script). Gap-filled run: 49,375 chirps; 48,425 assigned, 904 beyond
+  tolerance, 20 no live track, 26 re-attributed harmonics; unassigned 924
+  (1.9 %). Assigned chirps between fish < 10 Hz apart: 1,192 (2.5 %);
+  assignment confidence < 0.9: 1,032 (2.1 %). Source run: 49,433 chirps;
   47,809 assigned, 1,579 beyond tolerance, 20 no live track, 25
-  re-attributed harmonics; unassigned 1,599 (3.2 %). Assigned chirps between
-  fish < 10 Hz apart: 1,100 (2.3 %); assignment confidence < 0.9: 920
-  (1.9 %).
+  re-attributed; unassigned 1,599 (3.2 %); < 10 Hz apart 1,100 (2.3 %);
+  confidence < 0.9 920 (1.9 %). (The gap-filled run has 58 more rows flagged
+  by post-processing, hence 49,375 chirps.)
 
 ## Disagreements with the README / reports
 
@@ -351,7 +396,9 @@ ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
 - Fig. 1 B/C display levels make the chirps visible by saturating the
   baselines; the relative brightness of baseline and chirp is therefore not
   shown (A shows it).
-- Fig. 3B depends on the gap-filled run (see Fig. 3 above).
+- Fig. 3B (gap-filled run) shows a filled gap: how gaps are handled. A
+  remaining unfilled gap (53 in the 33 trials, EOD$f$ jump > 15 Hz) would
+  instead show a residual failure; not drawn (no example inspected).
 - Fig. 3C left/right are ambiguous assignments, not verified errors (no
   emitter ground truth on real data); worded as such.
 - Click-related detections (e.g. `2020-05-13-10_00` 8673.9 s, 67 % of the
@@ -469,11 +516,15 @@ was faint and scored 0.33 (right, enlarged with its own display contrast).
 Two of the 21 detections have no label (?; one assigned to EOD$f_2$, one a
 second box 93 ms before the box of a labelled chirp); whether they are
 unlabelled chirps cannot be decided from the spectrogram, and the
-evaluation of Fig. 2A counts them as false positives. *B*, the frequency
-track of EOD$f_2$ is interrupted for 140 s while the fish keeps chirping:
-its chirps in the gap are detected but stay unassigned, because no track
-lies within 20 Hz of their predicted emitter EOD$f$. [To be redrawn from
-the gap-filled run; counts to follow.] *C*, assignments between fish less
+evaluation of Fig. 2A counts them as false positives. *B*, a gap in the
+frequency track: the tracker lost EOD$f_2$ for 140 s while the fish kept
+chirping. Such interior gaps of the two competitors' tracks (10-300 s, EOD$f$
+change across the gap <= 15 Hz) were bridged by linear interpolation
+(dashed) before assignment, so the chirps in the gap are assigned to the
+fish. In the 33 analysed trials, the competitors' tracks had 1,328 interior
+gaps longer than 10 s (56 of 66 fish); 1,275 were filled and 53 left
+because the EOD$f$ changed by more than 15 Hz across the gap; filling
+reduced the unassigned chirps from 1,599 to 924. *C*, assignments between fish less
 than 7 Hz apart; numbers above the boxes, assignment confidence (posterior
 probability of the chosen track under an error model fitted on simulated
 data; an upper bound on real data). Left, one chirp between fish 2.7 Hz
@@ -482,10 +533,10 @@ eye. Right, two chirps 77 ms apart between fish 6.4 Hz apart, shown in the
 51-ms window, in which they are separate; assigned to different fish with
 confidence 0.72 and 0.56. Real recordings have no emitter ground truth, so
 these are uncertain assignments, not verified errors. In the 33 trials,
-1,100 assigned chirps (2.3 %) occurred between fish less than 10 Hz apart,
+1,192 assigned chirps (2.5 %) occurred between fish less than 10 Hz apart,
 where the predicted emitter EOD$f$ assigned 0.881 of simulated chirps
-correctly (Fig. 2D), and 920 (1.9 %) had a confidence below 0.9; 1,599 of
-49,433 detected chirps (3.2 %) were unassigned [before the gap fill].
+correctly (Fig. 2D), and 1,032 (2.1 %) had a confidence below 0.9; 924 of
+49,375 detected chirps (1.9 %) remained unassigned.
 Display levels: from a background percentile to a percentile of the
 pixels inside the chirp boxes, so the baselines saturate; the enlargement
 in A uses the levels of the main panel (C right: per-crop percentiles).
