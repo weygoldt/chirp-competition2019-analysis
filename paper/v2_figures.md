@@ -57,9 +57,11 @@ crop (mostly background) to the 99th percentile of the pixels inside the
 crop's chirp boxes, excluding +-15 Hz around the tracks, so that the chirps
 fill the colour range and the baselines saturate (Fig. 1B and C share one
 set, 0.27-0.63 of the 0-1 range; the draft's fixed 0.30-0.95 left the
-chirps, at 0.26-0.62, in the dark half). Fig. 1A (single windows), the zoom
-of Fig. 3A and the 51-ms panel of Fig. 3C use per-crop percentiles
-(40th-99.8th); the RGB image of Fig. 1A is on the front end's own levels.
+chirps, at 0.26-0.62, in the dark half). Fig. 3A (main and zoom) uses
+`background_levels()` instead (floor from the background pixels only; see
+Fig. 3 below). Fig. 1A (single windows) and the 51-ms panel of Fig. 3C use
+per-crop percentiles (40th-99.8th); the RGB image of Fig. 1A is on the front
+end's own levels.
 
 ## Figure style
 
@@ -226,8 +228,18 @@ track to the box's lower edge + 41.15 Hz.
 
 ### Fig. 3 (failure modes)
 
-Display levels (`chirp_levels`): A 0.519-0.687, B 0.471-0.620, C left
-0.426-0.615; A zoom and C right per-crop percentiles (C right 0.254-0.894).
+Display levels: A (main and zoom) 0.324-0.579 from `background_levels`
+(60th percentile of the background pixels only, i.e. outside every stored
+box with score >= 0.2 and > 15 Hz from the tracks -> 97th percentile of the
+pixels inside the chirp boxes away from the tracks). The earlier
+`chirp_levels` floor (85th percentile of the whole crop, 0.519) lay above
+the median chirp pixel (0.35) because the glow of the two baselines 20 Hz
+apart fills > 15 % of this 310-Hz crop, so most chirps were nearly
+invisible (`_draft3/`). The zoom uses the main panel's levels on purpose:
+the missed chirp's pixels do not exceed the background of the same rows, so
+it stays as faint relative to the detected chirps as it is (not
+stretched). B 0.471-0.620 and C left 0.426-0.615 (`chirp_levels`), C right
+per-crop percentiles (0.254-0.894): unchanged, their chirps read clearly.
 No titles; the panels carry the minimal cues: "?", "score 0.33", "track
 ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
 "confidence 0.53", "0.72", "0.56".
@@ -474,5 +486,7 @@ these are uncertain assignments, not verified errors. In the 33 trials,
 where the predicted emitter EOD$f$ assigned 0.881 of simulated chirps
 correctly (Fig. 2D), and 920 (1.9 %) had a confidence below 0.9; 1,599 of
 49,433 detected chirps (3.2 %) were unassigned [before the gap fill].
-Display levels as in Fig. 1B-D (A zoom and C right: per-crop percentiles).
+Display levels: from a background percentile to a percentile of the
+pixels inside the chirp boxes, so the baselines saturate; the enlargement
+in A uses the levels of the main panel (C right: per-crop percentiles).
 Scale bars: 1 s (A, B), 200 ms (A, right), 100 ms (C).

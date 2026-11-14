@@ -286,6 +286,40 @@ def chirp_levels(snip: dict, t0: float, t1: float, f0: float, f1: float,
     return lo, max(hi, lo + 0.1)
 
 
+def background_levels(snip: dict, t0: float, t1: float, f0: float, f1: float,
+                      rows: pd.DataFrame, *, channel: int = 0, q_bg: float = 60,
+                      q_chirp: float = 97, guard_hz: float = 15.0) -> tuple[float, float]:
+    """Display levels for crops where the baselines fill much of the image.
+
+    vmin: the ``q_bg`` percentile of the background pixels only (outside every
+    stored box with score >= 0.2 and farther than ``guard_hz`` from a live
+    track); vmax: the ``q_chirp`` percentile of the pixels inside the
+    operating chirp boxes away from the tracks. Unlike ``chirp_levels`` the
+    floor is not pulled up by the baselines' glow (in a 300-Hz crop around two
+    close fish the glow fills > 15 % of the pixels).
+    """
+    t, f = snip["times_s"], snip["freqs_hz"]
+    it, jf = (t >= t0) & (t <= t1), (f >= f0) & (f <= f1)
+    tt, ff = t[it], f[jf]
+    crop = snip["img"][channel][np.ix_(jf, it)].astype(float)
+    tracks = [track_median(snip, tid, t0 - 5, t1 + 5) for tid in fish_order(snip, t0 - 5, t1 + 5)]
+    off_track = np.ones(len(ff), bool)
+    for hz in tracks:
+        off_track &= np.abs(ff - hz) > guard_hz
+    bg = np.repeat(off_track[:, None], len(tt), axis=1)
+    vals = []
+    for r in rows.itertuples():
+        mt = (tt >= r.t_start_s) & (tt <= r.t_end_s)
+        mf = (ff >= r.f_low_hz) & (ff <= r.f_high_hz)
+        if r.score >= 0.2:
+            bg[np.ix_(mf, mt)] = False
+        if r.operating and r.chirp and mt.any() and (mf & off_track).any():
+            vals.append(crop[np.ix_(mf & off_track, mt)].ravel())
+    lo = float(np.percentile(crop[bg], q_bg))
+    hi = float(np.percentile(np.concatenate(vals), q_chirp)) if vals else lo + 0.3
+    return lo, max(hi, lo + 0.1)
+
+
 def show_spec(
     ax,
     snip: dict,

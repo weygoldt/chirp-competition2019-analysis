@@ -99,7 +99,10 @@ def panel_labelled(ax, ax_zoom, fig, report):
     f0, f1 = 650, 960
     colors, order = C.fish_colors(snip, t0, t1)
     rows = C.window(snip, t0, t1)
-    lv = C.chirp_levels(snip, t0, t1, f0, f1, rows)
+    # floor from the background only: in this 310-Hz crop the glow of the two
+    # baselines 20 Hz apart fills > 15 % of the pixels (chirp_levels' floor
+    # landed above the median chirp pixel)
+    lv = C.background_levels(snip, t0, t1, f0, f1, rows)
     C.show_spec(ax, snip, t0, t1, f0, f1, vmin=lv[0], vmax=lv[1])
     C.draw_tracks(ax, snip, colors, t0, t1)
     drawn = C.draw_detections(ax, rows, colors, t0)
@@ -115,16 +118,18 @@ def panel_labelled(ax, ax_zoom, fig, report):
         near = kept[(kept.t_start_s < r.t_center_s + 0.06) & (kept.t_end_s > r.t_center_s - 0.06)]
         ax.text(r.t_center_s - t0, float(near.f_high_hz.max()) + 6, "?", ha="center",
                 va="bottom", fontweight="bold", **C.ANNOT)
-    fish_labels(ax, snip, colors, order, t0, t1, 0.1, dy=(23, -23))
+    fish_labels(ax, snip, colors, order, t0, t1, 0.1, dy=(29, -29))
     C.scalebar(ax, t1 - t0 - 0.15, 668, 1.0, "1 s")
     C.spec_yaxis(ax, ticks=[700, 800, 900])
     n_lab = len(labels)
     n_found = n_lab - len(unmatched_lab)
 
-    # zoom on the missed chirp, the crop's own display contrast
+    # zoom on the missed chirp with the levels of the main panel: the missed
+    # chirp keeps its brightness relative to the detected chirps (its pixels
+    # do not exceed the background of the same rows; not stretched)
     zt0, zt1 = miss.t_center_s - 0.4, miss.t_center_s + 0.4
     zf0, zf1 = 685, 845
-    C.show_spec(ax_zoom, snip, zt0, zt1, zf0, zf1, vmin=None, vmax=None)
+    C.show_spec(ax_zoom, snip, zt0, zt1, zf0, zf1, vmin=lv[0], vmax=lv[1])
     C.draw_tracks(ax_zoom, snip, colors, zt0, zt1)
     C.draw_detections(ax_zoom, rows, colors, zt0)
     C.draw_missed(ax_zoom, miss, zt0)
