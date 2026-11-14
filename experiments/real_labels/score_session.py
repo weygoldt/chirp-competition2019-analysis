@@ -13,6 +13,11 @@ recall windows, the t001 runs' detections. Estimates:
 2. **Precision at thresholds** 0.5-0.95: the same estimator over the main
    strata's items with ``score >= t`` (domain estimation within the cells),
    both datasets pooled and per dataset; ``N_hat(t) = sum(w)``.
+   **By the assigned fish's trial status** (winner / loser / other, the
+   strata of the bins 0.5-0.7, 0.7-0.9, 0.9-1; ``status`` in the truth):
+   precision per dataset x score bin x status and at thresholds 0.5-0.9
+   per status: whether the winner-assigned detections between 0.5 and 0.9
+   are chirps decides the paper's winner counts.
 3. **Recall** from the windows the labeller finished: every mark in the
    zone is a chirp; a mark is found at threshold ``t`` if a kept detection
    with ``score >= t`` matches it under the rule of
@@ -38,7 +43,8 @@ recall windows, the t001 runs' detections. Estimates:
    duplicates whether the labeller's emitter differs from the kept twin's.
 
 Confidence intervals: 95 % percentile bootstrap (2,000 resamples) within the
-design's cells (candidates) or datasets (windows).
+design's strata (candidates; items keep their cell weights) or datasets
+(windows).
 
     uv run python experiments/real_labels/score_session.py [--labels DIR] [--out DIR]
 
@@ -81,17 +87,20 @@ def read_labels(labels_dir: Path) -> pd.DataFrame:
     return df
 
 
-def _boot(stat, groups: list[np.ndarray], rng: np.random.Generator) -> tuple[float, float]:
-    """Percentile CI of stat(index array) resampling within groups."""
-    vals = []
-    for _ in range(N_BOOT):
-        idx = np.concatenate([rng.choice(g, size=len(g), replace=True) for g in groups if len(g)])
-        v = stat(idx)
-        if np.isfinite(v):
-            vals.append(v)
-    if not vals:
+def boot_matrix(groups: list[np.ndarray], rng: np.random.Generator) -> np.ndarray:
+    """N_BOOT resamples (rows) of all items, each group resampled with
+    replacement on its own (stratified bootstrap); shape (N_BOOT, n)."""
+    parts = [g[rng.integers(0, len(g), size=(N_BOOT, len(g)))] for g in groups if len(g)]
+    return np.hstack(parts) if parts else np.zeros((N_BOOT, 0), dtype=int)
+
+
+def _boot_ratio(num: np.ndarray, den: np.ndarray, index: np.ndarray) -> tuple[float, float]:
+    """Percentile CI of sum(num) / sum(den) over the resamples."""
+    n, d = num[index].sum(axis=1), den[index].sum(axis=1)
+    r = n[d > 0] / d[d > 0]
+    if r.size == 0:
         return (np.nan, np.nan)
-    return (float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5)))
+    return (float(np.percentile(r, 2.5)), float(np.percentile(r, 97.5)))
 
 
 def candidate_table(truth: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame:
@@ -124,14 +133,17 @@ def _ratio(num, den) -> float:  # noqa: ANN001
 
 def precision_tables(t: pd.DataFrame, rng: np.random.Generator) -> tuple[pd.DataFrame, pd.DataFrame]:
     main = t[t["stratum"].str.startswith("main/") & t["labelled"]].reset_index(drop=True)
-    cells = [g.index.to_numpy() for _, g in main.groupby(["stratum", "recording"])]
+    # resample within strata (the recording cells often hold 1-2 items, which
+    # a within-cell bootstrap would treat as fixed); items keep their weights
+    cells = [g.index.to_numpy() for _, g in main.groupby("stratum")]
+    index = boot_matrix(cells, rng)
     w, y, s = main["w"].to_numpy(), main["y"].to_numpy(), main["score"].to_numpy()
     rows = []
     for (ds_sel, ds_name) in ((None, "both"), ("competition2019", "2019"), ("competition2022", "2022")):
         dmask = np.ones(len(main), bool) if ds_sel is None else (main["dataset"] == ds_sel).to_numpy()
         for b, g in main[dmask].groupby("score_bin"):
             m = dmask & (main["score_bin"] == b).to_numpy()
-            ci = _boot(lambda i, m=m: _ratio((w * y * m)[i], (w * m)[i]), cells, rng)
+            ci = _boot_ratio(w * y * m, w * m, index)
             rows.append({"dataset": ds_name, "score_bin": b, "n": int(m.sum()),
                          "N_hat": float(w[m].sum()), "mean_score": _ratio(w[m] * s[m], w[m]),
                          "precision": _ratio(w[m] * y[m], w[m]), "ci_low": ci[0], "ci_high": ci[1],
@@ -150,11 +162,39 @@ def precision_tables(t: pd.DataFrame, rng: np.random.Generator) -> tuple[pd.Data
         dmask = np.ones(len(main), bool) if ds_sel is None else (main["dataset"] == ds_sel).to_numpy()
         for thr in THRESHOLDS:
             m = dmask & (s >= thr)
-            ci = _boot(lambda i, m=m: _ratio((w * y * m)[i], (w * m)[i]), cells, rng)
+            ci = _boot_ratio(w * y * m, w * m, index)
             rows.append({"dataset": ds_name, "threshold": thr, "n": int(m.sum()),
                          "N_hat": float(w[m].sum()), "precision": _ratio(w[m] * y[m], w[m]),
                          "ci_low": ci[0], "ci_high": ci[1]})
     return by_bin, pd.DataFrame(rows)
+
+
+def status_tables(t: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+    """Precision by dataset x score bin x status and at thresholds by status."""
+    main = t[t["stratum"].str.startswith("main/") & t["labelled"]].reset_index(drop=True)
+    # resample within strata (the recording cells often hold 1-2 items, which
+    # a within-cell bootstrap would treat as fixed); items keep their weights
+    cells = [g.index.to_numpy() for _, g in main.groupby("stratum")]
+    index = boot_matrix(cells, rng)
+    w, y, s = main["w"].to_numpy(), main["y"].to_numpy(), main["score"].to_numpy()
+    rows = []
+    for ds_sel, ds_name in ((None, "both"), ("competition2019", "2019"), ("competition2022", "2022")):
+        dm = np.ones(len(main), bool) if ds_sel is None else (main["dataset"] == ds_sel).to_numpy()
+        for status in ("winner", "loser", "other"):
+            sm = dm & (main["status"] == status).to_numpy()
+            groups = [(b, (main["score_bin"] == b).to_numpy()) for b in sorted(main["score_bin"].unique())]
+            groups += [(f">= {thr}", s >= thr) for thr in (0.5, 0.7, 0.9)]
+            groups += [("0.5-0.9", (s >= 0.5) & (s < 0.9))]
+            for name, gm in groups:
+                m = sm & gm
+                if not m.any():
+                    continue
+                ci = _boot_ratio(w * y * m, w * m, index)
+                rows.append({"dataset": ds_name, "status": status, "scores": name, "n": int(m.sum()),
+                             "N_hat": float(w[m].sum()), "precision": _ratio(w[m] * y[m], w[m]),
+                             "ci_low": ci[0], "ci_high": ci[1],
+                             "N_hat_chirps": float((w * y)[m].sum())})
+    return pd.DataFrame(rows)
 
 
 def window_detections(windows: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -235,6 +275,7 @@ def recall_tables(win: pd.DataFrame, marks: pd.DataFrame, rng: np.random.Generat
         out["recall"] = pd.DataFrame()
         return out
     groups = [g.index.to_numpy() for _, g in per.groupby("dataset")]
+    index = boot_matrix(groups, rng)
     wv, m = per["weight"].to_numpy(), per["marks"].to_numpy(float)
     rows = []
     for ds_sel, name in ((None, "both"), ("competition2019", "2019"), ("competition2022", "2022")):
@@ -243,7 +284,7 @@ def recall_tables(win: pd.DataFrame, marks: pd.DataFrame, rng: np.random.Generat
             f = per[f"found_{thr}"].to_numpy(float)
             dz = per[f"det_zone_{thr}"].to_numpy(float)
             dzm = per[f"det_zone_matched_{thr}"].to_numpy(float)
-            ci = _boot(lambda i, f=f, dm=dm: _ratio((wv * f * dm)[i], (wv * m * dm)[i]), groups, rng)
+            ci = _boot_ratio(wv * f * dm, wv * m * dm, index)
             ft = per[f"found_time_only_{thr}"].to_numpy(float)
             rows.append({"dataset": name, "threshold": thr, "windows": int(dm.sum()),
                          "marks": int(m[dm].sum()), "found": int(f[dm].sum()),
@@ -388,6 +429,7 @@ def main() -> None:
     labels = read_labels(args.labels)
     t = design_weights(candidate_table(truth, labels))
     by_bin, at_thr = precision_tables(t, rng)
+    by_status = status_tables(t, rng)
     win, marks = window_table(truth, labels)
     rec = recall_tables(win, marks, rng)
     emit = emitter_table(t, rec["pairs"])
@@ -396,6 +438,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     by_bin.to_csv(args.out / "precision_by_bin.csv", index=False)
     at_thr.to_csv(args.out / "precision_at_threshold.csv", index=False)
+    by_status.to_csv(args.out / "precision_by_status.csv", index=False)
     rec["recall"].to_csv(args.out / "recall.csv", index=False)
     rec["per_window"].to_csv(args.out / "windows.csv", index=False)
     emit.to_csv(args.out / "emitter_agreement.csv", index=False)
@@ -417,6 +460,9 @@ def main() -> None:
           "## Precision by score bin (main strata, weighted)", "", _md(by_bin),
           "", "## Precision at thresholds", "",
           _md(at_thr),
+          "", "## Precision by the assigned fish's trial status", "",
+          "N_hat_chirps: estimated number of real chirps among the frame's detections of that cell.", "",
+          _md(by_status),
           "", "## Recall (windows)", "", _md(rec["recall"])
           if len(rec["recall"]) else "(no finished windows)",
           "", "## Emitter agreement", "", _md(emit) if len(emit) else "-",

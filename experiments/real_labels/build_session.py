@@ -4,8 +4,19 @@ Items (blind browser labeller, the simulated benchmark's view):
 
 1. Candidates (detections of the t001 runs, store threshold 0.01): kept rows
    (not flagged by post-processing), stratified by dataset (2019/2020,
-   2022) x score bin x chirp size, ``N_PER_CELL`` per stratum (shortfalls of
-   a stratum go to the other strata of the same score bin). Within a
+   2022) x score bin x chirp size, and in the bins 0.5-0.7, 0.7-0.9 and
+   0.9-1 also by the trial status of the assigned fish (winner / loser /
+   other; coordinator's addition of 2026-11-14: the winner counts of the
+   paper depend on the precision of winner-assigned detections at 0.5-0.9).
+   Targets per dataset x score bin x status in ``TARGETS`` (shortfalls go to
+   the other statuses of the same bin), split over the two sizes by
+   water-filling. Status: the assigned track (gap-filled assignment for the
+   2019 rows the gap-filled run has, i.e. score >= 0.05; the t001
+   assignment otherwise) is the trial's ``win_ID`` / ``lose_ID``
+   (``trial_summary.csv``; only the 33 analysed trials: no draws, without
+   ``EXCLUDED_TRIALS``) or, for 2022, ``Win_ID`` / ``Lose_ID`` of
+   ``raw/meta.csv``; everything else (unassigned, other tracks, draws,
+   excluded or non-trial recordings) is ``other``. Within a
    stratum the sample is spread over the recordings by water-filling (every
    recording gets the same number, up to what it has; dense recordings are
    capped at that level), and drawn at random within each recording. The
@@ -65,6 +76,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     BACKGROUND,
+    REC_2019,
+    REC_2022,
     CANDIDATES,
     DARK_PHASE_S,
     EMITTER_LABELS,
@@ -86,7 +99,23 @@ SCORE_BINS = (0.01, 0.05, 0.2, 0.5, 0.7, 0.9, 1.0001)
 SCORE_NAMES = ("0.01-0.05", "0.05-0.2", "0.2-0.5", "0.5-0.7", "0.7-0.9", "0.9-1")
 SIZE_CUT_HZ = 200.0  # decoder height; valley of the bimodal height distribution
 SIZE_CUT_BOX_HZ = 250.0  # rows without a decoder height: box top above the emitter
-N_PER_CELL = 31  # 6 score bins x 2 sizes x 2 datasets = 24 strata -> ~744
+STATUS_BINS = ("0.5-0.7", "0.7-0.9", "0.9-1")
+# items per dataset x score bin x status ("all" below 0.5): 744 in all
+TARGETS = {
+    "competition2019": {
+        "0.01-0.05": {"all": 55}, "0.05-0.2": {"all": 55}, "0.2-0.5": {"all": 55},
+        "0.5-0.7": {"winner": 60, "loser": 30, "other": 12},
+        "0.7-0.9": {"winner": 60, "loser": 30, "other": 12},
+        "0.9-1": {"winner": 40, "loser": 30, "other": 12},
+    },
+    "competition2022": {
+        "0.01-0.05": {"all": 45}, "0.05-0.2": {"all": 45}, "0.2-0.5": {"all": 45},
+        "0.5-0.7": {"winner": 30, "loser": 20, "other": 6},
+        "0.7-0.9": {"winner": 30, "loser": 20, "other": 6},
+        "0.9-1": {"winner": 20, "loser": 20, "other": 6},
+    },
+}
+EXCLUDED_TRIALS = ("2020-05-21-10_00", "2020-05-25-10_00", "2020-05-28-10_00", "2020-06-10-10_00")
 N_FLAGGED = 50
 FLAGGED_MIN_SCORE = 0.5
 N_WINDOWS = {"competition2019": 125, "competition2022": 75}
@@ -229,16 +258,92 @@ def waterfill(counts: dict[str, int], n: int) -> dict[str, int]:
     return alloc
 
 
+def capped(targets: dict[str, int], avail: dict[str, int]) -> dict[str, int]:
+    """Targets capped by what is available; the shortfall goes to the other
+    cells in proportion to their targets, up to what they have."""
+    alloc = {k: min(v, avail.get(k, 0)) for k, v in targets.items()}
+    left = sum(targets.values()) - sum(alloc.values())
+    while left > 0:
+        room = {k: avail.get(k, 0) - alloc[k] for k in targets if avail.get(k, 0) > alloc[k]}
+        if not room:
+            break
+        total = sum(targets[k] for k in room)
+        give = {k: max(1, int(left * targets[k] / total)) for k in room}
+        for k in sorted(room, key=lambda k: -targets[k]):
+            g = min(give[k], room[k], left)
+            alloc[k] += g
+            left -= g
+            if left == 0:
+                break
+    return alloc
+
+
 def allocate_strata(pool: pd.DataFrame) -> dict[tuple, int]:
-    """n per stratum (dataset, score bin, size): N_PER_CELL, shortfalls of a
-    stratum moved to the other strata of its score bin."""
-    sizes = pool.groupby(["dataset", "score_bin", "size"]).size().to_dict()
+    """n per stratum (dataset, score bin, status, size), see ``TARGETS``."""
+    counts = pool.groupby(["dataset", "score_bin", "status_stratum", "size"]).size().to_dict()
     out: dict[tuple, int] = {}
-    for b in SCORE_NAMES:
-        cells = {k: v for k, v in sizes.items() if k[1] == b}
-        target = N_PER_CELL * 4
-        out |= waterfill(cells, target)
+    for ds, bins in TARGETS.items():
+        for b, targets in bins.items():
+            avail = {st: sum(v for k, v in counts.items() if k[:3] == (ds, b, st)) for st in targets}
+            for st, n in capped(targets, avail).items():
+                sizes = {k: v for k, v in counts.items() if k[:3] == (ds, b, st)}
+                out |= waterfill(sizes, n)
     return out
+
+
+def trial_roles() -> dict[str, dict]:
+    """Per recording: winner / loser track ids and whether the trial is analysed."""
+    roles: dict[str, dict] = {}
+    t = pd.read_csv(REC_2019 / "trial_summary.csv", index_col=0)
+    for r in t.itertuples():
+        roles[r.recording] = {"winner": float(r.win_ID), "loser": float(r.lose_ID),
+                              "analysed": bool(r.draw == 0 and r.recording not in EXCLUDED_TRIALS),
+                              "kind": "draw" if r.draw else (
+                                  "excluded" if r.recording in EXCLUDED_TRIALS else "analysed")}
+    m = pd.read_csv(REC_2022 / "raw" / "meta.csv", index_col=0)
+    for rec, r in m.iterrows():
+        roles[str(rec)] = {"winner": float(r["Win_ID"]), "loser": float(r["Lose_ID"]),
+                           "analysed": True, "kind": "trial2022"}
+    return roles
+
+
+def add_status(det: pd.DataFrame) -> pd.DataFrame:
+    """Assigned fish's trial status of every row (see the module docstring)."""
+    key = ["t_start_s", "t_end_s", "f_low_hz", "f_high_hz", "score"]
+    parts = []
+    for rec, g in det.groupby("recording", sort=False):
+        path = GAPFILL_2019 / rec / "chirps_rtdetr_gapfill.parquet"
+        if g["dataset"].iat[0] == "competition2019" and path.exists():
+            gap = pd.read_parquet(path, columns=[*key, "track_id", "assign_status"]).rename(
+                columns={"track_id": "gapfill_track_id", "assign_status": "gapfill_assign_status"})
+            g = g.merge(gap, on=key, how="left", validate="many_to_one")
+        else:
+            g = g.assign(gapfill_track_id=np.nan, gapfill_assign_status=None)
+        parts.append(g)
+    det = pd.concat(parts, ignore_index=True)
+    has_gap = det["gapfill_assign_status"].notna()
+    track = np.where(has_gap, det["gapfill_track_id"], det["track_id"]).astype(float)
+    status_src = np.where(has_gap, det["gapfill_assign_status"], det["assign_status"])
+    assigned = np.isin(status_src, ["assigned", "reattributed"])
+    roles = trial_roles()
+    status = np.full(len(det), "other", dtype=object)
+    detail = np.full(len(det), "nontrial", dtype=object)
+    rec = det["recording"].to_numpy()
+    for name, r in roles.items():
+        sel = rec == name
+        if not sel.any():
+            continue
+        detail[sel] = r["kind"]
+        if r["analysed"]:
+            status[sel & assigned & (track == r["winner"])] = "winner"
+            status[sel & assigned & (track == r["loser"])] = "loser"
+    detail[~assigned] = "unassigned"
+    det["status_track_id"] = np.where(assigned, track, np.nan)
+    det["status_assignment"] = np.where(has_gap, "gapfill", "t001")
+    det["status"] = status
+    det["status_detail"] = detail
+    det["status_stratum"] = np.where(det["score_bin"].isin(STATUS_BINS), det["status"], "all")
+    return det
 
 
 def sample_cells(pool: pd.DataFrame, strata: dict[tuple, int], keys: list[str],
@@ -408,6 +513,7 @@ def main() -> None:
     det = load_detections()
     det["score_bin"] = pd.cut(det["score"], SCORE_BINS, right=False, labels=SCORE_NAMES).astype(str)
     det["size"] = size_of(det)
+    det = add_status(det)
     regs, bg, earlier = regions(), background_segments(), earlier_boxes()
     tc = det["t_center_s"].to_numpy()
     in_frame = frame_mask(det, tc, 0.0, regs, bg)
@@ -417,9 +523,10 @@ def main() -> None:
 
     pool = det[det["in_frame"] & det["kept"]].reset_index(drop=True)
     strata = allocate_strata(pool)
-    main_s = sample_cells(pool, strata, ["dataset", "score_bin", "size"], rng)
+    main_s = sample_cells(pool, strata, ["dataset", "score_bin", "status_stratum", "size"], rng)
     main_s["stratum"] = ("main/" + main_s["dataset"].str.removeprefix("competition") + "/"
-                         + main_s["score_bin"] + "/" + main_s["size"])
+                         + main_s["score_bin"] + "/" + main_s["status_stratum"] + "/"
+                         + main_s["size"])
     flagged_pool = det[det["in_frame"] & ~det["kept"] & (det["score"] >= FLAGGED_MIN_SCORE)]
     flagged_pool = flagged_pool.reset_index(drop=True)
     fl_sizes = flagged_pool.groupby(["dataset", "pp_drop_reason"]).size().to_dict()
@@ -484,15 +591,16 @@ def main() -> None:
             "cell_N", "cell_n", "stratum_N", "stratum_n", "pi", "weight",
             "zone_t0_s", "zone_t1_s", "minute", "minute_chirps", "p_draw", "n_draws",
             "frame_slots", "frame_mean_minute_chirps", "n_live", "f_min_hz", "f_max_hz",
+            "status", "status_detail", "status_stratum", "status_track_id", "status_assignment",
             *MODEL_COLUMNS]
     truth = items[[c for c in keep if c in items.columns]].copy()
     truth = truth.merge(production_match(items[items["item_kind"] == "box"]),
                         on="candidate_id", how="left")
     truth.to_parquet(truth_dir / "real_v1_truth.parquet", index=False)
 
-    pools = det[det["in_frame"]].groupby(["dataset", "kept", "score_bin", "size"]).size()
+    pools = det[det["in_frame"]].groupby(["dataset", "kept", "score_bin", "status", "size"]).size()
     pools.rename("N").reset_index().to_csv(truth_dir / "pools.csv", index=False)
-    cells = pool.groupby(["dataset", "score_bin", "size", "recording"]).size()
+    cells = pool.groupby(["dataset", "score_bin", "status_stratum", "size", "recording"]).size()
     cells.rename("N").reset_index().to_csv(truth_dir / "pool_cells.csv", index=False)
     flagged_pool.groupby(["dataset", "pp_drop_reason", "recording"]).size().rename(
         "N").reset_index().to_csv(truth_dir / "flagged_cells.csv", index=False)

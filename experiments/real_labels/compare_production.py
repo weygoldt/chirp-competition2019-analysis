@@ -49,8 +49,9 @@ def main() -> None:
         if len(a) == len(b):
             row["exact_columns_differing_rows"] = int(sum((~_same(a[c], b[c])).sum() for c in EXACT))
             for c in REFS:
-                ta = a[c].map(a.set_index("chirp_id")["t_center_s"])
-                tb = b[c].map(full.set_index("chirp_id")["t_center_s"])
+                ta = pd.to_numeric(a[c].map(a.set_index("chirp_id")["t_center_s"]), errors="coerce")
+                tb = pd.to_numeric(b[c].map(full.set_index("chirp_id")["t_center_s"]), errors="coerce")
+                ta, tb = ta.astype(float), tb.astype(float)
                 row[f"{c}_differing"] = int((~_same(ta, tb)).sum())
             row["height_max_abs_diff_hz"] = float(np.nanmax(np.abs(a["height_hz"] - b["height_hz"])))
             row["fwhm_max_abs_diff_ms"] = 1e3 * float(np.nanmax(np.abs(a["fwhm_s"] - b["fwhm_s"])))
@@ -63,8 +64,11 @@ def main() -> None:
     df.to_csv(out, index=False)
     same_n = (df["production_rows"] == df["t001_rows_ge_0.05"]).sum()
     exact = (df.get("exact_columns_differing_rows", pd.Series(dtype=float)) == 0).sum()
+    refs_ok = int((df[[f"{c}_differing" for c in REFS]].fillna(1).sum(axis=1) == 0).sum())
     print(f"{len(df)} recordings: row count equal in {same_n}; exact columns identical in {exact}; "
-          f"chirp_id references identical in {int((df[[f'{c}_differing' for c in REFS]].sum(axis=1) == 0).sum())}")
+          f"chirp_id references identical in {refs_ok}")
+    big = df.sort_values("height_max_abs_diff_hz", ascending=False).head(3)
+    print("largest decoder height differences:", big[["recording", "height_max_abs_diff_hz"]].to_dict("records"))
     print(f"decoder: max |height diff| {df['height_max_abs_diff_hz'].max():.3g} Hz, max |FWHM diff| "
           f"{df['fwhm_max_abs_diff_ms'].max():.3g} ms, median relative "
           f"height difference (median over recordings) {df['decoder_median_rel_diff_height'].median():.2g}; "
