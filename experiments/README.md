@@ -138,6 +138,9 @@ author's decision: primary threshold stays 0.5). Only `chirp` changes
 At 0.9: `$CHIRP_DATA/detections/competition2019_v2_20261113_gapfill_t090/`
 (120,808 -> 86,990 legacy chirps in the 50 recordings), copied with
 `--suffix _gapfill_t090`.
+At 0.8 (the manuscript's operating threshold, chosen 2026-11-16 from the
+real-data expert agreement of `labels/real_v1`): `…_gapfill_t080/`
+(120,808 -> 108,824), copied with `--suffix _gapfill_t080`.
 
 ### README figures (`readme_figures/`)
 
