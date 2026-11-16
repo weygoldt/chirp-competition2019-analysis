@@ -1,4 +1,4 @@
-"""Chirp counts per trial and status: v1 (``rcnn``) against v2 (``rtdetr``).
+"""Chirp counts per trial and status: v1 (``rcnn``) against v2 (``PAPER_DETECTIONS``).
 
 Reads both legacy array pairs of every trial in ``trial_summary.csv`` and
 writes ``$PAPER_OUT/report/detection_counts.csv`` (one row per trial) and
@@ -6,7 +6,8 @@ writes ``$PAPER_OUT/report/detection_counts.csv`` (one row per trial) and
 trials). Counts are given for the whole recording and for the first 3 h
 (the active phase the analyses use). The trial selection is the one of the
 analysis scripts: drop draws and the four recordings with too-close EODfs
-(``bad_recordings`` of ``analyze_event_time_rates_trial.py``).
+(``bad_recordings`` of ``analyze_event_time_rates_trial.py``). The summaries
+also go to write_stats ("counts").
 
 Also checks whether ``trial_summary.csv``'s ``chirps_win`` / ``chirps_lose``
 are the v1 counts.
@@ -18,7 +19,8 @@ import numpy as np
 import pandas as pd
 
 from chirps import load_chirps
-from paper_config import DATA_ROOT, OUT
+from manuscript_stats import write_stats
+from paper_config import DATA_ROOT, DETECTIONS, OUT
 
 BAD_RECORDINGS = [
     "2020-05-21-10_00",
@@ -43,7 +45,7 @@ def main() -> None:
             "summary_chirps_win": r["chirps_win"],
             "summary_chirps_lose": r["chirps_lose"],
         }
-        for src, tag in (("rcnn", "v1"), ("rtdetr", "v2")):
+        for src, tag in (("rcnn", "v1"), (DETECTIONS, "v2")):
             t, ids = load_chirps(DATA_ROOT / r["recording"], src)
             for status, fid in (("win", r["win_ID"]), ("lose", r["lose_ID"])):
                 sel = ids == fid
@@ -60,7 +62,7 @@ def main() -> None:
 
     inc = df[df["included"]]
     lines = [
-        "# Chirp counts per trial: v1 (rcnn) vs v2 (rtdetr)",
+        f"# Chirp counts per trial: v1 (rcnn) vs v2 ({DETECTIONS})",
         "",
         f"Trials in trial_summary.csv: {len(df)}; analysed (no draw, not bad_recordings): {len(inc)}.",
         f"trial_summary chirps_win/lose equal v1 whole-recording counts in "
@@ -90,6 +92,26 @@ def main() -> None:
     lines.append(f"\nWinners without chirps in the first 3 h: v1 {zero['v1']}, v2 {zero['v2']}.")
     (out / "detection_counts.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
+    write_stats("counts", count_stats(inc))
+
+
+def count_stats(inc: pd.DataFrame) -> dict:
+    """Per detection set and window: totals, per-trial medians, losers vs winners."""
+    stats: dict = {"n_trials": len(inc)}
+    for tag in ("v1", "v2"):
+        stats[tag] = {}
+        for suffix, window in (("", "whole"), ("_3h", "first_3h")):
+            win, lose = inc[f"{tag}_win{suffix}"], inc[f"{tag}_lose{suffix}"]
+            stats[tag][window] = {
+                "winner": {"total": win.sum(), "median": win.median()},
+                "loser": {"total": lose.sum(), "median": lose.median()},
+                "total": win.sum() + lose.sum(),
+                "trials_loser_more": (lose > win).sum(),
+                "loser_share_median": (lose / (lose + win)).median(),
+                "winners_without_chirps": (win == 0).sum(),
+            }
+        stats[tag]["share_first_3h"] = stats[tag]["first_3h"]["total"] / stats[tag]["whole"]["total"]
+    return stats
 
 
 if __name__ == "__main__":
