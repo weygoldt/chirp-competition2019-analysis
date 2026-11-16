@@ -77,6 +77,8 @@ caption drafts, are in `v2_figures.md`. `compare_detection_counts.py`
 writes the chirp counts per trial and status, v1 against v2, to
 `$PAPER_OUT/report/`.
 
+Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun).
+
 ## Figures into the manuscript
 
 `paper/export_figures.sh [--dry-run]` copies the figure PDFs of the primary

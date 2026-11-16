@@ -1,12 +1,16 @@
 # Gap-filled tracks and the 0.9 threshold: what changes in the manuscript's numbers
 
+> Superseded as primary: since 2026-11-15 the manuscript uses the operating
+> threshold 0.8 (`rtdetr_gapfill_t080`); see `REPORT_t080.md`. The 0.5 run
+> below is now a sensitivity run.
+
 2026-11-14. Full tables: `paper/output/compare/comparison.md`
 (`paper/scripts/compare_runs.py`). Runs (all on branch `paper-rerun`):
 
 | run | detections | output root |
 |---|---|---|
 | v2, 0.5 | `rtdetr` (production run) | `paper/output/rtdetr/` |
-| v2 gap-filled, 0.5 (**primary**) | `rtdetr_gapfill` (trial fish's track gaps filled, assignment rerun) | `…/rtdetr_gapfill/` |
+| v2 gap-filled, 0.5 (primary until 2026-11-15) | `rtdetr_gapfill` (trial fish's track gaps filled, assignment rerun) | `…/rtdetr_gapfill/` |
 | v2 gap-filled, 0.9 (robustness) | `rtdetr_gapfill_t090` (same, operating threshold 0.9) | `…/rtdetr_gapfill_t090/` |
 
 On the 365 real hand labels the production model gives precision 0.938 /
