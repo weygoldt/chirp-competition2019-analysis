@@ -9,8 +9,10 @@ shell scripts):
     Bulk data root (libraries, scenes, datasets, runs, bundles, labels,
     detections). Default ``/mnt/data1/chirp_v2``.
 ``CHIRP_FAST``
-    Copy of the detector datasets on a fast disk (``datasets/sim_v4`` was
-    read from here in training and evaluation). Default ``~/chirp_v2_fast``.
+    Where the detector datasets are read from (``datasets/sim_v4``). Default
+    ``$CHIRP_DATA`` (the data drive, since 2026-11-16). Training and
+    evaluation ran from a copy on a fast disk (``~/chirp_v2_fast``, I/O on the
+    hard disk starved training); set this to such a copy to retrain fast.
 ``CHIRP_REC_2019``
     The 2019/2020 tube competition recordings (fishgrid raw, wavetracker
     tracks, hand labels). Default ``/mnt/data2/2019_tube_competition``.
@@ -61,7 +63,7 @@ def _env(name: str, default: str) -> Path:
 EXPERIMENTS = Path(__file__).resolve().parent
 REPO = EXPERIMENTS.parent
 DATA = _env("CHIRP_DATA", "/mnt/data1/chirp_v2")
-FAST = _env("CHIRP_FAST", "~/chirp_v2_fast")
+FAST = _env("CHIRP_FAST", str(DATA))
 REC_2019 = _env("CHIRP_REC_2019", "/mnt/data2/2019_tube_competition")
 REC_2022 = _env("CHIRP_REC_2022", "/mnt/data2/2022_tube_competition")
 V1_BENCHMARK = _env(

@@ -67,7 +67,7 @@ to use other ones.
 | `templates/v4` | chirp template library (13,548 templates; `splits_v1.json`) |
 | `background/v2` | background library (1,342 one-minute segments), `background/screens/` |
 | `scenes/train_v4/{train,val,test}` | the 3,000 training scenes; `scenes/benchmark_v2*` |
-| `datasets/real_test_v1`, `~/chirp_v2_fast/datasets/sim_v4` | detector datasets |
+| `datasets/real_test_v1`, `datasets/sim_v4` | detector datasets |
 | `runs/dualhead_r18_sim_v4_r1`, `runs/yolo26s_sim_v4_r1` | the final detector runs (bundle in `final/bundle`) |
 | `params/runs/v4-dualhead-sim-v4-r2` | the final decoder run (bundle in `bundle/`) |
 | `labels/` | the author's labels: `emitters/` (real), `human_benchmark_*`, `benchmark/` (truth, model outputs, reports) |

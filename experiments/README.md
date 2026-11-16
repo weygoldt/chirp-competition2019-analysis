@@ -14,7 +14,7 @@ from one place:
 | variable | default (the machine the results were made on) | contents |
 |---|---|---|
 | `CHIRP_DATA` | `/mnt/data1/chirp_v2` | libraries, scenes, datasets, runs, bundles, labels, detections |
-| `CHIRP_FAST` | `~/chirp_v2_fast` | fast-disk copy of the detector datasets (`datasets/sim_v4`) |
+| `CHIRP_FAST` | `$CHIRP_DATA` | where the detector datasets (`datasets/sim_v4`) are read from; training ran from a fast-disk copy (`~/chirp_v2_fast`), set this to such a copy to retrain fast |
 | `CHIRP_REC_2019` | `/mnt/data2/2019_tube_competition` | 2019/2020 tube competition recordings and tracks |
 | `CHIRP_REC_2022` | `/mnt/data2/2022_tube_competition` | 2022 recordings (`raw/`) and tracks (`interrim/`) |
 | `CHIRP_V1_BENCHMARK` | `~/wrk/analyses/chirp_competition/detector_benchmark` | frozen v1 detector benchmark (v1 boxes on the labelled regions) |

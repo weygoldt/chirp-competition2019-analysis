@@ -17,7 +17,7 @@ Markdown (`packages/*/docs/README.md`); the results with their reports are in th
 | chirp template library | v4, 13,548 templates (12,692 pass the default QC), fish-disjoint splits `splits_v1` | `$CHIRP_DATA/templates/v4` |
 | background library | v2, 1,342 segments: inactive-period windows, v1 and v2 chirp screens, recording gate | `$CHIRP_DATA/background/v2`, `configs/background/v2.toml` |
 | training scenes | train_v4: 3,000 one-minute hybrid scenes (seeds 5000-7999) | `$CHIRP_DATA/scenes/train_v4`, `configs/scenes/train_v4_*.toml` |
-| detector dataset | sim_v4, 81,000 tiles (content sha256 `d65588ab3d02…`) | `~/chirp_v2_fast/datasets/sim_v4` |
+| detector dataset | sim_v4, 81,000 tiles (content sha256 `d65588ab3d02…`) | `$CHIRP_DATA/datasets/sim_v4` (trained from a fast-disk copy in `~/chirp_v2_fast`, moved to the data drive 2026-11-16) |
 | detector | dual-head RT-DETRv2-r18, weights `9fcdef3c…`, epoch 16 | `$CHIRP_DATA/runs/dualhead_r18_sim_v4_r1/final/bundle`; release `models-v1` |
 | box-only reference | YOLO26s, same data | `$CHIRP_DATA/runs/yolo26s_sim_v4_r1/final/bundle` |
 | decoder | weights `c0801c56…`, on the dual-head's boxes; calibrated and raw estimates (the manuscript's chirp-parameter figure uses the calibrated ones) | `$CHIRP_DATA/params/runs/v4-dualhead-sim-v4-r2/bundle`; release `models-v1` |

@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
@@ -60,7 +61,7 @@ import paper_config
 
 log = logging.getLogger("v2_fig_extract")
 
-CHIRP_DATA = Path("/mnt/data1/chirp_v2")
+CHIRP_DATA = paper_config.CHIRP_DATA
 # the detections follow PAPER_DETECTIONS (paper_config): the production run,
 # or its dataset patch with the trial fish's track gaps filled
 RUNS = {  # run directory, chirp table, run holding tracks_gapfill.npz (or None)
@@ -77,8 +78,8 @@ RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
 PARQUET = RUNS[DETECTIONS][1]
 TRACKS_RUN = (CHIRP_DATA / "detections" / RUNS[DETECTIONS][2]) if RUNS[DETECTIONS][2] else None
 BUNDLE = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "final" / "bundle"
-REC_2019 = Path("/mnt/data2/2019_tube_competition")
-SIM_V4 = Path("~/chirp_v2_fast/datasets/sim_v4").expanduser()
+REC_2019 = paper_config.DATA_ROOT
+SIM_V4 = Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser() / "datasets" / "sim_v4"
 PP_EVAL = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess"
 
 OUT = paper_config.processed("v2_figures", "x").parent
