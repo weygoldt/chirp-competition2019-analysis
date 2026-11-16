@@ -52,6 +52,11 @@ chain_status() {       # Fig. chirp_status (plot_chirp_winner_loser_trial_summar
   step plot_chirp_winner_loser_trial_summary.py
 }
 
+chain_agonistic() {    # chirps within agonistic windows, circular-shift test (no figure)
+  step print_chirps_in_agonistic_windows.py
+  tagged maxshift600 step print_chirps_in_agonistic_windows.py --max-shift 600
+}
+
 chain_interchase() {   # obs.csv for coupling, receiver effect, random effects
   step summarize_submissive_chirp_effect_on_dominant.py
 }
@@ -122,7 +127,7 @@ chain_posteriors() {   # every reported posterior number (needs all fits)
   step summarize_reported_posteriors.py
 }
 
-ALL=(counts status interchase coupling gamma rates receiver hurdle echo descriptive allocation v2figs posteriors)
+ALL=(counts status agonistic interchase coupling gamma rates receiver hurdle echo descriptive allocation v2figs posteriors)
 chains=("$@")
 (( ${#chains[@]} )) || chains=("${ALL[@]}")
 for c in "${chains[@]}"; do

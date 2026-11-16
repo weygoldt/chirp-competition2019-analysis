@@ -1,3 +1,7 @@
+# Ported from chirp_competition d040123 (src_paper/print_chirps_in_agonistic_windows.py).
+# Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data root default DATA_ROOT;
+# per-trial table under $PAPER_OUT/data/processed (named after --max-shift, so the two
+# runs of run_all.sh keep their own); the printed numbers also go to write_stats.
 """
 This script counts the winner and loser chirps that are associated with agonistic
 behavior and those that are unrelated to it. A chirp counts as agonistic if it
@@ -30,6 +34,9 @@ import pandas as pd
 import typer
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
+from chirps import load_chirps
+from manuscript_stats import write_stats
+from paper_config import DATA_ROOT, processed
 from summarize_submissive_chirp_effect_on_dominant import is_bad_trial
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -129,8 +136,7 @@ def extract_data_for_trial(
     contact_times, chasing_on_off_times, _, _ = load_and_convert_boris_events(
         trial_folder, trial_row["recording"], sr=20000
     )
-    chirp_times = np.load(trial_folder / "chirp_times_rcnn.npy")
-    chirp_ids = np.load(trial_folder / "chirp_ids_rcnn.npy")
+    chirp_times, chirp_ids = load_chirps(trial_folder)
 
     chirp_mask = chirp_times < max_recording_time
     chirp_times = chirp_times[chirp_mask]
@@ -485,14 +491,59 @@ def print_permutation_test(
         )
 
 
+def median_iqr_values(values: pd.Series) -> dict:
+    """Median and interquartile range of a per-trial fraction, as `median_iqr` prints them."""
+    q1, median, q3 = values.quantile([0.25, 0.5, 0.75])
+    return {"median": median, "iqr": [q1, q3]}
+
+
+def stats_values(df: pd.DataFrame, results: dict, n_permutations: int) -> dict:
+    """The numbers of `print_summary` and `print_permutation_test`, for write_stats."""
+    values = {
+        "n_trials": len(df),
+        "n_permutations": n_permutations,
+        "coverage": {
+            key: median_iqr_values(df[f"coverage_{key}"])
+            for key in ["agonistic", "chasing", "contact"]
+        },
+    }
+    for fish, res in results.items():
+        n_total = df[f"{fish}_n_chirps"].sum()
+        per_trial = {}
+        for key in ["agonistic", "unrelated"]:
+            frac = df[f"{fish}_frac_{key}"]
+            per_trial[key] = {**median_iqr_values(frac), "range": [frac.min(), frac.max()]}
+        values[fish] = {
+            "n_chirps": n_total,
+            "n_trials_with_chirps": res["n_trials"],
+            "pooled": {
+                key: df[f"{fish}_n_{key}"].sum() / n_total
+                for key in ["agonistic", "unrelated", "chasing", "contact"]
+            },
+            "per_trial": per_trial,
+            "excess": {
+                "observed": res["observed_excess"],
+                "null_95": np.quantile(res["null_excess"], [0.025, 0.975]),
+                "p": res["p_excess"],
+            },
+            "pooled_test": {
+                "observed": res["observed_pooled"],
+                "null_95": np.quantile(res["null_pooled"], [0.025, 0.975]),
+                "p": res["p_pooled"],
+            },
+            "n_trials_p_below_0_05": res["n_significant"],
+        }
+    return values
+
+
 @app.command()
 def main(
-    data_path: Path,
+    data_path: Path = DATA_ROOT,
     chasing_pre: float = 10.0,
     chasing_post: float = 10.0,
     contact_window: float = 10.0,
     max_recording_time: float = 3 * 60 * 60,
-    output_csv: Path = Path("data/processed/chirps_in_agonistic_windows.csv"),
+    output_csv: Optional[Path] = None,  # noqa: UP045, typer needs Optional
     n_permutations: int = 10000,
     max_shift: Optional[float] = None,  # noqa: UP045, typer needs Optional
     seed: int = 42,
@@ -500,6 +551,11 @@ def main(
     """
     Main entry point. Saves one row per trial and prints a summary.
     """
+    # The permutation columns depend on the shift range, so each range has its
+    # own table and stats namespace.
+    suffix = "" if max_shift is None else f"_maxshift_{max_shift:g}s"
+    if output_csv is None:
+        output_csv = processed(f"chirps_in_agonistic_windows{suffix}.csv")
     df, all_events = get_data(
         data_path,
         chasing_pre=chasing_pre,
@@ -521,6 +577,7 @@ def main(
     print_trial_table(df)
     print_summary(df)
     print_permutation_test(results, n_permutations, max_shift)
+    write_stats(f"agonistic_windows{suffix}", stats_values(df, results, n_permutations))
 
 
 if __name__ == "__main__":
