@@ -126,6 +126,10 @@ dual-head's 8,802 true positives: 0.914 correct, against 0.648 for the
 nearest track to the box's lower edge plus the median offset (41 Hz); with
 the two closest fish less than 10 Hz apart, 0.875 vs 0.577
 (`runs/dualhead_r18_sim_v4_r1/eval/summary.json`, `sim_v4_test/emitter_by_df_bin.csv`).
+The two closest fish need not include the emitter (most test scenes have
+3-7 fish): by the emitter's own distance to the nearest other fish below
+10 Hz, 0.774 vs 0.382 on the post-processed true positives (Fig. 2F,
+`paper/v2_figures.md`).
 
 ### Chirp parameters
 

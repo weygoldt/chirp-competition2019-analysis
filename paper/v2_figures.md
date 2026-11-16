@@ -40,9 +40,10 @@ reproduce the kept `rtdetr` renders pixel for pixel (checked 2026-11-14).
 never hard-coded. Everything that encodes the operating point follows it:
 which boxes are drawn as detections (the run's `operating` column) and which
 as "below threshold", the operating-point markers and their label in
-Fig. 2C, the model's recall in Fig. 2D (benchmark: kept and score >=
-threshold), the true positives of Fig. 2E (score >= threshold) and the boxes
-of Fig. 2F, G (score >= threshold), and the counts printed for the captions.
+Fig. 2C, the model's recall and emitter in Fig. 2D, E (benchmark: kept and
+score >= threshold), the true positives of Fig. 2F (score >= threshold) and
+the boxes of Fig. 2G, H (score >= threshold), and the counts printed for the
+captions.
 
 **What changes at 0.8 (`rtdetr_gapfill_t080`, 2026-11-16).**
 
@@ -278,7 +279,7 @@ Source: `detections/competition2019_v2_20261113/2020-05-29-10_00/chirps_rtdetr.p
 Framing (author, 2026-11-16, binding): on real recordings a human expert is
 not ground truth, so A and B show **agreement with the expert** (used to
 choose the operating threshold) and never precision/recall or accuracy;
-only the simulated panels (C-G) give performance against truth. Names:
+only the simulated panels (C-H) give performance against truth. Names:
 "RT-DETR dual-head" = `dualhead_r18_sim_v4_r1` (the detector of all
 analyses); "YOLO26s (boxes only)" = `yolo26s_sim_v4_r1`; "human expert" =
 the author labelling blind; "box position only" = nearest live track to the
@@ -286,8 +287,9 @@ box's lower edge + 41.15 Hz. Numbers at the operating threshold 0.8
 (`rtdetr_gapfill_t080`); the old real-data panel (precision-recall on the
 365 hand labels of `eval/real_labels_365`) is removed.
 
-Layout: three rows grouped by spacing (real recordings A, B; simulated C-E
-with the model key above them; chirp parameters F, G with their key at the
+Layout: three rows grouped by spacing (real recordings A, B; simulated C-F
+with the model key above them, E and F close together on shared ΔF and
+y axes with one x label; chirp parameters G, H with their key at the
 right); A: the two agreement measures over the score threshold (dashed line:
 the operating threshold; key in the empty lower middle, left of the line);
 B: winner / loser in the paper's status colours (`style.winner_color`,
@@ -299,8 +301,9 @@ B: winner / loser in the paper's status colours (`style.winner_color`,
 | B real, by assigned fish (winner / loser) and score bin 0.5-0.7, 0.7-0.9, >= 0.9 | judged chirps, winner: 0.066 [0.011, 0.145], 0.427 [0.157, 0.630], 0.972 [0.804, 0.995] (n 60, 60, 40); loser: 0.184 [0.016, 0.386], 0.698 [0.328, 0.885], 0.920 [0.731, 1.000] (n 30, 30, 30) | `labels/real_v1/report/precision_by_status.csv`, rows `dataset == 2019`, scores `0.5-0.7`, `0.7-0.9`, `0.9-1` (status from the gap-filled assignment) |
 | C sim test after post-processing, 9,401 chirps | at 0.8: RT-DETR dual-head P 0.995, R 0.931 (TP 8,757, FP 44, FN 644); YOLO26s 0.997 / 0.919 (8,639 / 30 / 762) | `runs/<model>/eval_postprocess/sim_test_after/pr_curve.csv` (level "all"; the row at the first threshold >= 0.8; the evaluation re-matches at each threshold) |
 | D benchmark, 536 true chirps (1,010 items) | recall expert 0.924, RT-DETR dual-head at 0.8 0.935; by SNR (<-20, -20..-10, -10..0, 0..10, >=10 dB; n 85, 123, 130, 100, 98): expert 0.671, 0.959, 0.946, 0.990, 1.000; detector 0.741, 0.968, 0.931, 1.000, 1.000. Right emitter among true chirps: expert 0.812, detector 0.851 (not plotted) | `labels/benchmark/report_v2/items.csv` (truth == chirp & scored; model: `dualhead_chirp` (kept, score >= 0.5) and `dualhead_score >= 0.8`; unweighted, Wilson 95 % intervals) |
-| E correct emitter by ΔF (true positives with score >= 0.8, scenes with >= 2 live fish, n = 8,652) | emitter head: <10 Hz 0.884 (n 5,455), 10-25 (2,146), 25-50 (638), 50-100 (294), >=100 (119); box position only <10 Hz 0.577. Plotted population: head 0.923, box position 0.646. All 8,748 TPs >= 0.8: 0.924 / 0.650 | `data/processed/v2_figures/assign_baseline.csv` (TPs of the evaluation at 0.5, filtered to score >= 0.8; byte-identical in every root) |
-| F, G decoder (boxes >= 0.8) | sim (n 7,395): height median abs. error 9.17 Hz (6.5 %), FWHM 1.12 ms (9.4 %); real long chirps (n 512): median abs. difference to the trace reference 17.7 Hz (4.1 %), 24.5 ms (18.7 %); median signed difference +8.2 Hz, +23.9 ms | `params/runs/v4-dualhead-sim-v4-r2/bundle/eval/predictions.parquet` (score >= 0.8), `real_agreement.csv` (detected, score >= 0.8) |
+| E benchmark, emitter among own detections, by the emitter's ΔF to the nearest other live fish (536 true chirps; 2 without ΔF left out) | expert (items called chirp, n 493) / detector (kept, score >= 0.8, n 499): 0-10 Hz 0.608 [0.520, 0.689] / 0.728 [0.648, 0.796] (n 125 / 136); 10-25 0.924 / 0.943; 25-50 0.986 / 0.986; 50-100 0.992 / 0.991; >= 100 0.986 / 1.000; overall 0.878 / 0.910. Chirps per bin 143, 114, 78, 124, 75 | `labels/benchmark/report_v2/items.csv` (`df_nearest_hz`, `human_emitter_ok`, `dualhead_emitter_ok`; unweighted, Wilson 95 % intervals) |
+| F correct emitter by the emitter's ΔF to the nearest other live track (true positives with score >= 0.8 and a known ΔF, n = 8,652) | predicted emitter EODf: 0-10 Hz 0.780 [0.763, 0.795] (n 2,571), 10-25 0.963 (2,154), 25-50 0.992 (1,713), 50-100 0.996 (1,107), >= 100 0.997 (1,107); box position only: 0.380, 0.552, 0.806, 0.880, 0.968. Overall 0.923 vs 0.646 (all 8,748 TPs >= 0.8: 0.924 / 0.650). Until 2026-11-16 this panel was binned by the evaluation's ΔF (closest pair of any two live tracks; most scenes have 3-7 fish), which put easy chirps into the 0-10 Hz bin (then 0.884 vs 0.577) | `data/processed/v2_figures/assign_baseline.csv` column `emitter_df_bin` (TPs of the evaluation at 0.5, filtered to score >= 0.8; regenerated 2026-11-16 in `rtdetr_gapfill_t080`) |
+| G, H decoder (boxes >= 0.8) | sim (n 7,395): height median abs. error 9.17 Hz (6.5 %), FWHM 1.12 ms (9.4 %); real long chirps (n 512): median abs. difference to the trace reference 17.7 Hz (4.1 %), 24.5 ms (18.7 %); median signed difference +8.2 Hz, +23.9 ms | `params/runs/v4-dualhead-sim-v4-r2/bundle/eval/predictions.parquet` (score >= 0.8), `real_agreement.csv` (detected, score >= 0.8) |
 
 ### Fig. 3 (failure modes)
 
@@ -397,10 +400,12 @@ ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
    (`emitter_by_df_bin.csv`; 8,802 TPs), an evaluation made before
    post-processing and before the matching rule compared labels by box
    midpoint (its label times are chirp centres; `contract.py` now uses box
-   midpoints). Fig. 2E uses the post-processed evaluation that also gives
+   midpoints). Fig. 2F uses the post-processed evaluation that also gives
    the README's detection numbers (0.976 / 0.957): 8,999 TPs, emitter head
-   0.921 (0.881 below 10 Hz), box edge + offset 0.651 (0.578 below 10 Hz);
-   it plots the 8,901 TPs of scenes with >= 2 live fish (0.920 / 0.647).
+   0.921, box edge + offset 0.651. Below 10 Hz by the evaluation's ΔF
+   (closest pair of any two live tracks): 0.881 / 0.578; by the emitter's
+   ΔF to the nearest other live track (what Fig. 2F plots since
+   2026-11-16): 0.774 / 0.382.
    The README mixes the two evaluations. Small difference, same
    conclusion; the manuscript should quote one of them consistently.
 2. **Benchmark strata.** `report_v2/report.md` gives recall per SNR bin
@@ -516,10 +521,10 @@ baselines, so the baselines saturate.
 
 **Fig. 2, pipeline v2 performance (replaces the YOLOv8 cross-validation
 figure).** *Agreement with a human expert on real recordings (A, B) and
-performance on simulated recordings (C-G).* On real recordings the
+performance on simulated recordings (C-H).* On real recordings the
 expert's judgement is not ground truth, so A and B show agreement with the
 expert, which we used to choose the operating threshold; the simulator's
-ground truth gives absolute performance (C-G). Models as in the key:
+ground truth gives absolute performance (C-H). Models as in the key:
 RT-DETR dual-head, the detector used for all analyses (an RT-DETR detector
 with a second head that predicts the emitter's baseline EOD$f$ for each
 box); YOLO26s, a detector trained on the same data that predicts boxes only
@@ -550,21 +555,28 @@ scored): recall of the human expert and of the RT-DETR dual-head detector
 (score >= 0.8) by chirp signal-to-noise ratio (SNR; outer bins open-ended;
 numbers, chirps per bin). Overall recall 0.924 (expert) and 0.935
 (detector); chirp found and assigned to the correct fish, 0.812 and 0.851.
-*E*, fraction of detected simulated chirps (true positives with score >=
-0.8 in scenes with at least two fish; n = 8,652) assigned to the emitting
-fish, by the difference between the emitter's baseline EOD$f$ and that of
-the closest other fish ($\Delta f$; numbers, chirps per bin), with the
-predicted emitter EOD$f$ (nearest track, as in the pipeline) and with the
-box position only (track nearest to the box's lower edge + 41 Hz, the
-median offset of the training chirps). Overall 0.923 vs 0.646; $\Delta f$ <
-10 Hz, 0.884 vs 0.577. *F*, *G*, estimated (calibrated) chirp height and
+*E*, the same benchmark: fraction of each one's own detections (expert:
+chirps called, n = 493; detector: score >= 0.8, n = 499) assigned to the
+emitting fish, by the difference between the emitter's baseline EOD$f$ and
+that of the nearest other fish ($\Delta f$; numbers, true chirps per bin;
+two chirps without $\Delta f$ left out). Below 10 Hz the expert assigned
+0.61 [0.52, 0.69] and the detector 0.73 [0.65, 0.80] correctly; above
+25 Hz both $\geq$ 0.98. The expert gave the same emitter on repeated items
+in 0.80-0.81 of cases (16 and 56 repeated pairs). *F*, fraction of detected
+simulated test chirps (true positives with score >= 0.8 and a known
+$\Delta f$; n = 8,652; 2,571, 2,154, 1,713, 1,107 and 1,107 per bin) assigned to
+the emitting fish, by $\Delta f$ as in E (to the nearest other tracked fish),
+with the predicted emitter EOD$f$ (nearest track, as in the pipeline) and
+with the box position only (track nearest to the box's lower edge + 41 Hz,
+the median offset of the training chirps). Overall 0.923 vs 0.646;
+$\Delta f$ < 10 Hz, 0.780 [0.763, 0.795] vs 0.380 [0.362, 0.399]. *G*, *H*, estimated (calibrated) chirp height and
 FWHM for boxes with score >= 0.8 against a reference value: the true values
 of 7,395 simulated test chirps of unseen fish (density; median absolute
 error 9.2 Hz, 6.5 %, and 1.12 ms, 9.4 %; dashed, identity) and an
 independent estimate from the frequency trace for 512 long chirps of the
 competition recordings (black; median absolute difference 17.7 Hz, 4.1 %,
 and 24.5 ms, 18.7 %; the estimated FWHM is longer by a median 23.9 ms).
-Error bars in D, E: Wilson 95 % confidence intervals. FWHM, full width at
+Error bars in D-F: Wilson 95 % confidence intervals. FWHM, full width at
 half maximum.
 
 **Fig. 3, pipeline v2 failure modes (replaces the v1 failure-mode
@@ -596,8 +608,8 @@ eye. Right, two chirps 77 ms apart between fish 6.4 Hz apart, shown in the
 confidence 0.72 and 0.56. Real recordings have no emitter ground truth, so
 these are uncertain assignments, not verified errors. In the 33 trials,
 1,127 assigned chirps (2.5 %) occurred between fish less than 10 Hz apart,
-where the predicted emitter EOD$f$ assigned 0.884 of simulated chirps
-correctly (Fig. 2E), and 736 (1.7 %) had a confidence below 0.9; 206 of
+where the predicted emitter EOD$f$ assigned 0.78 of simulated chirps
+correctly (Fig. 2F), and 736 (1.7 %) had a confidence below 0.9; 206 of
 44,571 detected chirps (0.5 %) remained unassigned.
 Display levels: from a background percentile to a percentile of the
 pixels inside the chirp boxes, so the baselines saturate; the enlargement

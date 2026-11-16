@@ -30,7 +30,11 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     two box-only baselines (nearest live track to the box's lower edge, and
     to the lower edge plus the median offset emitter - f_low of the training
     chirps). Recomputed from the saved post-processed predictions and the
-    scenes' tracks. ``assign_baseline.csv``.
+    scenes' tracks. Also the emitter's ΔF: the distance of the true
+    emitter's track to the nearest other live track at the label's centre
+    (``emitter_df_hz``, ``emitter_df_bin``; the evaluation's ``delta_f_hz``
+    is the closest pair of any two live tracks, which in scenes with three
+    or more fish need not include the emitter). ``assign_baseline.csv``.
 
 Environment: the upgrade repository's root venv (chirpdetector 2.0.0,
 gridtools 2.0.0), run from ``paper/``::
@@ -294,6 +298,38 @@ def raw() -> None:
     log.info("raw: %s %.1f-%.1f s, channel %d of %d", rec_name, t0, t1, ch, len(rms))
 
 
+DF_EDGES_HZ = (0.0, 10.0, 25.0, 50.0, 100.0)  # the evaluation's ΔF bins (left-closed)
+DF_NAMES = ("0-10", "10-25", "25-50", "50-100", "100+")
+TRACK_MAX_GAP_S = 1.0  # a track is live within 1 s of its detections (evaluation default)
+
+
+def df_bin_names(df_hz: np.ndarray) -> np.ndarray:
+    """ΔF bin names of the evaluation; ``unknown`` where ΔF is NaN."""
+    idx = np.clip(np.digitize(np.nan_to_num(df_hz, nan=0.0), DF_EDGES_HZ) - 1, 0, len(DF_NAMES) - 1)
+    return np.where(np.isfinite(df_hz), np.asarray(DF_NAMES, dtype=object)[idx], "unknown")
+
+
+def emitter_delta_f(tp: pd.DataFrame, tracks: dict) -> np.ndarray:
+    """Distance of the true emitter's track to the nearest other live track
+    at the label's centre (NaN if the emitter or every other track is not live)."""
+    out = np.full(len(tp), np.nan)
+    rec = tp["recording"].astype(str).to_numpy()
+    t = tp["label_t_center_s"].to_numpy(float)
+    emitter = tp["true_emitter_id"].astype("Int64").fillna(-1).to_numpy(int)
+    for r in np.unique(rec):
+        idx = np.flatnonzero(rec == r)
+        trk = tracks[r]
+        freqs = {int(i): trk.track(int(i)).frequency_at(t[idx], TRACK_MAX_GAP_S) for i in trk.ids}
+        for j, k in enumerate(idx):
+            if emitter[k] not in freqs or not np.isfinite(freqs[emitter[k]][j]):
+                continue
+            fe = freqs[emitter[k]][j]
+            others = [f[j] for i, f in freqs.items() if i != emitter[k] and np.isfinite(f[j])]
+            if others:
+                out[k] = float(np.min(np.abs(np.asarray(others) - fe)))
+    return out
+
+
 def assign_baseline() -> None:
     from chirpdetector.data import load_dataset
     from chirpdetector.evaluation import assign_by_frequency
@@ -333,6 +369,10 @@ def assign_baseline() -> None:
     true_ids = tp["true_emitter_id"].astype("Int64").fillna(-2).to_numpy(int)
     out = tp[["recording", "label_row", "pred_row", "score", "true_emitter_id",
               "pred_emitter_id", "delta_f_hz", "n_live_tracks", "df_bin"]].copy()
+    out["emitter_df_hz"] = emitter_delta_f(tp, tracks)
+    out["emitter_df_bin"] = df_bin_names(out["emitter_df_hz"].to_numpy(float))
+    log.info("emitter ΔF unknown (emitter not live or no other live track) for %d of %d TPs",
+             int(np.isnan(out["emitter_df_hz"]).sum()), len(out))
     out["head_correct"] = (
         tp["pred_emitter_id"].astype("Int64").fillna(-1).to_numpy(int) == true_ids
     )
@@ -351,6 +391,8 @@ def assign_baseline() -> None:
     )
     log.info("wrote %s", path)
     print(out.groupby("df_bin")[["head_correct", "edge_correct", "edge_offset_correct"]].mean())
+    print(out.groupby("emitter_df_bin")[["head_correct", "edge_correct",
+                                         "edge_offset_correct"]].agg(["mean", "size"]))
     print(out[["head_correct", "edge_correct", "edge_offset_correct"]].mean())
 
 
