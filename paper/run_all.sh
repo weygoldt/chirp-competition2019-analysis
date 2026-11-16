@@ -122,6 +122,7 @@ chain_v2figs() {       # new figures of pipeline v2 (replace the v1 assignment a
   step plot_v2_pipeline_explainer.py
   step plot_v2_performance.py
   step plot_v2_failure_modes.py
+  step summarize_pipeline.py   # the pipeline's own evaluations, for the Methods
 }
 
 chain_posteriors() {   # every reported posterior number (needs all fits)

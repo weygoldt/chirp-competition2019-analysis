@@ -326,6 +326,9 @@ def benchmark_emitter_panel(ax, report):
     n_row(ax, DF_POS, n, 0.305, fmt="{}")
     df_axis(ax, ylabel=False)
     out["n_true_chirps_per_bin"] = dict(zip(DF_KEYS, n.astype(int).tolist(), strict=True))
+    # the lowest share correct of expert and detector from 25 Hz up (cited in the caption)
+    out["min_p_from_25_hz"] = min(out[key]["by_df"][b]["p"]
+                                  for key in ("human", "dualhead") for b in DF_KEYS[2:])
     out["n_df_unknown"] = n_unknown
     out["threshold"] = THR
     report["benchmark_emitter"] = out

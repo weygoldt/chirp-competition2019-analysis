@@ -68,9 +68,10 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:winner_behavior_predicts_chirp` (`plot_obliterate_receiver_effect`) | interchase, gamma, rates, receiver | `stats_chirp_affects_chasing` (59 fits), `analyze_warped_chase_chirp_rates_trial`, plot | `…/gamma_glmm_binary/`, `event_time_rates/lchirps@{agon,agoff,warped_chase}.json` |
 | `fig:re_analysis` (`plot_re_analysis`) | gamma, receiver | plot | `…/gamma_glmm_binary/` |
 | `fig:hurdle_model` (`plot_hurdle_decomposition`) | hurdle | `summarize_chirp_event_correlation_around_chasing`, `stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets`, plot | `chirp_event_correlations_m3p13/` |
-| `fig:chirp_assignment` → **new** `plot_v2_pipeline_explainer` | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
-| `fig:performances_supp_full` → **new** `plot_v2_performance` | v2figs | `v2_fig_extract assign-baseline` (root env), plot | `v2_figures/`, evaluation outputs under `$CHIRP_DATA` |
-| `fig:performances_supp` → **new** `plot_v2_failure_modes` | v2figs | plot | `v2_figures/` |
+| `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
+| `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline` (root env), plot | `v2_figures/`, evaluation outputs under `$CHIRP_DATA` |
+| `fig:failure_modes` (`plot_v2_failure_modes`, Fig. S4; replaced `fig:performances_supp`) | v2figs | plot | `v2_figures/` |
+| pipeline numbers of the Methods (no figure) | v2figs | `summarize_pipeline` (templates, scenes, expert benchmark, real-data session, production run, from their result files under `$CHIRP_DATA`) | — |
 | reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `make_chirps_around_chasing_obs` (reconstructed writer, audit O5), `stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset`, `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
 
 The sources and every plotted number of the three new v2 figures, with
@@ -120,6 +121,7 @@ script owns each namespace:
 | `re_analysis` | `plot_re_analysis` | replication, grouping levels, HDI overlap |
 | `posteriors` | `summarize_reported_posteriors` | median and 95 % HDI of every reported posterior |
 | `v2_performance`, `v2_failure_modes`, `v2_pipeline_explainer` | the three v2 figures | the numbers of their panels and captions |
+| `pipeline` | `summarize_pipeline` | templates, scenes, expert benchmark, real-data session, production run (from the pipeline's result files) |
 
 ```sh
 paper/run_all.sh                                          # writes $PAPER_OUT/stats/
