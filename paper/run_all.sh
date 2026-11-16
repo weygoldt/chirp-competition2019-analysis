@@ -41,7 +41,8 @@ check_disk() {
 
 # --- chains -------------------------------------------------------------------
 
-chain_counts() {       # chirp counts per trial and status, v1 vs v2
+chain_counts() {       # the dataset (trials, recordings, annotations); chirp counts, v1 vs v2
+  step summarize_dataset.py
   step compare_detection_counts.py
 }
 
