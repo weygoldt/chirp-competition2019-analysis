@@ -2,8 +2,8 @@
 
 Reads the output roots of ``run_all.sh`` for several ``PAPER_DETECTIONS``
 values (default: ``rtdetr`` = v2 as produced, ``rtdetr_gapfill`` = v2 with
-the trial fish's track gaps filled, ``rtdetr_gapfill_t090`` = the same at
-operating threshold 0.9, the robustness check) plus the v1 detections for
+the trial fish's track gaps filled, ``rtdetr_gapfill_t080`` = the same at
+the manuscript's operating threshold 0.8, ``rtdetr_gapfill_t090`` = at 0.9) plus the v1 detections for
 the chirp counts, and writes one markdown table set to
 ``$CHIRP_DATA/paper_rerun/compare/comparison.md``:
 
@@ -31,6 +31,7 @@ from paper_config import CHIRP_DATA, DATA_ROOT
 RUNS = [
     ("rtdetr", "v2, 0.5"),
     ("rtdetr_gapfill", "v2 gap-filled, 0.5"),
+    ("rtdetr_gapfill_t080", "v2 gap-filled, 0.8 (primary)"),
     ("rtdetr_gapfill_t090", "v2 gap-filled, 0.9"),
 ]
 BAD_RECORDINGS = ["2020-05-21-10_00", "2020-05-25-10_00", "2020-05-28-10_00", "2020-06-10-10_00"]
