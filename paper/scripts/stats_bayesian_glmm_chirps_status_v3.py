@@ -1,5 +1,5 @@
 # Ported from chirp_competition d040123 (src/stats_bayesian_glmm_chirps_status_v3.py).
-# Changes: input/output under $PAPER_OUT/data/processed (the old save path was hard-coded into the old repo); random_seed=SEED for the fit and np.random.seed(SEED) before the new-group predictions (both unseeded before). Model, priors and sampler settings unchanged.
+# Changes: input/output under $PAPER_OUT/data/processed (the old save path was hard-coded into the old repo); random_seed=SEED for the fit and for both model.predict calls (all unseeded before; an earlier np.random.seed did not reach bambi's sampler, so the new-group predictions of the figure changed with every run). Model, priors and sampler settings unchanged. Observations, trials and divergences go to write_stats ("status_model").
 """
 Test whether chirps differ between winner and loser (negative binomial GLMM).
 
@@ -20,6 +20,7 @@ import seaborn as sns
 import xarray as xr
 
 from stats_utils import parse_bambi_model_output
+from manuscript_stats import write_stats
 from paper_config import SEED, processed, processed_dir
 
 
@@ -281,7 +282,7 @@ multipliers = report_count_multipliers(
 # Posterior predictive checks
 # ---------------------------------------------------------------------------
 
-idata_ppc = model.predict(idata, data=df, inplace=False, kind="response")
+idata_ppc = model.predict(idata, data=df, inplace=False, kind="response", random_seed=SEED)
 fig, ax = plt.subplots()
 az.plot_ppc(idata_ppc, ax=ax)
 plt.show()
@@ -323,13 +324,13 @@ new_data = pd.DataFrame(
     }
 )
 
-np.random.seed(SEED)
 new_idata = model.predict(
     idata,
     data=new_data,
     inplace=False,
     kind="response",
     sample_new_groups=True,
+    random_seed=SEED,
 )
 
 new_data = (
@@ -388,3 +389,9 @@ with open(savepath / "summary.json", "w") as f:
 multipliers.to_csv(savepath / "count_multipliers.csv", index=False)
 
 idata.to_netcdf(savepath / "posterior.nc")
+
+write_stats("status_model", {
+    "n_obs": len(df),
+    "n_trials": df["trial_idx"].nunique(),
+    "divergences": int(idata.sample_stats["diverging"].sum()),
+})
