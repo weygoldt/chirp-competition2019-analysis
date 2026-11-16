@@ -161,6 +161,27 @@ At 0.8 (the manuscript's operating threshold, chosen 2026-11-16 from the
 real-data expert agreement of `labels/real_v1`): `…_gapfill_t080/`
 (120,808 -> 108,824), copied with `--suffix _gapfill_t080`.
 
+### Real-data labelling session real_v1 (`real_labels/`, 2026-11-14)
+
+A blind labelling session on real recordings: precision as a function of
+the detector score (calibration), recall independent of the detector (recall
+windows), emitter agreement and test-retest. Session README with the design,
+the semantics and the commands: `$CHIRP_DATA/labels/real_v1/README.md`.
+
+| script / config | output (`$CHIRP_DATA/...`) | role |
+|---|---|---|
+| `configs/detect/competition2019_v2_t001.toml`, `competition2022_v2_t001.toml` | `detections/competition20{19,22}_v2_t001/` | the production config with store threshold 0.01 (2019/2020: 50 recordings; 2022: 19, tracks from `interrim/`) |
+| `real_labels/common.py` | | paths, the benchmark's labeller view, pixel masks |
+| `real_labels/contrast_check.py measure/summarise/sheets` | `labels/real_v1/review/contrast/` | does the benchmark's colour rule keep faint real chirps visible (365 labelled chirps, 120 noise-only windows) |
+| `real_labels/make_gapfill_tracks.py` | `labels/real_v1/tracks_gapfill/` | wavetracker copies of the gap-filled trial tracks (labeller display) |
+| `real_labels/build_session.py` | `labels/candidates/real_v1.parquet`, `labels/real_v1/truth/` | the stratified sample, windows, repeats; truth kept apart |
+| `real_labels/contact_sheet.py` | `labels/real_v1/review/contact_sheet/` | 24 items (not in the queue) as the labeller shows them |
+| `real_labels/serve.sh` | `labels/real_v1_labels/` | start / resume the labeller (systemd user service) |
+| `real_labels/score_session.py` | `labels/real_v1/report/` | the scores, once labels exist |
+| `real_labels/fake_labels.py` | (a test directory) | machine-made labels for a smoke test of the scorer only |
+| `real_labels/compare_production.py` | `detections/competition2019_v2_t001/compare_production.csv` | the t001 rows >= 0.05 against the production run |
+| `real_labels/screenshot.py` | | headless-Firefox screenshot of the running labeller (checks that an item renders) |
+
 ### README figures (`readme_figures/`)
 
 The overview figures of the two package READMEs, each in a light and a

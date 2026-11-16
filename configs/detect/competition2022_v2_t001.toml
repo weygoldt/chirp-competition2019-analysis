@@ -1,0 +1,42 @@
+# Real-data labelling session (2026-11-14): the production config
+# (competition2019_v2.toml) applied to the 2022 tube competition recordings
+# (/mnt/data2/2022_tube_competition/raw, 19 recordings, 11 electrodes, ~4 h),
+# with store_threshold 0.01 and the 2022 tracks from interrim/<recording>/.
+# Everything else is identical to the production run.
+[run]
+name = "competition2022_v2_t001"
+out = "/mnt/data1/chirp_v2/detections"
+
+[models]
+# dual-head RT-DETRv2-r18: boxes + emitter EODf (weights 9fcdef3c)
+detector = "/mnt/data1/chirp_v2/runs/dualhead_r18_sim_v4_r1/final/bundle"
+# chirp-parameter decoder (retrained with box-midpoint matching, 2026-11-13), locked to that detector by hash (weights c0801c56)
+decoder = "/mnt/data1/chirp_v2/params/runs/v4-dualhead-sim-v4-r2/bundle"
+allow_detector_mismatch = false
+
+[detection]
+store_threshold = 0.01      # production: 0.05 (the only change)
+operating_threshold = 0.5   # column `operating`; legacy arrays and QC use it
+postprocess = true          # flags harmonic copies / duplicates (rows kept)
+
+[assignment]
+tracks = "/mnt/data2/2022_tube_competition/interrim/{recording}"  # 2022: tracks outside the recording dir
+tolerance_hz = 20.0
+max_gap_s = 10.0
+baseline_window_s = 1.0
+baseline_guard_s = 0.0
+
+[compute]
+device = "cuda"
+max_vram_fraction = 0.4
+chunk_tiles = 48            # 105.6 s per chunk
+click_workers = 2
+clean_processes = 4
+prefetch = 5
+
+[validation]
+qc = true
+windows = 10
+window_s = 10.0
+candidates_per_cell = 6
+seed = 0
