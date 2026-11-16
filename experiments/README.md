@@ -79,6 +79,25 @@ bundle`) is the second chirp screen of background library v2.
 detection counts differ from `eval_postprocess/`, which the detection
 results cite.
 
+### Front-end ablation (`ablation/`)
+
+Decision 6: do the two short windows (0.0512, 0.0128 s) in channels 1-2
+help? Arm A is the released dual-head (not retrained); arm B the same
+config and seed on sim_v4 with the 0.2048 s window in all three channels.
+One training run per arm. Report: `$CHIRP_DATA/runs/ablation_frontend/report.md`.
+
+| script | output (`$CHIRP_DATA/...` unless noted) | role |
+|---|---|---|
+| `build_longonly.py --out $CHIRP_FAST/datasets/sim_v4_longonly` | `$CHIRP_FAST/datasets/sim_v4_longonly` | arm B dataset (`extra_windows_s = ()`, `channel_fill = "reference"`) |
+| `check_identity.py A B --out ...` | `runs/ablation_frontend/identity_check.json` | all 81,000 tiles: channel 0 and boxes identical to sim_v4 |
+| `tile_comparison.py A B OUT` | `runs/ablation_frontend/tile_comparison.png` | one test tile in both front ends |
+| `train_longonly.sh` (`dualhead_r18_sim_v4_longonly.toml`) | `runs/dualhead_r18_sim_v4_longonly_r1` | arm B (best epoch 4 of 10) |
+| `run_eval.sh A\|B` | `runs/ablation_frontend/{A,B}/eval_postprocess` | unchanged `eval_postprocess.py` per arm |
+| `eval_real_labels_ablation.sh OUT A=DIR B=DIR` | `runs/ablation_frontend/real_labels_365` | the 365 real labels, as `eval_real_labels.sh` |
+| `run_benchmark.sh A B score` (`run_benchmark_models.py`) | `runs/ablation_frontend/benchmark` | both arms on the 1,010-item blind benchmark |
+| `compare.py ROOT --sim-a --sim-b`, `plot_curves.py` | `runs/ablation_frontend/compare/`, `val_curves.png` | A-vs-B tables, paired scene bootstrap, figures |
+| `run_remaining.sh` | logs in `runs/ablation_frontend/logs/` | the order the B evaluation, real labels, benchmark and compare were run in (boost off) |
+
 ### Decoder (`decoder/`)
 
 | file | run (`$CHIRP_DATA/params/runs/...`) | role |
