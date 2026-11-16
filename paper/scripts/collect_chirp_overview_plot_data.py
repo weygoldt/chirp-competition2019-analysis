@@ -1,11 +1,13 @@
 # Ported from chirp_competition d040123 (src/collect_chirp_overview_plot_data.py).
-# Changes: inputs read from $CHIRP_DATA/paper_rerun/inputs/new_chirpextractions (verbatim
+# Changes: inputs read from paper/inputs/new_chirpextractions (verbatim
 # copies of the old data/interrim arrays, see README.md there); output under PROCESSED.
+from pathlib import Path
+
 import numpy as np
 
-from paper_config import CHIRP_DATA, processed
+from paper_config import processed
 
-INPUTS = CHIRP_DATA / "paper_rerun" / "inputs" / "new_chirpextractions"
+INPUTS = Path(__file__).resolve().parents[1] / "inputs" / "new_chirpextractions"
 
 
 def save_data():

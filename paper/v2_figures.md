@@ -1,7 +1,7 @@
 # Pipeline-v2 figures (methods/supplement)
 
 Three figures replace the v1 pipeline figures of the manuscript. Outputs
-(PDF + 300-dpi PNG) in `/mnt/data1/chirp_v2/paper_rerun/rtdetr/figures/`;
+(PDF + 300-dpi PNG) in `paper/output/rtdetr/figures/`;
 all are 17.4 cm wide (the width of most manuscript figures; the template
 scales them to the 16-cm text width). Earlier versions for comparison:
 `figures/_draft1/` (first drafts, 2026-11-13) and `figures/_draft2/` (first
@@ -20,9 +20,9 @@ paper rerun:
 
 | `PAPER_DETECTIONS` | detections (per recording) | tracks | output root (`PAPER_OUT`) |
 |---|---|---|---|
-| `rtdetr_gapfill_t080` (the dataset the paper uses, 2026-11-16) | `detections/competition2019_v2_20261113_gapfill_t080/<rec>/chirps_rtdetr_gapfill_t080.parquet` (the gap-filled run's rows; `operating`/`chirp` recomputed at 0.8; `meta.json` `operating_threshold` 0.8) | as `rtdetr_gapfill` (the gap-filled run's `tracks_gapfill.npz`) | `/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill_t080` |
-| `rtdetr_gapfill` (operating threshold 0.5) | `detections/competition2019_v2_20261113_gapfill/<rec>/chirps_rtdetr_gapfill.parquet` | wavetracker tracks, with the two trial fish's tracks replaced by `<rec>/tracks_gapfill.npz` (interior gaps 10-300 s with an EOD$f$ jump <= 15 Hz filled by linear interpolation; `filled` marks the interpolated samples) | `/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill` |
-| `rtdetr` (production run, unpatched) | `detections/competition2019_v2_20261113/<rec>/chirps_rtdetr.parquet` | wavetracker tracks | `/mnt/data1/chirp_v2/paper_rerun/rtdetr` |
+| `rtdetr_gapfill_t080` (the dataset the paper uses, 2026-11-16) | `detections/competition2019_v2_20261113_gapfill_t080/<rec>/chirps_rtdetr_gapfill_t080.parquet` (the gap-filled run's rows; `operating`/`chirp` recomputed at 0.8; `meta.json` `operating_threshold` 0.8) | as `rtdetr_gapfill` (the gap-filled run's `tracks_gapfill.npz`) | `paper/output/rtdetr_gapfill_t080` |
+| `rtdetr_gapfill` (operating threshold 0.5) | `detections/competition2019_v2_20261113_gapfill/<rec>/chirps_rtdetr_gapfill.parquet` | wavetracker tracks, with the two trial fish's tracks replaced by `<rec>/tracks_gapfill.npz` (interior gaps 10-300 s with an EOD$f$ jump <= 15 Hz filled by linear interpolation; `filled` marks the interpolated samples) | `paper/output/rtdetr_gapfill` |
+| `rtdetr` (production run, unpatched) | `detections/competition2019_v2_20261113/<rec>/chirps_rtdetr.parquet` | wavetracker tracks | `paper/output/rtdetr` |
 
 `v2_fig_extract.py` caches the tracks of the selected run (field
 `track_filled` in each snippet; `meta.detections`/`meta.run`), and the plot
@@ -85,18 +85,18 @@ of Fig. 2F, G (score >= threshold), and the counts printed for the captions.
    ```
 
    Writes `$PAPER_OUT/data/processed/v2_figures/` (default
-   `/mnt/data1/chirp_v2/paper_rerun/rtdetr/data/processed/v2_figures/`).
+   `paper/output/rtdetr/data/processed/v2_figures/`).
    `raw` (new) caches 1.2 s of the raw voltage of one electrode for the
    "Recording" thumbnail of Fig. 1. The snippet `g_missed_1208` is no
    longer plotted.
    For the gap-filled dataset prefix both commands with
-   `PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill`
+   `PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=paper/output/rtdetr_gapfill`
    (`run_all.sh` exports both; its `v2figs` chain runs the same steps).
 2. Plot (paper env; ~20 s each on a cold LaTeX cache, ~3 s warm):
 
    ```sh
    cd paper && unset VIRTUAL_ENV
-   # export PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=/mnt/data1/chirp_v2/paper_rerun/rtdetr_gapfill
+   # export PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=paper/output/rtdetr_gapfill
    uv run python scripts/plot_v2_pipeline_explainer.py
    uv run python scripts/plot_v2_performance.py
    uv run python scripts/plot_v2_failure_modes.py
@@ -126,7 +126,7 @@ end's own levels.
 
 ## Figure style
 
-Written down from the paper's figures (`~/wrk/analyses/chirp_competition_paper/figures/`:
+Written down from the paper's figures (`manuscript/figures/`:
 `plot_competition_trial_overview`, `plot_what_is_a_chirp_and_why_use_spetrograms`,
 `plot_chirp_coupling`, `plot_event_time_rates_winner_loser_chirp`,
 `plot_obliterate_receiver_effect`, `plot_hurdle_decomposition`, and the v1

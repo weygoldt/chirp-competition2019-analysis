@@ -6,3 +6,7 @@
 	path = packages/chirpdetector
 	url = git@github.com:weygoldt/chirpdetector.git
 	branch = main
+[submodule "manuscript"]
+	path = manuscript
+	url = git@github.com:weygoldt/manuscript_chirpdetection.git
+	branch = main

@@ -5,7 +5,7 @@ values (default: ``rtdetr`` = v2 as produced, ``rtdetr_gapfill`` = v2 with
 the trial fish's track gaps filled, ``rtdetr_gapfill_t080`` = the same at
 the manuscript's operating threshold 0.8, ``rtdetr_gapfill_t090`` = at 0.9) plus the v1 detections for
 the chirp counts, and writes one markdown table set to
-``$CHIRP_DATA/paper_rerun/compare/comparison.md``:
+``paper/output/compare/comparison.md``:
 
 1. chirp counts in the 33 analysed trials (whole recording, first 3 h),
 2. every reported posterior (``reported_posteriors_median_hdi.csv``),
@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from paper_config import CHIRP_DATA, DATA_ROOT
+from paper_config import DATA_ROOT
 
 RUNS = [
     ("rtdetr", "v2, 0.5"),
@@ -35,7 +35,7 @@ RUNS = [
     ("rtdetr_gapfill_t090", "v2 gap-filled, 0.9"),
 ]
 BAD_RECORDINGS = ["2020-05-21-10_00", "2020-05-25-10_00", "2020-05-28-10_00", "2020-06-10-10_00"]
-ROOT = CHIRP_DATA / "paper_rerun"
+ROOT = Path(__file__).resolve().parents[1] / "output"
 
 
 def counts() -> str:

@@ -19,11 +19,13 @@ variables override the defaults (the machine the results were made on):
     Output root. Intermediates go to ``$PAPER_OUT/data/processed`` (the old
     scripts' relative ``data/processed``), model summaries to
     ``$PAPER_OUT/results``, figures to ``$PAPER_OUT/figures``. Default
-    ``$CHIRP_DATA/paper_rerun/<detections>`` with ``CHIRP_DATA`` defaulting to
-    ``/mnt/data1/chirp_v2``.
+    ``paper/output/<detections>`` inside the repository (git-ignored; all
+    derived data of the paper lives there, raw data and detections stay in
+    the dataset).
 ``PAPER_FIGURE_DIR``
     Figure directory (the old scripts' variable). Default
-    ``$PAPER_OUT/figures``. Never the manuscript's ``figures/``.
+    ``$PAPER_OUT/figures``. Never the manuscript's ``figures/``: only
+    ``paper/export_figures.sh`` copies the primary run's figures there.
 
 The scripts are run with the output root as working directory
 (``run_all.sh``), so any relative path the old code still uses lands there
@@ -57,7 +59,7 @@ PAPER = SCRIPTS.parent
 DATA_ROOT = _env("CHIRP_REC_2019", "/mnt/data2/2019_tube_competition")
 DETECTIONS = os.environ.get("PAPER_DETECTIONS", "rtdetr")
 CHIRP_DATA = _env("CHIRP_DATA", "/mnt/data1/chirp_v2")
-OUT = _env("PAPER_OUT", CHIRP_DATA / "paper_rerun" / DETECTIONS)
+OUT = _env("PAPER_OUT", PAPER / "output" / DETECTIONS)
 PROCESSED = OUT / "data" / "processed"
 RESULTS = OUT / "results"
 FIGURES = _env("PAPER_FIGURE_DIR", OUT / "figures")
@@ -65,14 +67,18 @@ FIGURES = _env("PAPER_FIGURE_DIR", OUT / "figures")
 # Seed for scripts that were unseeded in the old analysis (seeded ones keep theirs).
 SEED = 42
 
-# The manuscript's figure directory; nothing may be written there.
-_FORBIDDEN = Path("~/wrk/analyses/chirp_competition_paper/figures").expanduser().resolve()
-_OLD_REPO = Path("~/wrk/analyses/chirp_competition").expanduser().resolve()
+# The manuscript's figures (submodule; written only by export_figures.sh), the
+# former standalone manuscript checkout, and the old analysis repository.
+_FORBIDDEN = (
+    (PAPER.parent / "manuscript" / "figures").resolve(),
+    Path("~/wrk/analyses/chirp_competition_paper/figures").expanduser().resolve(),
+    Path("~/wrk/analyses/chirp_competition").expanduser().resolve(),
+)
 
 
 def _check(path: Path) -> Path:
     resolved = path.resolve()
-    for bad in (_FORBIDDEN, _OLD_REPO):
+    for bad in _FORBIDDEN:
         if resolved == bad or bad in resolved.parents:
             raise RuntimeError(f"refusing to write into {bad} ({path})")
     return path

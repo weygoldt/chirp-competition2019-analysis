@@ -12,7 +12,8 @@ PAPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 script="$1"; shift
 : "${CHIRP_DATA:=/mnt/data1/chirp_v2}"
 : "${PAPER_DETECTIONS:=rtdetr}"
-: "${PAPER_OUT:=$CHIRP_DATA/paper_rerun/$PAPER_DETECTIONS}"
+mkdir -p "$PAPER/output"   # derived data stays inside the repository (git-ignored)
+: "${PAPER_OUT:=$PAPER/output/$PAPER_DETECTIONS}"
 export CHIRP_DATA PAPER_DETECTIONS PAPER_OUT
 export MPLBACKEND=Agg PYTHONUNBUFFERED=1
 mkdir -p "$PAPER_OUT/logs"

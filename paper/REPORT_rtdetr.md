@@ -1,7 +1,7 @@
 # Manuscript rerun on the v2 detections: old vs new
 
 2026-11-13. Branch `paper-rerun` of `chirp_competition_upgrade`, folder `paper/`.
-Outputs: `/mnt/data1/chirp_v2/paper_rerun/rtdetr/` (`figures/`, `data/processed/`,
+Outputs: `paper/output/rtdetr/` (`figures/`, `data/processed/`,
 `logs/`, `report/`). "Old" = the published analysis on the v1 detections
 (`chirp_times_rcnn.npy`), read from the old repository's `data/processed/` and
 the manuscript; "new" = the same code on the v2 detections (`chirp_times_rtdetr.npy`,

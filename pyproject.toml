@@ -53,7 +53,7 @@ target-version = "py314"
 # made portable); they are provenance, not maintained code. paper/ holds the
 # manuscript analysis ported like-for-like from the old analysis repo, with
 # its own environment (paper/pyproject.toml) and tests (make paper-test).
-extend-exclude = ["experiments", "paper"]
+extend-exclude = ["experiments", "paper", "manuscript"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF", "PT"]

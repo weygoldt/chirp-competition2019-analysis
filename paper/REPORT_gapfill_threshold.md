@@ -1,11 +1,11 @@
 # Gap-filled tracks and the 0.9 threshold: what changes in the manuscript's numbers
 
-2026-11-14. Full tables: `$CHIRP_DATA/paper_rerun/compare/comparison.md`
+2026-11-14. Full tables: `paper/output/compare/comparison.md`
 (`paper/scripts/compare_runs.py`). Runs (all on branch `paper-rerun`):
 
 | run | detections | output root |
 |---|---|---|
-| v2, 0.5 | `rtdetr` (production run) | `$CHIRP_DATA/paper_rerun/rtdetr/` |
+| v2, 0.5 | `rtdetr` (production run) | `paper/output/rtdetr/` |
 | v2 gap-filled, 0.5 (**primary**) | `rtdetr_gapfill` (trial fish's track gaps filled, assignment rerun) | `…/rtdetr_gapfill/` |
 | v2 gap-filled, 0.9 (robustness) | `rtdetr_gapfill_t090` (same, operating threshold 0.9) | `…/rtdetr_gapfill_t090/` |
 

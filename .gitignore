@@ -19,3 +19,8 @@ runs/
 
 # Agent and feature worktrees of the submodules
 .worktrees/
+
+# Paper analysis: derived data (outputs) and large inputs stay local, not in git
+paper/output
+paper/inputs/*
+!paper/inputs/README.md

@@ -2,7 +2,7 @@
 
 The analyses and figures of the manuscript on chirping in staged shelter
 competitions of *Apteronotus leptorhynchus*
-(`~/wrk/analyses/chirp_competition_paper/manuscript.typ`), ported from the
+(`manuscript/manuscript.typ`, the manuscript repository as a submodule), ported from the
 old analysis repository (`~/wrk/analyses/chirp_competition`, commit
 `d040123`) so that they run front to back on the chirp detections of
 pipeline v2.
@@ -38,7 +38,7 @@ make paper-test                      # loader tests (from the repository root)
 |---|---|---|
 | `CHIRP_REC_2019` | `/mnt/data2/2019_tube_competition` | recordings, tracks, BORIS, LED files, `trial_summary.csv`, detections |
 | `PAPER_DETECTIONS` | `rtdetr` | which `chirp_{times,ids}_<x>.npy` the analysis reads (`rtdetr` = v2, `rcnn` = v1) |
-| `PAPER_OUT` | `$CHIRP_DATA/paper_rerun/$PAPER_DETECTIONS` | intermediates (`data/processed/`), figures (`figures/`), logs (`logs/`), `report/` |
+| `PAPER_OUT` | `paper/output/$PAPER_DETECTIONS` | intermediates (`data/processed/`), figures (`figures/`), logs (`logs/`), `report/` |
 | `CHIRP_ROOT_PY` | `<repo>/.venv/bin/python` | root environment (chirpdetector, gridtools) for `v2_fig_extract.py` |
 
 `run.sh` runs a step in the paper environment with the output root as
@@ -46,7 +46,7 @@ working directory and `MPLBACKEND=Agg` (the old scripts' `plt.show()` calls
 return at once), and logs to `$PAPER_OUT/logs/`. Fits and long resampling
 steps run through `scripts/guarded` (RAM cap). Inputs that cannot be
 regenerated (the chirp templates of the first figure, from the MSc thesis
-extraction) are copied to `$CHIRP_DATA/paper_rerun/inputs/` with their
+extraction) are copied to `paper/inputs/` with their
 sha256.
 
 ## Figure → scripts → intermediates
@@ -76,3 +76,15 @@ The sources and every plotted number of the three new v2 figures, with
 caption drafts, are in `v2_figures.md`. `compare_detection_counts.py`
 writes the chirp counts per trial and status, v1 against v2, to
 `$PAPER_OUT/report/`.
+
+## Figures into the manuscript
+
+`paper/export_figures.sh [--dry-run]` copies the figure PDFs of the primary
+run (`PAPER_PRIMARY`, default `rtdetr_gapfill_t080`: gap-filled detections at
+the operating threshold 0.8) into `manuscript/figures/`. It is the only way
+figures enter the manuscript: the analysis scripts cannot write there
+(`paper_config.py` refuses), and the sensitivity runs (`rtdetr_gapfill` at
+0.5, `rtdetr_gapfill_t090`) never do. Identical files are skipped; files in
+`manuscript/figures/` that are not in its list are left alone. Commit the
+result in the manuscript submodule, then the submodule pointer here.
+
