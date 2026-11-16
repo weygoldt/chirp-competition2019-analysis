@@ -75,8 +75,10 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 
 The sources and every plotted number of the three new v2 figures, with
 caption drafts, are in `v2_figures.md`. `compare_detection_counts.py`
-writes the chirp counts per trial and status, v1 against v2, to
-`$PAPER_OUT/report/`.
+writes the chirp counts per trial and status, v1 against v2 (the run's
+`PAPER_DETECTIONS`), to `$PAPER_OUT/report/`. `summarize_dataset.py` (chain
+`counts`) describes the dataset: trials per year and sex combination, the
+recordings' durations, the annotated trials and their chases and contacts.
 
 Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun).
 
@@ -90,4 +92,47 @@ figures enter the manuscript: the analysis scripts cannot write there
 0.5, `rtdetr_gapfill_t090`) never do. Identical files are skipped; files in
 `manuscript/figures/` that are not in its list are left alone. Commit the
 result in the manuscript submodule, then the submodule pointer here.
+
+## Numbers into the manuscript
+
+The text never copies a number. Every script that computes a number the
+manuscript cites writes it with `manuscript_stats.write_stats(namespace,
+values)` to `$PAPER_OUT/stats/<namespace>.json` (nested numbers; the file also
+names the script, the detections and the commit of `paper/scripts`). One
+script owns each namespace:
+
+| namespace | script | contents |
+|---|---|---|
+| `dataset` | `summarize_dataset` | trials, draws, exclusions, years, sexes, recording hours, annotated trials, chases and contacts |
+| `counts` | `compare_detection_counts` | chirps per status, v1 and the run, whole recording and first 3 h |
+| `agonistic_windows`, `…_maxshift_600s` | `print_chirps_in_agonistic_windows` | coverage, shares of chirps in windows, circular-shift tests |
+| `progression`, `progression_annotated_subset` | `analyze_event_trial_progression_trial` | trials with events, trials with fewer than two events |
+| `allocation`, `allocation_15_fish` | `plot_event_trial_progression_correlations_{all,15}_fish` | rates, first/last-hour rates, durations and intervals |
+| `status_model`, `status_figure` | `stats_bayesian_glmm_chirps_status_v3`, `plot_chirp_winner_loser_trial_summary` | model size; per-trial medians |
+| `chirp_distributions` | `plot_chirp_distributions_manuscript` | the plotted box widths, heights, troughs |
+| `event_rates` | `plot_event_time_rates_winner_loser_chirp_src_paper` | peaks and troughs of the event-triggered rates |
+| `echo` | `stats_bayesian_logreg_echo_responses_new` | observed, chance and model echo fractions, diagnostics |
+| `chase_windows` | `summarize_chirp_event_correlation_around_chasing` | chases, merged chases, overlap of the -3..13 s windows |
+| `offset_logreg`, `before_offset_logreg` | the two offset logistic regressions | events, observed fractions, model estimates |
+| `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers |
+| `coupling` | `stats_chirp_coupling` | data anchors, overdispersion, LOO, Pareto k |
+| `receiver_effect_fits`, `receiver_effect_figure` | `stats_chirp_affects_chasing`, `plot_obliterate_receiver_effect` | n and divergences per fit; window disagreement |
+| `re_analysis` | `plot_re_analysis` | replication, grouping levels, HDI overlap |
+| `posteriors` | `summarize_reported_posteriors` | median and 95 % HDI of every reported posterior |
+| `v2_performance`, `v2_failure_modes`, `v2_pipeline_explainer` | the three v2 figures | the numbers of their panels and captions |
+
+```sh
+paper/run_all.sh                                          # writes $PAPER_OUT/stats/
+python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t080   # -> manuscript/stats.json
+python3 paper/scripts/manuscript_stats.py check                         # what changed since
+```
+
+`collect` refuses stats written by uncommitted code in `paper/scripts`;
+`stats.json` records per input file its sha256, script and commit. The
+manuscript reads it with `#stat("namespace.key…", digits: …)` (`stats.typ`),
+and its `make` runs `check` first and stops on any difference, so the text
+cannot build on numbers that no longer match the outputs. Commit
+`manuscript/stats.json` in the manuscript submodule, then the submodule
+pointer here. `compare_runs.py` tabulates the same stats files across the
+runs (0.5, 0.8, 0.9) in `paper/output/compare/comparison.md`.
 
