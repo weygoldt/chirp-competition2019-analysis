@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/stats_bayesian_logreg_echo_responses_new.py).
 # Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
-# start method for pymc on Python 3.14). Model, priors, sampler settings and seed unchanged.
+# start method for pymc on Python 3.14). Model, priors, sampler settings and seed unchanged. The printed
+# numbers (plus trials per direction and the observed/chance ratios) also go to write_stats ("echo").
 """Estimate P(chirp-after | other chirped) in two directions using
 intercept-only Bayesian GLMMs, and compare against a permutation-based
 chance level.
@@ -22,6 +23,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
 from stats_utils import log_odds_to_prob, parse_bambi_model_output, save_json
 
@@ -105,6 +107,14 @@ def _summarize(draws, hdi_prob=0.95):
     return mean_p, float(lo), float(hi)
 
 
+def sampler_diagnostics(idata) -> dict:
+    """Divergences, largest R-hat and smallest bulk ESS over all parameters."""
+    summ = az.summary(idata, kind="diagnostics")
+    return {"divergences": int(idata.sample_stats["diverging"].sum()),
+            "max_rhat": float(summ["r_hat"].max()),
+            "min_ess_bulk": float(summ["ess_bulk"].min())}
+
+
 def _build_null_distribution(
     perm_paths: list[Path],
     raw_count_col: str,
@@ -124,6 +134,7 @@ def _build_null_distribution(
 def main():
     savepath = PROCESSED
     results = []
+    stats = {}
 
     for cfg in CONFIGS:
         tag = cfg["tag"]
@@ -175,6 +186,17 @@ def main():
             savepath / f"{stem}_obs_summary.json",
         )
 
+        stats[tag] = {
+            "n_events": len(df_obs),
+            "n_trials": df_obs["recording"].nunique(),
+            "observed": obs_frac,
+            "observed_over_chance": obs_frac / chance_median,
+            "chance": {"median": chance_median, "ci_95": [chance_lo, chance_hi]},
+            "n_permutations": n_perm,
+            "p_perm": perm_p,
+            "model": {"median": obs_mean, "hdi": [obs_lo, obs_hi]},
+            "diagnostics": sampler_diagnostics(idata_obs),
+        }
         results.append(
             {
                 "pretty": cfg["pretty"],
@@ -209,6 +231,13 @@ def main():
         )
     print(r"\end{itemize}")
     print("=" * 72)
+
+    # The events of each direction are the other fish's chirps: winner chirps
+    # (loser after winner) and loser chirps (winner after loser).
+    stats["loser_to_winner_chirps"] = (
+        stats["winner_after_loser"]["n_events"] / stats["loser_after_winner"]["n_events"]
+    )
+    write_stats("echo", stats)
 
 
 if __name__ == "__main__":

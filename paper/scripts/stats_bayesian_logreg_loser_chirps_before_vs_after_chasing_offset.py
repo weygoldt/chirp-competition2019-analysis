@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset.py).
 # Changes: input/output under $PAPER_OUT/data/processed; the input is written by the
 # reconstructed make_chirps_around_chasing_obs.py (its old writer was never committed, audit O5).
+# Events, observed fraction and posterior median/HDI also go to write_stats ("before_offset_logreg").
 """
 Estimate P(loser chirp in the 10 s BEFORE chasing offset | at least one loser
 chirp in the 20 s window around chasing offset) using an intercept-only
@@ -16,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from stats_utils import parse_bambi_model_output, save_json, log_odds_to_prob
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
 
 
@@ -130,6 +132,13 @@ def main():
         {"model_info": model_summary, "posterior_summary": summary},
         savepath / f"{filename}_summary.json",
     )
+    write_stats("before_offset_logreg", {
+        "n_events": summary["n_events"], "n_discarded": n_discarded,
+        "observed_fraction": summary["observed_fraction"],
+        "model": {"median": summary["posterior_median"],
+                  "hdi": [summary["hdi_lower"], summary["hdi_upper"]],
+                  "p_gt_0_5": summary["prob_gt_0.5"]},
+    })
 
 
 if __name__ == "__main__":

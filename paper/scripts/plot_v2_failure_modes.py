@@ -29,7 +29,9 @@ C   Two assignments between fish < 7 Hz apart: (left) one chirp between two
 
 Also prints how often the failure-prone situations occur among the chirps
 of the 33 analysed trials (unassigned chirps; chirps between fish < 10 Hz
-apart; low assignment confidence).
+apart; low assignment confidence) and how many track gaps the patch of the
+gap-filled run filled in them. The numbers the caption cites go to
+write_stats ("v2_failure_modes"); the printed report has the details.
 
 Inputs: snippet cache of ``v2_fig_extract.py``, the run's parquet tables and
 track-gap table, the hand labels in ``eval/real_labels_365/labels``.
@@ -50,6 +52,7 @@ import numpy as np
 import pandas as pd
 
 import v2_fig_common as C
+from manuscript_stats import write_stats
 from style import set_light_style
 
 NAME = "plot_v2_failure_modes"
@@ -93,7 +96,7 @@ def fish_labels(ax, snip, colors, order, t0, t1, x, dy):
 # ---------------------------------------------------------------------------
 # A: hand-labelled region and the missed chirp
 # ---------------------------------------------------------------------------
-def panel_labelled(ax, ax_zoom, fig, report):
+def panel_labelled(ax, ax_zoom, fig, report, stats):
     snip = C.load_snippet("f3_labelled")
     m = snip["meta"]
     t0, t1 = m["t_start_s"], m["t_end_s"]
@@ -160,12 +163,16 @@ def panel_labelled(ax, ax_zoom, fig, report):
                    "t_center_s": float(miss.t_center_s)},
         "tracks_hz": {int(t): round(C.track_median(snip, t, t0, t1), 1) for t in order},
     }
+    hz = [C.track_median(snip, t, t0, t1) for t in order]
+    stats["labelled"] = {"n_hand_labels": n_lab, "n_found": n_found,
+                         "n_detections_kept": len(kept), "missed_score": miss.score,
+                         "fish_hz": hz, "fish_df_hz": hz[0] - hz[1]}
 
 
 # ---------------------------------------------------------------------------
 # B: track gap (self-contained; content follows the gap-filled run)
 # ---------------------------------------------------------------------------
-def panel_trackgap(ax, report):
+def panel_trackgap(ax, report, stats):
     """The 140-s gap in the track of the lower fish (2019-12-04).
 
     Source run (PAPER_DETECTIONS=rtdetr): the track ends, the chirps in the
@@ -235,13 +242,20 @@ def panel_trackgap(ax, report):
             (rec_rows.chirp & (rec_rows.assign_status == "beyond_tolerance")).sum()),
         "recording_chirps": int(rec_rows.chirp.sum()),
     }
+    stats["track_gap"] = {
+        "gap_s": report["B"]["gap_s"],
+        "n_assigned_in_window": report["B"]["n_assigned_in_window"],
+        "n_unassigned_in_window": report["B"]["n_unassigned_in_window"],
+        "recording_chirps": report["B"]["recording_chirps"],
+        "recording_chirps_beyond_tolerance": report["B"]["recording_chirps_beyond_tolerance"],
+    }
     return report["B"]
 
 
 # ---------------------------------------------------------------------------
 # C: assignments between close fish
 # ---------------------------------------------------------------------------
-def panel_close(ax, name, ids, half, channel, report, key, *, word: bool):
+def panel_close(ax, name, ids, half, channel, report, stats, key, *, word: bool):
     snip = C.load_snippet(name)
     rec = snip["meta"]["recording"]
     rows = C.window(snip, snip["meta"]["t_start_s"] - 1, snip["meta"]["t_end_s"] + 1)
@@ -300,10 +314,32 @@ def panel_close(ax, name, ids, half, channel, report, key, *, word: bool):
             "chirp_id", "t_center_s", "score", "operating", "track_id",
             "assign_confidence"]].round(3).to_dict(orient="records"),
     }
+    stats[key] = {"df_hz": df_onset, "confidence": sel.assign_confidence.tolist(),
+                  "chirp_gap_ms": report[key]["chirp_gap_ms"]}
     return report[key]
 
 
-def prevalence(report):
+def track_gaps(stats):
+    """The interior track gaps of the trial fish in the 33 analysed trials, as
+    the gap-filled run's patch handled them (its tracks_gapfill.npz tables)."""
+    if not C.GAPFILL:
+        return
+    actions, fish, duration = [], set(), []
+    for rec in sorted(C.analysed_recordings()):
+        z = np.load(C.TRACKS_RUN / rec / "tracks_gapfill.npz")
+        actions += [str(a) for a in z["gap_action"]]
+        fish |= {(rec, int(f)) for f in z["gap_fish_id"]}
+        duration += list(z["gap_end_s"] - z["gap_start_s"])
+    actions = pd.Series(actions)
+    stats["track_gaps_33_trials"] = {
+        "n_gaps": len(actions), "n_fish_with_gaps": len(fish),
+        "n_fish": 2 * len(C.analysed_recordings()),
+        "actions": actions.value_counts().to_dict(),
+        "duration_s": {"median": np.median(duration), "range": [min(duration), max(duration)]},
+    }
+
+
+def prevalence(report, stats):
     """How often the failure-prone situations occur in the 33 analysed trials."""
     recs = sorted(C.analysed_recordings())
     d = pd.concat([C.detections(r) for r in recs], ignore_index=True)
@@ -321,12 +357,24 @@ def prevalence(report):
             (assigned.assign_confidence < 0.9).mean()),
         "n_assigned": int(len(assigned)),
     }
+    unassigned = ch.assign_status.isin(["beyond_tolerance", "no_live_track"])
+    stats["prevalence_33_trials"] = {
+        "chirps": len(ch),
+        "assign_status": ch.assign_status.value_counts().to_dict(),
+        "unassigned": {"n": unassigned.sum(), "fraction": unassigned.mean()},
+        "assigned": len(assigned),
+        "assigned_df_lt_10_hz": {"n": (assigned.track_df_other_hz < 10).sum(),
+                                 "fraction": (assigned.track_df_other_hz < 10).mean()},
+        "assigned_confidence_lt_0_9": {"n": (assigned.assign_confidence < 0.9).sum(),
+                                       "fraction": (assigned.assign_confidence < 0.9).mean()},
+    }
 
 
 def main() -> None:
     set_light_style()
     C.rc_tweaks()
     report: dict = {}
+    stats: dict = {"operating_threshold": C.OPERATING}
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
 
     ax_a = C.axes_cm(fig, 1.45, 7.9, 11.55, 3.25)
@@ -335,10 +383,10 @@ def main() -> None:
     ax_c1 = C.axes_cm(fig, 1.45, 0.25, 7.6, 3.45)
     ax_c2 = C.axes_cm(fig, 9.6, 0.25, 7.6, 3.45)
 
-    panel_labelled(ax_a, ax_az, fig, report)
-    panel_trackgap(ax_b, report)
-    panel_close(ax_c1, "g_close_15388", [CLOSE_1], 0.45, 0, report, "C1", word=True)
-    panel_close(ax_c2, "g_close_9394", CLOSE_2, 0.45, 1, report, "C2", word=False)
+    panel_labelled(ax_a, ax_az, fig, report, stats)
+    panel_trackgap(ax_b, report, stats)
+    panel_close(ax_c1, "g_close_15388", [CLOSE_1], 0.45, 0, report, stats, "C1", word=True)
+    panel_close(ax_c2, "g_close_9394", CLOSE_2, 0.45, 1, report, stats, "C2", word=False)
     C.spec_yaxis(ax_c1, ticks=[700, 800])
     C.no_yaxis(ax_c2)  # same frequency range as C left
 
@@ -357,12 +405,14 @@ def main() -> None:
     C.key_strip(fig, (W - width) / 2, H - 0.3, items)
     report["key"] = [it[2] for it in items]
 
-    prevalence(report)
+    prevalence(report, stats)
+    track_gaps(stats)
     C.letters_cm(fig, [(ax_a, "A", 1.2, 0.3), (ax_b, "B", 1.2, 0.3),
                        (ax_c1, "C", 1.2, 0.3)])
     paths = C.save(fig, NAME)
     print(json.dumps(report, indent=1, default=float))
     print("\n".join(map(str, paths)))
+    write_stats("v2_failure_modes", stats)
 
 
 if __name__ == "__main__":

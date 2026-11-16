@@ -1,5 +1,6 @@
 # Ported from chirp_competition d040123 (src_paper/plot_re_analysis.py).
-# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure().
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); the design summary,
+# HDI overlaps and grouping levels of the readout also go to write_stats ("re_analysis").
 """
 Random-effects justification — figure + terminal readout.
 
@@ -40,6 +41,7 @@ import seaborn as sns
 from matplotlib.transforms import blended_transform_factory
 from scipy.stats import gaussian_kde
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
@@ -358,12 +360,13 @@ def _format_profile(profile: dict[int, int]) -> str:
     return ", ".join(f"{count}x{n}" for n, count in profile.items())
 
 
-def print_design_summary(events: pd.DataFrame | None) -> None:
+def print_design_summary(events: pd.DataFrame | None) -> dict:
+    """Print the design summary; return its numbers (empty without the events table)."""
     _section(1, "Design summary")
     if events is None:
         print(f"  Events file not found at {EVENTS_DATA}.")
         print("  Skipping design summary; downstream sections still run.")
-        return
+        return {}
 
     # Restrict to the subset used by the model so the counts here match
     # n_fit reported elsewhere. The events CSV may carry rows that the
@@ -375,7 +378,7 @@ def print_design_summary(events: pd.DataFrame | None) -> None:
             f"  Events table missing one of {needed}; got "
             f"{sorted(events.columns)[:8]} ... -- skipping."
         )
-        return
+        return {}
 
     n_rec = events["recording"].nunique()
     n_losers = events["loser_id"].nunique()
@@ -409,6 +412,13 @@ def print_design_summary(events: pd.DataFrame | None) -> None:
         f"subjects across both roles, individual-level variance components "
         f"are estimated from a small replication base."
     )
+    return {
+        "n_recordings": n_rec,
+        "losers": {"n": n_losers, "n_replicated": n_losers_replicated,
+                   "max_recordings": max(loser_profile)},
+        "winners": {"n": n_winners, "n_replicated": n_winners_replicated,
+                    "max_recordings": max(winner_profile)},
+    }
 
 
 # --- 2. cell audit ---------------------------------------------------------
@@ -453,7 +463,8 @@ def print_fixed_effect_table(slope_df: pd.DataFrame) -> None:
 
 
 # --- 4. fixed-effect robustness --------------------------------------------
-def print_fixed_effect_robustness(slope_df: pd.DataFrame) -> None:
+def print_fixed_effect_robustness(slope_df: pd.DataFrame) -> dict:
+    """Print the robustness readout; return the pairwise HDI overlaps (fractions)."""
     _section(4, "Fixed-effect robustness across RE structures")
     rrs = []
     for spec in RE_SPECS:
@@ -470,8 +481,9 @@ def print_fixed_effect_robustness(slope_df: pd.DataFrame) -> None:
         )
     if len(rrs) < 2:
         print("  Not enough fits to compare.")
-        return
+        return {}
 
+    overlaps = {}
     medians = [r[1] for r in rrs]
     rr_min, rr_max = min(medians), max(medians)
     print(
@@ -488,11 +500,15 @@ def print_fixed_effect_robustness(slope_df: pd.DataFrame) -> None:
             shorter = min(hi_i - lo_i, hi_j - lo_j)
             frac = ov / shorter if shorter > 0 else float("nan")
             print(f"    {re_i:<44} vs  {re_j:<44}  {frac:>5.0%}")
+            overlaps[f"{re_i}__vs__{re_j}"] = frac
+    return {"hdi_overlap": overlaps}
 
 
 # --- 5. variance components ------------------------------------------------
-def print_variance_summary(var_df: pd.DataFrame) -> None:
+def print_variance_summary(var_df: pd.DataFrame) -> dict:
+    """Print the variance components; return the levels of each grouping term."""
     _section(5, "Variance components (sigma on linear-predictor scale)")
+    levels: dict = {}
     print(
         f"  {'RE structure':<44}  {'term':<10}  {'lvls':>4}  "
         f"{'sigma':>5}  {'sigma HDI95':>14}  {'HDI low':>7}"
@@ -508,6 +524,7 @@ def print_variance_summary(var_df: pd.DataFrame) -> None:
             if last_re is not None and spec.re != last_re:
                 print("  " + "-" * (WIDTH - 2))
             last_re = spec.re
+            levels.setdefault(spec.re, {})[r["re_term"]] = int(r["n_levels"])
             lo_marker = " <-- weak" if r["sigma_hdi95_low"] <= HDI_LOW_FLAG else ""
             print(
                 f"  {spec.re:<44}  {r['re_term']:<10}  "
@@ -517,6 +534,7 @@ def print_variance_summary(var_df: pd.DataFrame) -> None:
                 f"{r['sigma_hdi95_low']:>7.2f}"
                 f"{lo_marker}"
             )
+    return {"n_levels": levels}
 
 
 # --- 6. identification diagnostics -----------------------------------------
@@ -680,16 +698,18 @@ def print_full_readout(
     slope_df: pd.DataFrame,
     var_df: pd.DataFrame,
     events: pd.DataFrame | None,
-) -> None:
-    print_design_summary(events)
+) -> dict:
+    """Print the readout; return the numbers of sections 1, 4 and 5 (for write_stats)."""
+    stats = {"design": print_design_summary(events)}
     print_cell_audit(slope_df, var_df)
     print_fixed_effect_table(slope_df)
-    print_fixed_effect_robustness(slope_df)
-    print_variance_summary(var_df)
+    stats.update(print_fixed_effect_robustness(slope_df))
+    stats.update(print_variance_summary(var_df))
     print_identification_summary(var_df)
     print_sampling_diagnostics(slope_df)
     print_key_numbers(slope_df, var_df)
     print()
+    return stats
 
 
 # ===========================================================================
@@ -1138,7 +1158,7 @@ def main() -> None:
     var_df = load_variance_summary()
     events = load_events()
 
-    print_full_readout(slope_df, var_df, events)
+    write_stats("re_analysis", print_full_readout(slope_df, var_df, events))
 
     _section(9, "Figure")
     if not all_cells_present(slope_df, var_df):

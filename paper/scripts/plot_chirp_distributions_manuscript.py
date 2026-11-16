@@ -4,6 +4,8 @@
 # trough = -(track_hz - f_low_hz) (track_hz replaces v1 emitter_eodf); recordings visited in sorted
 # order; data root DATA_ROOT; figure via paper_config.figure(). Limits extended for v2 data that the
 # old ones clipped: xlims 600 -> 900 ms, ylims/yticks 700 -> 900 Hz, hexbin LogNorm vmax 3000 -> 7000.
+# Recordings are found by the parquet of PAPER_DETECTIONS; the plotted distributions (median, central
+# 90 %, range) and counts go to write_stats ("chirp_distributions").
 import os
 from pathlib import Path
 
@@ -15,7 +17,8 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm
 
 from chirps import load_chirp_table
-from paper_config import DATA_ROOT, figure
+from manuscript_stats import write_stats
+from paper_config import DATA_ROOT, DETECTIONS, figure
 from style import circle_annotate, set_light_style, letter_subplots
 
 scriptname = Path(__file__).stem
@@ -105,7 +108,7 @@ def get_data():
         for dir in dirs:
             if dir.is_file():
                 continue
-            if not (dir / "chirps_rtdetr.parquet").exists():
+            if not (dir / f"chirps_{DETECTIONS}.parquet").exists():
                 print(f"WARNING: No data found in {dir}")
                 continue
             # v2 detections; `keep` = the chirps of the legacy arrays
@@ -179,8 +182,15 @@ def get_data():
     # print(f"Removed {len(picker)-np.sum(picker)} bboxes where trough is below thresh")
 
     print(f"Finished retrieving data, got {len(widths)} datapoints")
+    print(f"n_competitions = {summary['recording'].nunique()}")
 
     return widths, heights, troughs, recordings
+
+
+def distribution(values: np.ndarray) -> dict:
+    """Median, central 90 % and range of a plotted quantity."""
+    return {"median": np.median(values), "p5_p95": np.percentile(values, [5, 95]),
+            "range": [values.min(), values.max()]}
 
 
 # ---------------------------------------------------------------------------
@@ -291,8 +301,13 @@ def plot_hexbin(axes, widths, heights):
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    widths, heights, troughs, _ = get_data()
+    widths, heights, troughs, recordings = get_data()
     widths *= 1000
+    write_stats("chirp_distributions", {
+        "n_competitions": len(set(recordings)), "n_chirps": len(widths),
+        "box_width_ms": distribution(widths), "box_height_hz": distribution(heights),
+        "box_trough_hz": distribution(troughs),
+    })
 
     fig, scatter_axes, hex_axes = setup_plot()
 

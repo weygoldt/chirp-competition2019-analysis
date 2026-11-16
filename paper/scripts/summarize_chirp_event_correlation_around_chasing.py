@@ -1,6 +1,9 @@
 # Ported from chirp_competition d040123 (src_paper/summarize_chirp_event_correlation_around_chasing.py).
 # Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data root defaults to paper_config.DATA_ROOT;
-# output under $PAPER_OUT (it still clears its own output directory first). Seeds unchanged.
+# output under $PAPER_OUT (it still clears its own output directory first). Seeds unchanged. The loading
+# of a trial's chases and chirps is factored out (trial_events; same order of random draws), so that
+# window_overlap can count how far the windows overlap; that and the chase counts go to write_stats
+# ("chase_windows").
 """
 Build per-chase rows of chirp counts in the fixed [-3, +13] s window
 around each chase offset, for both winner and loser chirps. Used
@@ -43,6 +46,7 @@ from rich.progress import track
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
 from chirps import load_chirps
+from manuscript_stats import write_stats
 from paper_config import DATA_ROOT, PROCESSED
 from summarize_submissive_chirp_effect_on_dominant import (
     BAD_RECORDINGS,  # noqa: F401  -- re-exported for visibility
@@ -71,14 +75,13 @@ M3P13_LABEL = "fixed_m3p13"
 # ---------------------------------------------------------------------------
 # Per-trial extraction
 # ---------------------------------------------------------------------------
-def extract_data_for_trial(
+def trial_events(
     trial_row: pd.Series,
     data_path: Path,
-    randomize: bool,
-    rng: np.random.Generator,
     t_max_cap: float = DEFAULT_T_MAX_CAP,
-) -> list[dict]:
-    """Return one dict per chase event in the trial."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Chase onsets and offsets (before merging) and loser and winner chirp
+    times of one trial, all within the active phase."""
     trial_folder = data_path / trial_row["recording"]
 
     _, chasing_on_off_times, _, _ = load_and_convert_boris_events(
@@ -98,17 +101,30 @@ def extract_data_for_trial(
     loser_chirp_times = loser_chirp_times[loser_chirp_times < t_max_cap]
     winner_chirp_times = winner_chirp_times[winner_chirp_times < t_max_cap]
 
-    if randomize:
-        loser_chirp_times = randomize_chirp_times(loser_chirp_times, t_max_cap, rng)
-        winner_chirp_times = randomize_chirp_times(winner_chirp_times, t_max_cap, rng)
-
     chasing_onsets = chasing_on_off_times[:, 0]
     chasing_offsets = chasing_on_off_times[:, 1]
 
     # Drop chasing events past the active-phase cap.
     in_window = (chasing_onsets < t_max_cap) & (chasing_offsets < t_max_cap)
-    chasing_onsets = chasing_onsets[in_window]
-    chasing_offsets = chasing_offsets[in_window]
+    return (chasing_onsets[in_window], chasing_offsets[in_window],
+            loser_chirp_times, winner_chirp_times)
+
+
+def extract_data_for_trial(
+    trial_row: pd.Series,
+    data_path: Path,
+    randomize: bool,
+    rng: np.random.Generator,
+    t_max_cap: float = DEFAULT_T_MAX_CAP,
+) -> list[dict]:
+    """Return one dict per chase event in the trial."""
+    chasing_onsets, chasing_offsets, loser_chirp_times, winner_chirp_times = trial_events(
+        trial_row, data_path, t_max_cap
+    )
+
+    if randomize:
+        loser_chirp_times = randomize_chirp_times(loser_chirp_times, t_max_cap, rng)
+        winner_chirp_times = randomize_chirp_times(winner_chirp_times, t_max_cap, rng)
 
     # Same merge logic as the receiver-effect script: keeps onsets
     # monotonic, removes overlapping pairs, fails loud on bad data.
@@ -186,6 +202,39 @@ def get_data(
     return pd.DataFrame(all_rows)
 
 
+def window_overlap(data_path: Path, t_max_cap: float = DEFAULT_T_MAX_CAP) -> dict:
+    """How far the m3p13 windows of the observed chases overlap (audit item O4
+    of the old analysis): merged chases, consecutive offsets of a trial closer
+    than the window width, and loser chirps that fall in more than one window."""
+    summary_df = pd.read_csv(data_path / "trial_summary.csv", index_col=0)
+    width = M3P13_PRE + M3P13_POST
+    n = dict(chases_before_merging=0, chases=0, offset_gaps=0, offset_gaps_below_width=0,
+             loser_chirps=0, loser_chirps_in_a_window=0, loser_chirps_in_several_windows=0)
+    for _, trial_row in summary_df.iterrows():
+        if is_bad_trial(trial_row, data_path):
+            continue
+        onsets, offsets, loser, _ = trial_events(trial_row, data_path, t_max_cap)
+        n["chases_before_merging"] += len(onsets)
+        _, offsets = _merge_overlapping_chases(onsets, offsets, trial_row["recording"])
+        n["chases"] += len(offsets)
+        gaps = np.diff(offsets)
+        n["offset_gaps"] += len(gaps)
+        n["offset_gaps_below_width"] += int((gaps < width).sum())
+        # windows per chirp, with the bounds of count_chirps_in_interval
+        k = ((loser[:, None] >= offsets[None, :] - M3P13_PRE)
+             & (loser[:, None] <= offsets[None, :] + M3P13_POST)).sum(axis=1)
+        n["loser_chirps"] += len(loser)
+        n["loser_chirps_in_a_window"] += int((k >= 1).sum())
+        n["loser_chirps_in_several_windows"] += int((k >= 2).sum())
+    return {
+        **n,
+        "window_width_s": width,
+        "share_offset_gaps_below_width": n["offset_gaps_below_width"] / n["offset_gaps"],
+        "share_windowed_loser_chirps_in_several": (
+            n["loser_chirps_in_several_windows"] / n["loser_chirps_in_a_window"]),
+    }
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -220,6 +269,12 @@ def main(
 
     print(f"\nWrote {num_permutations} permutations + 1 observed file to {save_dir}.")
     print(f"Observed file shape: {final_df.shape}")
+
+    overlap = window_overlap(data_path)
+    if overlap["chases"] != len(final_df):
+        raise RuntimeError(f"{overlap['chases']} chases in the overlap count, {len(final_df)} rows")
+    print(overlap)
+    write_stats("chase_windows", {"n_trials": final_df["recording"].nunique(), **overlap})
 
 
 if __name__ == "__main__":

@@ -43,7 +43,8 @@ Environment: ``paper/.venv``::
 
     cd paper && unset VIRTUAL_ENV && uv run python scripts/plot_v2_pipeline_explainer.py
 
-Runtime: ~20 s cold, ~4 s warm (LaTeX text rendering). Prints the numbers it shows.
+Runtime: ~20 s cold, ~4 s warm (LaTeX text rendering). Prints the numbers it
+shows; those of the caption also go to write_stats ("v2_pipeline_explainer").
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
 import v2_fig_common as C
+from manuscript_stats import write_stats
 from style import set_light_style
 
 NAME = "plot_v2_pipeline_explainer"
@@ -195,6 +197,8 @@ def panel_front_end(fig, axs, report):
         "chirps": rows[["chirp_id", "t_center_s", "score", "track_id", "track_hz",
                         "height_hz", "fwhm_s"]].round(3).to_dict(orient="records"),
     }
+    return {"tracks_hz": hz, "df_hz": hz[0] - hz[1], "windows_ms": [1e3 * w for w in wins],
+            "snippet_s": t1 - t0}
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +304,8 @@ def panel_duplicate(ax):
     return {"recording": snip["meta"]["recording"], "kept": DUP_KEPT,
             "kept_score": float(k.score), "kept_box": [float(k.f_low_hz), float(k.f_high_hz)],
             "dropped": DUP_DROPPED, "dropped_score": float(d.score),
-            "dropped_box": [float(d.f_low_hz), float(d.f_high_hz)], "levels": lv}
+            "dropped_box": [float(d.f_low_hz), float(d.f_high_hz)],
+            "separation_ms": 1e3 * abs(float(k.t_center_s - d.t_center_s)), "levels": lv}
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +422,7 @@ def main() -> None:
     ya, ha, wa = 9.85, 2.7, 3.45
     xs = [1.55, 5.25, 8.95, 13.75]
     ax_a = [C.axes_cm(fig, xx, ya, wa, ha) for xx in xs]
-    panel_front_end(fig, ax_a, report)
+    front_end = panel_front_end(fig, ax_a, report)
     C.flow_arrow(fig, xs[2] + wa + 0.3, ya + ha / 2, xs[3] - 0.3, ya + ha / 2,
                  color="#8c8c8c", lw=0.7, ms=5)
 
@@ -480,6 +485,32 @@ def main() -> None:
     print("trace baselines:", {k: round(v["trace_baseline_hz"], 2) for k, v in tmeta.items()})
     print(json.dumps(report, indent=1, default=float))
     print("\n".join(map(str, paths)))
+    write_stats("v2_pipeline_explainer", caption_stats(snip, order, front_end, report))
+
+
+def caption_stats(snip, order, front_end, report) -> dict:
+    """The numbers of the caption: snippets, boxes, scores and estimates of the panels."""
+    harm, dup = report["D_harmonic"], report["D_duplicate"]
+
+    def decoder(key):
+        d = report[key]["decoder"]
+        return {**{p: {"value": v, "sd": s} for p, (v, s) in d.items()},
+                "trace_peak_hz": report[key]["trace_peak_hz"]}
+
+    return {
+        "operating_threshold": C.OPERATING,
+        "front_end": front_end,
+        "tile": {"tracks_hz": [C.track_median(snip, tid, *TILE) for tid in order],
+                 "duration_s": TILE[1] - TILE[0]},
+        "assignment": report["C"],
+        "harmonic": {"box_hz": harm["harmonic_box"], "emitter_hz": harm["harmonic_emitter_hz"],
+                     "fundamental_track_hz": harm["fundamental_track_hz"],
+                     "score": harm["score"]},
+        "duplicate": {"kept_score": dup["kept_score"], "dropped_score": dup["dropped_score"],
+                      "separation_ms": dup["separation_ms"]},
+        "decoder_small": decoder("small"),
+        "decoder_big": decoder("big"),
+    }
 
 
 if __name__ == "__main__":

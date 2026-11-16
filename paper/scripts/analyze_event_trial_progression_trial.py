@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src_paper/analyze_event_trial_progression_trial.py).
 # Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); base_path defaults to DATA_ROOT;
-# JSONs under PROCESSED; diagnostic PNGs under the figure directory (event_meta/).
+# JSONs under PROCESSED; diagnostic PNGs under the figure directory (event_meta/); the trials per
+# event type (with events, with fewer than two) go to write_stats ("progression[_annotated_subset]").
 """
 Analysis of temporal allocation of events in trials.
 Uses a single trial as the statistically independent unit of analysis.
@@ -23,6 +24,7 @@ from analyze_event_time_rates_trial import load_and_convert_boris_events
 from analyze_event_time_rates_trial import gaussian_kde as self_gaussian_kde
 from chirps import load_chirps
 from logger import get_logger
+from manuscript_stats import write_stats
 from paper_config import DATA_ROOT, DETECTIONS, figure, processed_dir
 
 female_color, male_color = "#e74c3c", "#3498db"
@@ -345,6 +347,21 @@ def relative_rate_progression(all_event_t, title=""):
     return data
 
 
+def trial_event_counts(all_event_t):
+    """The trials of one event type as `relative_rate_progression` sees them
+    (trials with at least one event): how many have events in the active phase,
+    and in how many the rate estimate is zero because there are fewer than two
+    events (whole recording, 6 h, and active phase, 3 h)."""
+    whole = np.array([np.sum(t <= 6 * 60 * 60) for t in all_event_t])
+    active = np.array([np.sum(t <= 3 * 60 * 60) for t in all_event_t])
+    return {
+        "n_trials": len(all_event_t),
+        "n_trials_with_events_active": int((active > 0).sum()),
+        "n_trials_lt_2_events": int((whole < 2).sum()),
+        "n_trials_lt_2_events_active": int((active < 2).sum()),
+    }
+
+
 def analyze(event_times, active_phase, num_shuffles, time_points, title, out_dir):
     print(f"Analyzing {title}")
     baseline = compute_null_cumulative_rates(
@@ -502,6 +519,15 @@ def main(base_path, annotated_only=False):
     print(f"Lenght of winner chirp times: {len(all_chirp_times_win)}")
     print(f"Lenght of contact times: {len(all_contact_t)}")
     print(f"Lenght of chasing times: {len(all_ag_on_t)}")
+    write_stats(
+        "progression_annotated_subset" if annotated_only else "progression",
+        {
+            "loser_chirps": trial_event_counts(all_chirp_times_lose),
+            "winner_chirps": trial_event_counts(all_chirp_times_win),
+            "contacts": trial_event_counts(all_contact_t),
+            "chases": trial_event_counts(all_ag_on_t),
+        },
+    )
 
     # relative_rate_progression(all_chirp_times_lose, title=r"chirp$_{lose}$")
     # relative_rate_progression(all_chirp_times_win, title=r"chirp$_{win}$")

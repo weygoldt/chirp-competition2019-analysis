@@ -1,5 +1,6 @@
 # Ported from chirp_competition d040123 (src_paper/stats_chirp_affects_chasing.py).
 # Changes: input/output under $PAPER_OUT/data/processed. Models, priors, subsets, sampler settings and seed unchanged.
+# Observations and divergences per fit go to write_stats ("receiver_effect_fits").
 """
 Bayesian Gamma GLMMs: does loser chirp presence in the fixed [-3, +13] s
 window around a chasing offset change the dominant's chasing dynamics?
@@ -68,6 +69,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
 
 
@@ -743,6 +745,19 @@ def print_diagnostic_report(results: list[dict]) -> None:
             )
 
 
+def fit_stats(results: list[dict]) -> dict:
+    """Per fit (RE structure -> subset -> model): observations and divergent
+    transitions, and how many fits diverged (for write_stats)."""
+    fits: dict = {}
+    for r in results:
+        fits.setdefault(r["re"], {}).setdefault(r["subset"], {})[r["model"]] = {
+            "n_fit": r["n_fit"], "divergences": r["diag_divergent"]}
+    flat = [f for subsets in fits.values() for models in subsets.values() for f in models.values()]
+    return {"n_fits": len(flat),
+            "n_fits_with_divergences": sum(f["divergences"] > 0 for f in flat),
+            "fits": fits}
+
+
 def print_variance_table(variance_rows: list[dict]) -> None:
     if not variance_rows:
         return
@@ -888,6 +903,7 @@ def main() -> None:
     print_covariate_slopes(all_results)
     print_variance_table(all_variance)
     print_diagnostic_report(all_results)
+    write_stats("receiver_effect_fits", fit_stats(all_results))
 
     print(f"\nFull results CSV:   {OUT_DIR / 'slope_summary.csv'}")
     print(f"Variance comps CSV: {OUT_DIR / 'variance_summary.csv'}")

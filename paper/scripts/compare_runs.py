@@ -1,32 +1,22 @@
 """Compare the manuscript's numbers across detection sets (paper reruns).
 
-Reads the output roots of ``run_all.sh`` for several ``PAPER_DETECTIONS``
-values (default: ``rtdetr`` = v2 as produced, ``rtdetr_gapfill`` = v2 with
-the trial fish's track gaps filled, ``rtdetr_gapfill_t080`` = the same at
-the manuscript's operating threshold 0.8, ``rtdetr_gapfill_t090`` = at 0.9) plus the v1 detections for
-the chirp counts, and writes one markdown table set to
-``paper/output/compare/comparison.md``:
+Reads the stats files that the analysis modules write (``write_stats``,
+``paper/output/<run>/stats/<namespace>.json``) for several
+``PAPER_DETECTIONS`` values (``rtdetr`` = v2 as produced, ``rtdetr_gapfill`` =
+v2 with the trial fish's track gaps filled, ``rtdetr_gapfill_t080`` = the same
+at the manuscript's operating threshold 0.8, ``rtdetr_gapfill_t090`` = at 0.9)
+and writes ``paper/output/compare/comparison.md``: one table per namespace,
+one row per number, one column per run. The v1 chirp counts are in the
+``counts`` namespace (written by ``compare_detection_counts.py``).
 
-1. chirp counts in the 33 analysed trials (whole recording, first 3 h),
-2. every reported posterior (``reported_posteriors_median_hdi.csv``),
-3. hurdle multipliers, echo responses and temporal allocation (parsed from
-   the run logs, where the scripts print them),
-4. the event-rate extrema printout (raw lines).
-
-Runs that are missing or incomplete are reported as such, not skipped
-silently.
+A run without a stats file of a namespace shows "—" there; runs without any
+stats files are listed at the top, not skipped silently.
 """
 
 from __future__ import annotations
 
-import os
-import re
+import json
 from pathlib import Path
-
-import numpy as np
-import pandas as pd
-
-from paper_config import DATA_ROOT
 
 RUNS = [
     ("rtdetr", "v2, 0.5"),
@@ -34,111 +24,53 @@ RUNS = [
     ("rtdetr_gapfill_t080", "v2 gap-filled, 0.8 (primary)"),
     ("rtdetr_gapfill_t090", "v2 gap-filled, 0.9"),
 ]
-BAD_RECORDINGS = ["2020-05-21-10_00", "2020-05-25-10_00", "2020-05-28-10_00", "2020-06-10-10_00"]
 ROOT = Path(__file__).resolve().parents[1] / "output"
 
 
-def counts() -> str:
-    ts = pd.read_csv(DATA_ROOT / "trial_summary.csv", index_col=0)
-    ts = ts[(ts["draw"] == 0) & ~ts["recording"].isin(BAD_RECORDINGS)]
-    srcs = [("rcnn", "v1")] + RUNS
-    rows = []
-    for _, r in ts.iterrows():
-        for src, lab in srcs:
-            f = DATA_ROOT / r["recording"] / f"chirp_times_{src}.npy"
-            if not f.exists():
-                continue
-            t = np.load(f)
-            i = np.load(DATA_ROOT / r["recording"] / f"chirp_ids_{src}.npy")
-            for status, fid in (("winner", r["win_ID"]), ("loser", r["lose_ID"])):
-                sel = i == fid
-                rows.append({"src": lab, "status": status, "rec": r["recording"],
-                             "whole": int(sel.sum()), "first_3h": int((sel & (t < 3 * 3600)).sum())})
-    x = pd.DataFrame(rows)
-    order = [lab for _, lab in srcs if lab in set(x["src"])]
-    out = ["## 1. Chirps in the 33 analysed trials", ""]
-    for col, title in (("whole", "whole recording"), ("first_3h", "first 3 h")):
-        tot = x.pivot_table(index="status", columns="src", values=col, aggfunc="sum")[order]
-        med = x.pivot_table(index="status", columns="src", values=col, aggfunc="median")[order]
-        zero = x[(x["status"] == "winner") & (x[col] == 0)].groupby("src").size().reindex(order, fill_value=0)
-        out += [f"**{title}** (total; per-trial median in brackets)", "",
-                "| | " + " | ".join(order) + " |", "|---|" + "---|" * len(order)]
-        for st in ("winner", "loser"):
-            out.append(f"| {st} | " + " | ".join(f"{int(tot.loc[st, c]):,} ({med.loc[st, c]:.0f})" for c in order) + " |")
-        out.append("| winners with 0 chirps | " + " | ".join(str(int(zero[c])) for c in order) + " |")
-        out.append("")
-    return "\n".join(out)
+def leaves(tree, prefix: str = "") -> dict:
+    """Dotted key -> number or list of numbers."""
+    if isinstance(tree, dict):
+        return {k: v for key, item in tree.items() for k, v in leaves(item, f"{prefix}{key}.").items()}
+    return {prefix[:-1]: tree}
 
 
-def posteriors() -> str:
-    frames = []
-    for run, lab in RUNS:
-        f = ROOT / run / "data" / "processed" / "reported_posteriors_median_hdi.csv"
-        if not f.exists():
-            frames.append(None)
-            continue
-        d = pd.read_csv(f)
-        d[lab] = [f"{m:.3f} [{lo:.3f}, {hi:.3f}]" for m, lo, hi in zip(d["median"], d["hdi_low"], d["hdi_high"])]
-        frames.append(d.set_index(["quantity", "unit"])[[lab]])
-    present = [f for f in frames if f is not None]
-    missing = [lab for (_, lab), f in zip(RUNS, frames) if f is None]
-    t = pd.concat(present, axis=1)
-    out = ["## 2. Reported posteriors (median [95% HDI])", ""]
-    if missing:
-        out += [f"Missing: {', '.join(missing)}.", ""]
-    cols = list(t.columns)
-    out += ["| quantity | unit | " + " | ".join(cols) + " |", "|---|---|" + "---|" * len(cols)]
-    for (q, u), r in t.iterrows():
-        out.append(f"| {q} | {u} | " + " | ".join("" if pd.isna(v) else v for v in r) + " |")
-    return "\n".join(out) + "\n"
+def fmt(value) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, list):
+        return "[" + ", ".join(fmt(v) for v in value) + "]"
+    if isinstance(value, int):
+        return f"{value:,}"
+    return f"{value:.4g}"
 
 
-def grep(run: str, log: str, patterns: list[str]) -> list[str]:
-    f = ROOT / run / "logs" / log
-    if not f.exists():
-        return [f"(no {log})"]
-    lines = f.read_text(errors="replace").splitlines()
-    return [ln.strip() for ln in lines if any(re.search(p, ln) for p in patterns)]
-
-
-def parsed() -> str:
-    out = ["## 3. Hurdle, echo responses, temporal allocation (from the run logs)", ""]
-    for run, lab in RUNS:
-        out += [f"### {lab}", "", "```"]
-        out += grep(run, "stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets.log",
-                    [r"status\[[01]\] \(", r"odds ratio", r"rate ratio"])
-        out += grep(run, "stats_bayesian_logreg_echo_responses_new.log", [r"\\item \$P\("])
-        out += grep(run, "plot_event_trial_progression_correlations_all_fish.log",
-                    [r"first_h median", r"Per-trial count", r"Total events"])
-        out += ["```", ""]
-    return "\n".join(out)
-
-
-def extrema() -> str:
-    out = ["## 4. Event-rate extrema (raw printout of the src_paper plot)", ""]
-    for run, lab in RUNS:
-        out += [f"### {lab}", "", "```"]
-        out += grep(run, "plot_event_time_rates_winner_loser_chirp_src_paper.log",
-                    [r"▲|▼|peak|trough|region|^=+ |Panel|panel"])[:60]
-        out += ["```", ""]
-    return "\n".join(out)
+def load(run: str) -> dict[str, dict]:
+    """Namespace -> flattened values of one run."""
+    return {f.stem: leaves(json.loads(f.read_text())["values"])
+            for f in sorted((ROOT / run / "stats").glob("*.json"))}
 
 
 def main() -> None:
-    out_dir = ROOT / "compare"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    text = "\n".join([
-        "# Manuscript numbers across detection sets",
-        "",
-        "Runs: " + "; ".join(f"`{r}` = {lab}" for r, lab in RUNS) + ". v1 = `rcnn` (counts only).",
-        "",
-        counts(), posteriors(), parsed(), extrema(),
-    ])
-    (out_dir / "comparison.md").write_text(text)
-    print(text[:6000])
-    print(f"\n... written to {out_dir / 'comparison.md'}")
+    stats = {run: load(run) for run, _ in RUNS}
+    labels = [label for _, label in RUNS]
+    out = ["# Manuscript numbers across detection sets", "",
+           "Runs: " + "; ".join(f"`{run}` = {label}" for run, label in RUNS) + ".", ""]
+    empty = [label for (run, label) in RUNS if not stats[run]]
+    if empty:
+        out += [f"No stats files: {', '.join(empty)}.", ""]
+    for namespace in sorted(set().union(*stats.values())):
+        keys = sorted(set().union(*(stats[run].get(namespace, {}) for run, _ in RUNS)))
+        out += [f"## {namespace}", "", "| key | " + " | ".join(labels) + " |",
+                "|---|" + "---|" * len(RUNS)]
+        for key in keys:
+            cells = [fmt(stats[run].get(namespace, {}).get(key)) for run, _ in RUNS]
+            out.append(f"| {key} | " + " | ".join(cells) + " |")
+        out.append("")
+    path = ROOT / "compare" / "comparison.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(out))
+    print(f"written to {path}")
 
 
 if __name__ == "__main__":
-    os.environ.setdefault("PAPER_DETECTIONS", "rtdetr")
     main()

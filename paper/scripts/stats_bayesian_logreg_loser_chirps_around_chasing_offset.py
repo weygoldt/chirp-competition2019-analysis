@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/stats_bayesian_logreg_loser_chirps_around_chasing_offset.py).
 # Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
 # start method for pymc on Python 3.14). Model, priors, sampler settings and seed (20250101) unchanged.
+# Events, observed fractions and posterior median/HDI also go to write_stats ("offset_logreg").
 """
 Estimate whether loser/winner chirps occur in a fixed window around chasing
 offsets using a Bayesian Bernoulli intercept-only GLMM with a random
@@ -18,6 +19,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
 from stats_utils import parse_bambi_model_output, log_odds_to_prob, save_json
 
@@ -117,6 +119,7 @@ def fit_for_mode(df, mode, savepath):
         },
         savepath / f"{filename}_summary.json",
     )
+    return summary
 
 
 def main():
@@ -124,8 +127,13 @@ def main():
     savepath.mkdir(parents=True, exist_ok=True)
 
     df = _load_data()
+    stats = {}
     for mode in ("loser", "winner"):
-        fit_for_mode(df, mode, savepath)
+        s = fit_for_mode(df, mode, savepath)
+        stats[mode] = {"n_events": s["n_events"], "observed_fraction": s["observed_fraction"],
+                       "model": {"median": s["posterior_median"],
+                                 "hdi": [s["hdi_lower"], s["hdi_upper"]]}}
+    write_stats("offset_logreg", stats)
 
 
 if __name__ == "__main__":

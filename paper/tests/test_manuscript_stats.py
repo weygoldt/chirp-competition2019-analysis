@@ -35,10 +35,16 @@ def test_write_converts_numpy(run):
     assert record["code_modified"] is False
 
 
-@pytest.mark.parametrize("values", [{"x": float("nan")}, {"x": "1.2"}, {"x": None}, {"x": True},
-                                    {"a.b": 1}, {"x": [1.0, float("inf")]}])
-def test_write_refuses_what_is_not_a_number(run, values):
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize(("values", "message"), [
+    ({"x": float("nan")}, "not finite"),
+    ({"x": "1.2"}, "not a number"),
+    ({"x": None}, "not a number"),
+    ({"x": True}, "not a number"),
+    ({"a.b": 1}, "not a word"),
+    ({"x": [1.0, float("inf")]}, "not finite"),
+])
+def test_write_refuses_what_is_not_a_number(run, values, message):
+    with pytest.raises(ValueError, match=message):
         ms.write_stats("demo", values)
 
 
@@ -46,7 +52,7 @@ def test_namespace_belongs_to_one_script(run, monkeypatch):
     ms.write_stats("demo", {"x": 1})
     ms.write_stats("demo", {"x": 2})  # the same script may rewrite it
     monkeypatch.setattr(ms.sys, "argv", ["other.py"])
-    with pytest.raises(ValueError, match="belongs to analysis.py"):
+    with pytest.raises(ValueError, match=r"belongs to analysis\.py"):
         ms.write_stats("demo", {"x": 3})
 
 
@@ -57,8 +63,9 @@ def test_collect_merges_namespaces_with_provenance(run, tmp_path):
     assert stats["values"] == {"a": {"x": 1}, "b": {"y": {"median": 0.5}}}
     assert stats["detections"] == "testrun"
     entry = stats["inputs"]["paper/output/testrun/stats/a.json"]
-    assert entry["script"] == "analysis.py" and entry["commit"] == "c0ffee"
-    assert len(entry["sha256"]) == 64 and a.exists()
+    assert entry["script"] == "analysis.py"
+    assert entry["commit"] == "c0ffee"
+    assert entry["sha256"] == ms.hashlib.sha256(a.read_bytes()).hexdigest()
 
 
 def test_collect_refuses_uncommitted_code(run, monkeypatch):

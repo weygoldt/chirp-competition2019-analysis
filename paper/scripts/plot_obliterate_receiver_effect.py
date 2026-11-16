@@ -1,5 +1,5 @@
 # Ported from chirp_competition d040123 (src_paper/plot_obliterate_receiver_effect.py).
-# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); the 'rows affected' percentage (hard-coded 6.1 %, from the v1 data) is computed from obs.csv.
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); the 'rows affected' percentage (hard-coded 6.1 %, from the v1 data) is computed from obs.csv and also goes to write_stats ("receiver_effect_figure").
 """
 Figure: receiver-effect decomposition (3 panels).
 
@@ -40,6 +40,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.transforms import blended_transform_factory
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
@@ -73,13 +74,17 @@ OBS_DATA = (
 )
 
 
-def contamination_pct() -> float:
-    """Share of chase rows whose post-offset loser-chirp flag differs between the
-    clipped and the unclipped window (was hard-coded as 6.1 %: 119 of 1,958 rows
-    of the v1 data)."""
+def window_disagreement() -> pd.Series:
+    """Per chase row: does the post-offset loser-chirp flag differ between the
+    clipped and the unclipped window?"""
     obs = pd.read_csv(OBS_DATA)
-    differs = obs["loser_chirped_post_offset_clipped"] != obs["loser_chirped_post_offset_unclipped"]
-    return 100 * float(differs.mean())
+    return obs["loser_chirped_post_offset_clipped"] != obs["loser_chirped_post_offset_unclipped"]
+
+
+def contamination_pct() -> float:
+    """Share of chase rows whose post-offset flags differ, in percent (was
+    hard-coded as 6.1 %: 119 of 1,958 rows of the v1 data)."""
+    return 100 * float(window_disagreement().mean())
 
 # PRIMARY_RE = "primary_actor_partner"
 PRIMARY_RE = "primary_recording"
@@ -841,6 +846,9 @@ def main() -> None:
     fig.savefig(OUT_FIG, dpi=300)
     fig.savefig(OUT_FIG.with_suffix(".svg"), dpi=300)
     print(OUT_FIG)
+    differs = window_disagreement()
+    write_stats("receiver_effect_figure", {"window_disagreement": {
+        "n": differs.sum(), "n_rows": len(differs), "fraction": differs.mean()}})
     plt.show()
 
 

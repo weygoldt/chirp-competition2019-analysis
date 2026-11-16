@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src_paper/stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets.py).
 # Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
-# start method for pymc on Python 3.14). Models, priors, sampler settings and seed unchanged.
+# start method for pymc on Python 3.14). Models, priors, sampler settings and seed unchanged. The printed
+# digest also goes to write_stats ("hurdle", one entry per response variable).
 """
 Hurdle / two-part Bayesian GLMM for chirp activity around chase offsets,
 comparing observed activity against a shuffle-time null.
@@ -70,6 +71,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
 from stats_utils import parse_bambi_model_output
 
@@ -506,7 +508,7 @@ def print_hurdle_summary(
     intensity_summary: dict[int, dict],
     resp: str,
     hdi_prob: float = 0.95,
-) -> None:
+) -> dict:
     """Final digest of the hurdle results on interpretable scales.
 
     Reports, per status:
@@ -517,10 +519,14 @@ def print_hurdle_summary(
       * Cross-status contrast: difference of betas (and exp of that =
         multiplier of one status' multiplier vs the other).
     Plus dataset-level descriptive numbers.
+
+    Returns the printed numbers as a dictionary (for write_stats).
     """
     print("\n" + "=" * 72)
     print(f"Hurdle-model digest for {resp}")
     print("=" * 72)
+    digest: dict = {"n_chases": df_scored["interaction_id"].nunique(),
+                    "observed": {}, "presence": {}, "intensity": {}}
 
     # Dataset anchors per status.
     print("\nDataset anchors (observed):")
@@ -533,6 +539,8 @@ def print_hurdle_summary(
         n = len(sub)
         n_pos = int((sub[resp] > 0).sum())
         rate = float(sub[resp].mean())
+        digest["observed"][label] = {"n": n, "n_with_chirps": n_pos, "p_any": n_pos / n,
+                                     "mean_count": rate}
         print(
             f"  {label:>6}: n = {n}, "
             f"P(any chirp) = {n_pos / n:.3f} ({n_pos}/{n}), "
@@ -547,6 +555,9 @@ def print_hurdle_summary(
         median_p_null[status] = float(sub["p_null_pos"].median())
         median_mu_null[status] = float(
             sub.loc[sub["mu_null_pos"] > 0, "mu_null_pos"].median()
+        )
+        digest["observed"][_status_label(status)].update(
+            null_p_any_median=median_p_null[status], null_mu_median=median_mu_null[status]
         )
         print(
             f"\nShuffle-null medians for {_status_label(status)}s:\n"
@@ -571,6 +582,10 @@ def print_hurdle_summary(
         p_pred = 1.0 / (1.0 + np.exp(-logit_pred))
         p_med = float(np.median(p_pred))
         p_hdi = az.hdi(p_pred, hdi_prob=hdi_prob)
+        digest["presence"][s["label"]] = {
+            "median": s["mult"], "hdi": [s["mult_lo"], s["mult_hi"]], "p_gt_1": s["p_mult_gt1"],
+            "p_any_at_null": {"median": p_med, "hdi": [p_hdi[0], p_hdi[1]]},
+        }
         print(
             f"  {s['label']:>6}   "
             f"x{s['mult']:.3f} [{s['mult_lo']:.3f}, {s['mult_hi']:.3f}]   "
@@ -592,6 +607,10 @@ def print_hurdle_summary(
         pred_count = median_mu_null[k] * np.exp(s["samples"])
         c_med = float(np.median(pred_count))
         c_hdi = az.hdi(pred_count, hdi_prob=hdi_prob)
+        digest["intensity"][s["label"]] = {
+            "median": s["mult"], "hdi": [s["mult_lo"], s["mult_hi"]], "p_gt_1": s["p_mult_gt1"],
+            "count_at_null": {"median": c_med, "hdi": [c_hdi[0], c_hdi[1]]},
+        }
         print(
             f"  {s['label']:>6}   "
             f"x{s['mult']:.3f} [{s['mult_lo']:.3f}, {s['mult_hi']:.3f}]   "
@@ -602,14 +621,19 @@ def print_hurdle_summary(
     # Cross-status contrasts.
     if 0 in presence_summary and 1 in presence_summary:
         print("\nCross-status contrast (winner vs loser):")
-        for name, summary in (
-            ("Model 1 (presence) odds ratio", presence_summary),
-            ("Model 2 (intensity) rate ratio", intensity_summary),
+        digest["contrast_winner_loser"] = {}
+        for key, name, summary in (
+            ("presence", "Model 1 (presence) odds ratio", presence_summary),
+            ("intensity", "Model 2 (intensity) rate ratio", intensity_summary),
         ):
             diff = summary[1]["samples"] - summary[0]["samples"]
             ratio = np.exp(diff)
             r_mean = float(np.median(ratio))
             r_hdi = az.hdi(ratio, hdi_prob=hdi_prob)
+            digest["contrast_winner_loser"][key] = {
+                "median": r_mean, "hdi": [r_hdi[0], r_hdi[1]],
+                "p_winner_gt_loser": float((diff > 0).mean()),
+            }
             print(
                 f"  {name:<32}  "
                 f"x{r_mean:.3f} [{r_hdi[0]:.3f}, {r_hdi[1]:.3f}]   "
@@ -617,6 +641,7 @@ def print_hurdle_summary(
             )
 
     print("=" * 72)
+    return digest
 
 
 # ---------------------------------------------------------------------------
@@ -639,6 +664,7 @@ def main() -> None:
         f"({df_obs['interaction_id'].nunique()} chases x 2 statuses)"
     )
 
+    digests = {}
     for resp in RESPONSE_VARS:
         print(f"\nComputing shuffle baselines for: {resp}")
         df_scored = compute_shuffle_baselines(df_obs, perm_files, resp, log_every=25)
@@ -653,7 +679,7 @@ def main() -> None:
             fit_hurdle_models_with_bambi(df_scored, resp, OUTDIR)
         )
 
-        print_hurdle_summary(
+        digests[resp] = print_hurdle_summary(
             df_scored=df_scored,
             presence_summary=presence_summary,
             intensity_summary=intensity_summary,
@@ -672,6 +698,8 @@ def main() -> None:
 
         az.to_netcdf(trace1, OUTDIR / f"{resp}_hurdle_presence_trace.nc")
         az.to_netcdf(trace2, OUTDIR / f"{resp}_hurdle_positive_trace.nc")
+
+    write_stats("hurdle", digests)
 
 
 if __name__ == "__main__":

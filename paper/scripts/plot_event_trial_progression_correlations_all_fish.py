@@ -1,5 +1,6 @@
 # Ported from chirp_competition d040123 (src_paper/plot_event_trial_progression_correlations_all_fish.py).
-# Changes: inputs from PROCESSED; figures (main and _supplement, pdf/png/svg) via paper_config.figure().
+# Changes: inputs from PROCESSED; figures (main and _supplement, pdf/png/svg) via paper_config.figure();
+# the printed summary statistics also go to write_stats ("allocation").
 import os
 import argparse
 import json
@@ -12,6 +13,7 @@ import numpy as np
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, figure, processed
 from style import (
     baseline_color,
@@ -367,23 +369,38 @@ def plot_cumulative(axes, data):
 
 
 def print_summary(data, timing_data):
-    """Print manuscript-ready summary statistics to the terminal."""
+    """Print manuscript-ready summary statistics to the terminal.
+
+    Returns the printed numbers as a dictionary (for write_stats).
+    """
     dark_period_min = 3 * 60  # 3 h dark period in minutes
 
     # --- Per-trial event counts and rates ---
     keys = ["chasing", "contact", "chirp$_{lose}$", "chirp$_{win}$"]
     names = ["Chasing", "Contact", "Loser chirps", "Winner chirps"]
+    stats_keys = ["chasing", "contact", "loser_chirps", "winner_chirps"]
+    stats = {k: {} for k in stats_keys}
 
     print("\n" + "=" * 70)
     print("MANUSCRIPT SUMMARY STATISTICS")
     print("=" * 70)
 
     per_trial_counts = {}
-    for key, name in zip(keys, names):
+    for key, name, skey in zip(keys, names, stats_keys):
         counts = np.array(data[key]["event_count"])
         total = int(np.sum(counts))
         rates = counts / dark_period_min  # events per minute per trial
         per_trial_counts[key] = counts
+        stats[skey].update(
+            n_events=total,
+            n_trials=len(counts),
+            count_per_trial={"median": np.median(counts), "range": [np.min(counts), np.max(counts)]},
+            rate_per_min={
+                "median": np.median(rates),
+                "range": [np.min(rates), np.max(rates)],
+                "iqr": [np.percentile(rates, 25), np.percentile(rates, 75)],
+            },
+        )
         print(f"\n--- {name} ---")
         print(f"  Total events:       {total}")
         print(f"  Trials:             {len(counts)}")
@@ -399,13 +416,14 @@ def print_summary(data, timing_data):
 
     # --- Rate dynamics (normalized rate at start vs end of dark period) ---
     print("\n--- Normalised rate: first hour vs last hour of dark period ---")
-    for key, name in zip(keys, names):
+    for key, name, skey in zip(keys, names, stats_keys):
         kde_time = np.array(data[key]["kde_times"]) / 3600
         kde_ratios = np.array(data[key]["kde_ratios"])
         first_hour = kde_ratios[:, kde_time <= 1]
         last_hour = kde_ratios[:, (kde_time >= 2) & (kde_time <= 3)]
         med_first = np.median(np.median(first_hour, axis=1))
         med_last = np.median(np.median(last_hour, axis=1))
+        stats[skey]["normalised_rate"] = {"first_hour": med_first, "last_hour": med_last}
         print(
             f"  {name:20s}  first_h median={med_first:.2f}, "
             f"last_h median={med_last:.2f}"
@@ -442,6 +460,16 @@ def print_summary(data, timing_data):
             f"    IQR=[{np.percentile(pooled, 25):.1f}, "
             f"{np.percentile(pooled, 75):.1f}]"
         )
+        stats[tkey] = {
+            "n": len(pooled),
+            "range": [np.min(pooled), np.max(pooled)],
+            "median": np.median(pooled),
+            "mean": np.mean(pooled),
+            "mode": mode,
+            "iqr": [np.percentile(pooled, 25), np.percentile(pooled, 75)],
+        }
+
+    return stats
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +493,7 @@ def main(annotated_only=False):
         timing = json.load(f)
 
     # --- Summary statistics for manuscript ---
-    print_summary(data, timing)
+    write_stats(f"allocation{name_suffix}", print_summary(data, timing))
 
     # --- Main figure ---
     fig, bar_axes, rate_axes, timing_axes = setup_main_plot()

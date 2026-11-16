@@ -1,5 +1,6 @@
 # Ported from chirp_competition d040123 (src_paper/plot_hurdle_decomposition.py).
-# Changes: inputs under $PAPER_OUT/data/processed, figure via paper_config.figure (pdf + svg as before).
+# Changes: inputs under $PAPER_OUT/data/processed, figure via paper_config.figure (pdf + svg as before);
+# the drawn medians and HDIs also go to write_stats ("hurdle_decomposition").
 """
 Figure: hurdle-model decomposition of chirp activity vs shuffle null
 around chase offsets (m3p13 window).
@@ -43,6 +44,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, figure
 from style import (
     cm,
@@ -421,6 +423,7 @@ def draw_forest_panel(
     ax.axvline(1.0, ls="--", lw=0.5, c=C_NEUTRAL, alpha=1, zorder=1)
 
     y_for_status = {0: 1.0, 1: 0.0}
+    drawn = {}  # status label -> posterior median and HDI, as drawn
 
     print("-" * 80)
     for status, samples in samples_per_status.items():
@@ -437,6 +440,7 @@ def draw_forest_panel(
 
         print("winner" if status > 0 else "loser")
         print(mean, hdi)
+        drawn["winner" if status > 0 else "loser"] = {"median": mean, "hdi": [lo, hi]}
 
         kx, ky = kde_curve(s, log_x=False, bw=kde_bw)
         if ky.max() > 0:
@@ -476,6 +480,7 @@ def draw_forest_panel(
 
     ax.set_xlabel(xlabel, fontsize=8.5, color=C_TEXT)
     sns.despine(ax=ax, left=not show_yticks, trim=True, offset=3)
+    return drawn
 
 
 # ---------------------------------------------------------------------------
@@ -590,24 +595,26 @@ def main() -> None:
         ylabel=r"mean chirp count",
     )
 
-    draw_forest_panel(
-        axes["pres_bot"],
-        presence_mult,
-        xlabel="odds multiplier",
-        show_yticks=True,
-    )
-    draw_forest_panel(
-        axes["int_bot"],
-        positive_mult,
-        xlabel="rate multiplier",
-        show_yticks=False,
-    )
-    draw_forest_panel(
-        axes["comb_bot"],
-        combined_mult,
-        xlabel="combined multiplier",
-        show_yticks=False,
-    )
+    stats = {
+        "presence": draw_forest_panel(
+            axes["pres_bot"],
+            presence_mult,
+            xlabel="odds multiplier",
+            show_yticks=True,
+        ),
+        "intensity": draw_forest_panel(
+            axes["int_bot"],
+            positive_mult,
+            xlabel="rate multiplier",
+            show_yticks=False,
+        ),
+        "combined": draw_forest_panel(
+            axes["comb_bot"],
+            combined_mult,
+            xlabel="combined multiplier",
+            show_yticks=False,
+        ),
+    }
 
     # Column titles above the top row.
     title_pad = 6
@@ -663,6 +670,11 @@ def main() -> None:
         f"({(paired_comb['status'] == 0).sum()} loser / "
         f"{(paired_comb['status'] == 1).sum()} winner)"
     )
+    for key, paired in (("presence", paired_pres), ("intensity", paired_int),
+                        ("combined", paired_comb)):
+        stats[key]["n_cells"] = {"loser": (paired["status"] == 0).sum(),
+                                 "winner": (paired["status"] == 1).sum()}
+    write_stats("hurdle_decomposition", stats)
 
     OUT_FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT_FIG, dpi=300)

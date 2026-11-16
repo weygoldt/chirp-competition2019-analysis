@@ -1,5 +1,7 @@
 # Ported from chirp_competition d040123 (src_paper/stats_chirp_coupling.py).
 # Changes: input/output under $PAPER_OUT/data/processed. Models, priors, sampler settings and seed unchanged.
+# The data anchors, divergences, LOO differences, Pareto-k counts and the full-width subset go to
+# write_stats ("coupling").
 """
 Coupling models — how do chirp rates track competition intensity?
 
@@ -39,6 +41,7 @@ import bambi as bmb
 import numpy as np
 import pandas as pd
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -388,6 +391,19 @@ def main() -> None:
     df = prepare_data()
     all_summaries: list[pd.DataFrame] = []
     nested: dict[str, az.InferenceData] = {}
+    counts = df["chirp_count"]
+    stats: dict = {
+        "data": {
+            "n_rows": len(df),
+            "n_losers": df["loser"].nunique(),
+            "n_winners": df["winner"].nunique(),
+            "n_recordings": df["recording"].nunique(),
+            "zero_fraction": (counts == 0).mean(),
+            "max_count": counts.max(),
+            "variance_to_mean": counts.var() / counts.mean(),
+        },
+        "divergences": {},
+    }
 
     for spec in MODEL_SPECS:
         idata = fit_model(spec, df, cache_dir=TRACE_DIR)
@@ -396,6 +412,7 @@ def main() -> None:
         summary = summarise_fit(spec["name"], idata)
         print_summary(spec["name"], summary)
         all_summaries.append(summary)
+        stats["divergences"][spec["name"]] = int(idata.sample_stats["diverging"].sum())
 
         # Sampler diagnostics.
         try:
@@ -417,15 +434,26 @@ def main() -> None:
     loo_table.to_csv(OUT_DIR / "model_comparison_loo.csv")
     print("\nLOO comparison (ELPD; differences relative to the best model):")
     print(loo_table[["elpd_loo", "elpd_diff", "dse", "weight", "warning"]])
+    stats["loo"] = {name: {"elpd": row.elpd_loo, "weight": row.weight}
+                    for name, row in loo_table.iterrows()}
     for better, worse in (("C2_prev_ICI_and_D", "C1_prev_ICI"), ("C1_prev_ICI", "C0_intercept")):
         la = az.loo(nested[better], pointwise=True)
         lb = az.loo(nested[worse], pointwise=True)
         d = la.loo_i.values - lb.loo_i.values
         print(f"  {better} - {worse}: dELPD = {d.sum():.1f}, SE = {np.sqrt(len(d)) * d.std():.1f}")
+        stats["loo"][f"{better}_minus_{worse}"] = {"delpd": d.sum(),
+                                                    "se": np.sqrt(len(d)) * d.std()}
+    for name, idata in nested.items():
+        k = az.loo(idata, pointwise=True).pareto_k.values
+        stats["loo"][name]["n_pareto_k_above_0_7"] = int((k > 0.7).sum())
+        print(f"  {name}: {int((k > 0.7).sum())} observations with Pareto k > 0.7 (max {k.max():.2f})")
 
     # Sensitivity refit.
     sens = refit_c2_full_width(df, cache_dir=TRACE_DIR)
     all_summaries.append(sens)
+    full_width = (df["window_width"] >= 15.9).sum()  # the rule of refit_c2_full_width
+    stats["full_width_subset"] = {"n_rows": full_width, "fraction": full_width / len(df)}
+    write_stats("coupling", stats)
 
     # Persist the combined summary table.
     out = pd.concat(all_summaries, ignore_index=True)

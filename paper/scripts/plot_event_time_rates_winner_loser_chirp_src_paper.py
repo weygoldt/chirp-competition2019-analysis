@@ -1,7 +1,8 @@
 # Ported from chirp_competition d040123 (src_paper/plot_event_time_rates_winner_loser_chirp.py; 17.4 cm, prints the extrema the manuscript quotes).
 # Changes: JSONs from $PAPER_OUT/data/processed/event_time_rates, figures via paper_config.figure (png, pdf, svg as before),
 # written as <stem>_src_paper so it does not overwrite the paper version; rate-axis limits and ticks extended
-# (loser 8 -> 16, winner 4 -> 6 /min) because the v2 rates would be clipped.
+# (loser 8 -> 16, winner 4 -> 6 /min) because the v2 rates would be clipped; the printed extrema
+# and trial counts also go to write_stats ("event_rates").
 import argparse
 import json
 from pathlib import Path
@@ -17,6 +18,7 @@ from style import (
     loser_color,
 )
 from IPython import embed
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, figure
 
 
@@ -507,7 +509,7 @@ def plot_conv_rates_heatmap(ax, data):
         np.max(per_trial_rates, axis=1)[:, None] + 1e-6
     )
 
-    n_zero = np.sum(np.sum(per_trial_rates, axis=1) == 0)
+    n_zero = int(np.sum(np.sum(per_trial_rates, axis=1) == 0))
     n_tot = per_trial_rates.shape[0]
     print(f"N obs: {n_tot}")
     print(f"N trials with 0 chirps: {n_zero}")
@@ -538,7 +540,28 @@ def plot_conv_rates_heatmap(ax, data):
     )
 
     n = len(per_trial_rates)
-    return n
+    return n, n_zero
+
+
+# The events of the four panels per group, in the order of load_data().
+PANEL_EVENTS = ["other_chirps", "chase_onset", "chase_offset", "contact"]
+
+
+def extrema_stats(extrema):
+    """The extrema of one panel for write_stats: side (before/after) -> type (peak/trough)."""
+    out = {}
+    for e in extrema:
+        out.setdefault(e["side"], {})[e["type"]] = {
+            "time_s": e["time"],
+            "rate_per_min": e["rate"],
+            "baseline_per_min": e["baseline_med"],
+            "delta_per_min": e["delta"],
+            "region_s": [e["region_start"], e["region_end"]],
+            "region_width_s": e["region_width"],
+            "fold_point": e["fold_point"],
+            "fold_window": e["fold_window"],
+        }
+    return out
 
 
 def main():
@@ -561,6 +584,7 @@ def main():
     full_dataset_eventplot = [4, 12]
 
     all_extrema = []  # collected for the final summary
+    stats = {"loser": {}, "winner": {}}
     for i, (rp, ep) in enumerate(zip(rate_plot_indices, event_plot_indices)):
         d = data[i]
         if i < 4:
@@ -580,7 +604,12 @@ def main():
         report_extrema(group, event_label, extrema)
         all_extrema.append((group, event_label, extrema))
 
-        n_trials = plot_conv_rates_heatmap(axs[ep], d)
+        n_trials, n_zero = plot_conv_rates_heatmap(axs[ep], d)
+        stats[group.lower()][PANEL_EVENTS[i % 4]] = {
+            "n_trials": n_trials,
+            "n_trials_without_chirps": n_zero,
+            **extrema_stats(extrema),
+        }
 
         # add n to top right corner
         # axs[rp].text(
@@ -652,6 +681,7 @@ def main():
         )
         print(f"  {group:<7}{clean_event:<22}{cells}")
     print()
+    write_stats("event_rates", stats)
 
     xoffsets = [-0.4, -0.15, -0.15, -0.15] * 2
     yoffsets_top = [1.25] * 4

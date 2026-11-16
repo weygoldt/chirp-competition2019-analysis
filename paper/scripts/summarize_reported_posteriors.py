@@ -1,6 +1,8 @@
 # Ported from chirp_competition d040123 (src_paper/summarize_reported_posteriors.py).
 # Changes: inputs/output under $PAPER_OUT/data/processed; a missing Bernoulli trace is reported and
-# skipped (as the script already did for the Gamma GLMMs): the before/after-offset input has no writer (O5).
+# skipped (as the script already did for the Gamma GLMMs): the before/after-offset input has no writer (O5);
+# the coupling corners (10th/90th percentiles of the predictors) are computed from the coupling model's
+# data instead of being copied from a printout; every quantity also goes to write_stats ("posteriors").
 """
 Posterior median and 95% HDI for every model-based number in the manuscript.
 
@@ -16,6 +18,7 @@ and `plot_hurdle_decomposition.py` (both use median + HDI).
 
 Output:
     data/processed/reported_posteriors_median_hdi.csv
+    $PAPER_OUT/stats/posteriors.json (the same quantities, keyed for the text)
 """
 
 from pathlib import Path
@@ -24,7 +27,9 @@ import arviz as az
 import numpy as np
 import pandas as pd
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED
+from stats_chirp_coupling import prepare_data
 
 PROC = PROCESSED
 GAMMA_DIR = PROC / "chirp_effect_on_dominant_adaptive_window/gamma_glmm_binary"
@@ -32,11 +37,6 @@ COUPLING_DIR = PROC / "chirp_coupling/negbin"
 STATUS_DIR = PROC / "stats_bayesian_glmm_chirps_status_v3"
 OUT_CSV = PROC / "reported_posteriors_median_hdi.csv"
 HDI_PROB = 0.95
-
-# Corners of the central 80% of the observed predictors in the coupling
-# figure (plot_chirp_coupling.py prints these values).
-PREV_ICI_P10, PREV_ICI_P90 = 5.45, 172.25
-DURATION_P10, DURATION_P90 = 2.01, 15.03
 
 
 def draws(path: Path, var: str, **sel) -> np.ndarray:
@@ -51,10 +51,23 @@ def invlogit(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
-def summary(name: str, samples: np.ndarray, unit: str) -> dict:
+def summary(key: str, name: str, samples: np.ndarray, unit: str) -> dict:
+    """Median and HDI of `samples`; `key` is the dotted stats key, `name` the CSV label."""
     lo, hi = az.hdi(samples, hdi_prob=HDI_PROB)
-    return dict(quantity=name, unit=unit, median=float(np.median(samples)),
+    return dict(key=key, quantity=name, unit=unit, median=float(np.median(samples)),
                 hdi_low=float(lo), hdi_high=float(hi))
+
+
+def stats_tree(rows: list[dict]) -> dict:
+    """The rows as nested dictionaries along their dotted keys: {"median", "hdi": [low, high]}."""
+    tree: dict = {}
+    for row in rows:
+        *path, leaf = row["key"].split(".")
+        node = tree
+        for part in path:
+            node = node.setdefault(part, {})
+        node[leaf] = {"median": row["median"], "hdi": [row["hdi_low"], row["hdi_high"]]}
+    return tree
 
 
 def main() -> None:
@@ -62,31 +75,31 @@ def main() -> None:
 
     # Chirp production and competition status (negative binomial, v3).
     status_nc = STATUS_DIR / "posterior.nc"
-    rows.append(summary("status: loser/winner count multiplier",
+    rows.append(summary("status.loser_winner", "status: loser/winner count multiplier",
                         np.exp(-draws(status_nc, "status", status_dim="winner")), "x"))
-    rows.append(summary("status: male/female count multiplier",
+    rows.append(summary("status.male_female", "status: male/female count multiplier",
                         np.exp(draws(status_nc, "sex", sex_dim="male")), "x"))
-    rows.append(summary("status: body size multiplier per SD",
+    rows.append(summary("status.size_per_sd", "status: body size multiplier per SD",
                         np.exp(draws(status_nc, "size_z")), "x"))
 
     # Echo responses and chirp occurrence around chasing offsets (intercept-only
     # Bernoulli GLMMs): probability for a typical recording.
-    for name, file in [
-        ("echo: loser chirp within 10 s after winner chirp",
+    for key, name, file in [
+        ("echo.loser_after_winner", "echo: loser chirp within 10 s after winner chirp",
          "stats_bayesian_logreg_echo_responses_new_loser_after_winner_obs_trace.nc"),
-        ("echo: winner chirp within 10 s after loser chirp",
+        ("echo.winner_after_loser", "echo: winner chirp within 10 s after loser chirp",
          "stats_bayesian_logreg_echo_responses_new_winner_after_loser_obs_trace.nc"),
-        ("offset: P(loser chirp in -3..13 s window)",
+        ("offset.loser", "offset: P(loser chirp in -3..13 s window)",
          "stats_bayesian_logreg_loser_chirps_around_chasing_offset_loser_trace.nc"),
-        ("offset: P(winner chirp in -3..13 s window)",
+        ("offset.winner", "offset: P(winner chirp in -3..13 s window)",
          "stats_bayesian_logreg_loser_chirps_around_chasing_offset_winner_trace.nc"),
-        ("before offset: P(loser chirps before offset)",
+        ("before_offset.loser", "before offset: P(loser chirps before offset)",
          "stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset_trace.nc"),
     ]:
         if not (PROC / file).exists():
             print(f"missing {PROC / file}")
             continue
-        rows.append(summary(name, invlogit(draws(PROC / file, "Intercept")), "probability"))
+        rows.append(summary(key, name, invlogit(draws(PROC / file, "Intercept")), "probability"))
 
     # Inter-chase interval Gamma GLMMs: factor on the expected interval when the
     # loser chirped.
@@ -108,17 +121,19 @@ def main() -> None:
         posterior = az.from_netcdf(path).posterior
         if var not in posterior:
             var = next(v for v in posterior.data_vars if v.startswith("loser_chirped"))
-        rows.append(summary(f"ICI {model}: exp(beta_chirp)",
+        rows.append(summary(f"ici.{model}", f"ICI {model}: exp(beta_chirp)",
                             np.exp(posterior[var].to_numpy().ravel()), "x"))
 
     # Random-effects comparison for M4 (appendix).
     crossed = GAMMA_DIR / "sensitivity_loserid_winnerid_recording__full__M4_causal_adj_full.nc"
     primary = GAMMA_DIR / "primary_recording__full__M4_causal_adj_full.nc"
-    rows.append(summary("RE crossed M4: exp(beta_chirp)",
+    rows.append(summary("re.crossed_M4", "RE crossed M4: exp(beta_chirp)",
                         np.exp(draws(crossed, "loser_chirped_fixed_m3p13")), "x"))
-    rows.append(summary("RE primary M4: sigma_recording", draws(primary, "1|recording_sigma"), "log scale"))
+    rows.append(summary("re.primary_M4_sigma.recording", "RE primary M4: sigma_recording",
+                        draws(primary, "1|recording_sigma"), "log scale"))
     for g in ["recording", "loser_id", "winner_id"]:
-        rows.append(summary(f"RE crossed M4: sigma_{g}", draws(crossed, f"1|{g}_sigma"), "log scale"))
+        rows.append(summary(f"re.crossed_M4_sigma.{g}", f"RE crossed M4: sigma_{g}",
+                            draws(crossed, f"1|{g}_sigma"), "log scale"))
 
     # Coupling models (negative binomial): per-doubling rate multipliers.
     prev, dur = "log_time_since_previous_chasing_c", "log_chasing_duration_c"
@@ -129,26 +144,41 @@ def main() -> None:
         ("C2_full_width_only", [prev, dur]),
     ]:
         for var in vars_:
-            label = "prev ICI" if var == prev else "duration"
-            rows.append(summary(f"coupling {model}: per doubling of {label}",
+            label, key = ("prev ICI", "prev_ici") if var == prev else ("duration", "duration")
+            rows.append(summary(f"coupling.{model}.{key}_per_doubling",
+                                f"coupling {model}: per doubling of {label}",
                                 2.0 ** draws(COUPLING_DIR / f"{model}.nc", var), "x"))
 
-    # Coupling figure: multipliers across the central 80% of each predictor.
+    # Coupling figure: multipliers across the central 80% of each predictor
+    # (10th to 90th percentile of the observations the coupling models were fitted to).
+    obs = prepare_data()
+    prev_p10, prev_p90 = np.quantile(obs["prev_ICI"], [0.10, 0.90])
+    dur_p10, dur_p90 = np.quantile(obs["D"], [0.10, 0.90])
     c2 = COUPLING_DIR / "C2_prev_ICI_and_D.nc"
     b_prev, b_dur = draws(c2, prev), draws(c2, dur)
-    m_prev = (PREV_ICI_P90 / PREV_ICI_P10) ** b_prev
-    m_dur = (DURATION_P90 / DURATION_P10) ** b_dur
-    rows.append(summary("coupling C2: prev ICI p10 -> p90", m_prev, "x"))
-    rows.append(summary("coupling C2: duration p10 -> p90", m_dur, "x"))
-    rows.append(summary("coupling C2: joint contrast (short ICI, long chase vs long ICI, short chase)",
+    m_prev = (prev_p90 / prev_p10) ** b_prev
+    m_dur = (dur_p90 / dur_p10) ** b_dur
+    rows.append(summary("coupling.C2_prev_ICI_and_D.prev_ici_p10_p90",
+                        "coupling C2: prev ICI p10 -> p90", m_prev, "x"))
+    rows.append(summary("coupling.C2_prev_ICI_and_D.duration_p10_p90",
+                        "coupling C2: duration p10 -> p90", m_dur, "x"))
+    rows.append(summary("coupling.C2_prev_ICI_and_D.joint_contrast",
+                        "coupling C2: joint contrast (short ICI, long chase vs long ICI, short chase)",
                         m_dur / m_prev, "x"))
 
     out = pd.DataFrame(rows)
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    out.to_csv(OUT_CSV, index=False)
+    out.drop(columns="key").to_csv(OUT_CSV, index=False)
     with pd.option_context("display.width", 200, "display.max_colwidth", 80):
-        print(out.round(4).to_string(index=False))
+        print(out.drop(columns="key").round(4).to_string(index=False))
     print(f"\nSaved {OUT_CSV}")
+    print(f"coupling corners: prev ICI {prev_p10:.2f} -> {prev_p90:.2f} s, "
+          f"duration {dur_p10:.2f} -> {dur_p90:.2f} s (n = {len(obs)})")
+
+    stats = stats_tree(rows)
+    stats["coupling"]["corners"] = {"prev_ici_s": [prev_p10, prev_p90],
+                                    "duration_s": [dur_p10, dur_p90], "n": len(obs)}
+    write_stats("posteriors", stats)
 
 
 if __name__ == "__main__":

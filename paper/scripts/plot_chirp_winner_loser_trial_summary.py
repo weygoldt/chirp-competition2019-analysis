@@ -1,5 +1,6 @@
 # Ported from chirp_competition d040123 (src/plot_chirp_winner_loser_trial_summary.py).
-# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); seeded jitter.
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); seeded jitter;
+# the printed per-trial medians also go to write_stats ("status_figure").
 import os
 import json
 from pathlib import Path
@@ -12,6 +13,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, SEED, figure
 from style import (
     letter_subplots,
@@ -87,6 +89,8 @@ def plot_data(ax):
     print(f"Median chirps win: {med_win}")
     print(f"Median chirps lose: {med_lose}")
     print(f"Median factor: {med_lose / med_win:.2f}")
+    stats = {"n_trials": len(winlose), "median_chirps": {"winner": med_win, "loser": med_lose},
+             "median_ratio_loser_winner": med_lose / med_win}
 
     # paired scatter with connecting lines
     jitter = np.random.default_rng(SEED).uniform(-0.05, 0.05, len(winlose))
@@ -231,6 +235,7 @@ def plot_data(ax):
     ax.set_xticklabels(["Winner", "Loser"])
     ax.set_ylabel("Chirp count")
     ax.set_xlabel("")
+    return stats
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +318,7 @@ def plot_forest(ax):
 # ---------------------------------------------------------------------------
 def main():
     fig, axes = setup_plot()
-    plot_data(axes[0])
+    stats = plot_data(axes[0])
     plot_forest(axes[1])
 
     letter_subplots(xoffset=[-0.3, -0.3], yoffset=[0.98, 0.95])
@@ -323,6 +328,7 @@ def main():
 
     for fmt in formats:
         fig.savefig(targetpath.with_suffix(f".{fmt}"), dpi=300, bbox_inches="tight")
+    write_stats("status_figure", stats)
 
     plt.show()
 

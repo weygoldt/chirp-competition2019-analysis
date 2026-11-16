@@ -1,5 +1,7 @@
 # Ported from chirp_competition d040123 (src_paper/plot_event_trial_progression_correlations_15_fish.py).
-# Changes: inputs from PROCESSED; figure (pdf/png/svg) via paper_config.figure().
+# Changes: inputs from PROCESSED; figure (pdf/png/svg) via paper_config.figure(); print_summary (a
+# byte-identical copy of the all-fish script's) imported from there, its numbers go to write_stats
+# ("allocation_15_fish").
 import os
 import json
 from pathlib import Path
@@ -10,7 +12,9 @@ import numpy as np
 import seaborn as sns
 from scipy.stats import gaussian_kde
 
+from manuscript_stats import write_stats
 from paper_config import PROCESSED, figure, processed
+from plot_event_trial_progression_correlations_all_fish import print_summary
 from style import (
     baseline_color,
     letter_subplots,
@@ -346,84 +350,6 @@ def plot_cumulative(axes, data):
             ax.set_ylabel("")
 
 
-def print_summary(data, timing_data):
-    """Print manuscript-ready summary statistics to the terminal."""
-    dark_period_min = 3 * 60  # 3 h dark period in minutes
-
-    # --- Per-trial event counts and rates ---
-    keys = ["chasing", "contact", "chirp$_{lose}$", "chirp$_{win}$"]
-    names = ["Chasing", "Contact", "Loser chirps", "Winner chirps"]
-
-    print("\n" + "=" * 70)
-    print("MANUSCRIPT SUMMARY STATISTICS")
-    print("=" * 70)
-
-    per_trial_counts = {}
-    for key, name in zip(keys, names):
-        counts = np.array(data[key]["event_count"])
-        total = int(np.sum(counts))
-        rates = counts / dark_period_min  # events per minute per trial
-        per_trial_counts[key] = counts
-        print(f"\n--- {name} ---")
-        print(f"  Total events:       {total}")
-        print(f"  Trials:             {len(counts)}")
-        print(
-            f"  Per-trial count:    median={np.median(counts):.0f}, "
-            f"range=[{np.min(counts):.0f}, {np.max(counts):.0f}]"
-        )
-        print(
-            f"  Rate [events/min]:  median={np.median(rates):.2f}, "
-            f"range=[{np.min(rates):.2f}, {np.max(rates):.2f}], "
-            f"IQR=[{np.percentile(rates, 25):.2f}, {np.percentile(rates, 75):.2f}]"
-        )
-
-    # --- Rate dynamics (normalized rate at start vs end of dark period) ---
-    print("\n--- Normalised rate: first hour vs last hour of dark period ---")
-    for key, name in zip(keys, names):
-        kde_time = np.array(data[key]["kde_times"]) / 3600
-        kde_ratios = np.array(data[key]["kde_ratios"])
-        first_hour = kde_ratios[:, kde_time <= 1]
-        last_hour = kde_ratios[:, (kde_time >= 2) & (kde_time <= 3)]
-        med_first = np.median(np.median(first_hour, axis=1))
-        med_last = np.median(np.median(last_hour, axis=1))
-        print(
-            f"  {name:20s}  first_h median={med_first:.2f}, "
-            f"last_h median={med_last:.2f}"
-        )
-
-    # --- Timing distributions (pooled across trials) ---
-    timing_keys = [
-        ("chasing_durations", "Chasing durations [s]"),
-        ("inter_chasing_intervals", "Inter-chasing intervals [s]"),
-        ("inter_contact_intervals", "Inter-contact intervals [s]"),
-        ("winner_inter_chirp_intervals", "Winner inter-chirp intervals [s]"),
-        ("loser_inter_chirp_intervals", "Loser inter-chirp intervals [s]"),
-    ]
-
-    print("\n--- Timing distributions (pooled across all trials) ---")
-    for tkey, label in timing_keys:
-        pooled = []
-        for trial in timing_data:
-            pooled.extend(trial[tkey])
-        pooled = np.array(pooled)
-        kde = gaussian_kde(pooled)
-        xkde = np.linspace(max(0, np.min(pooled)), np.max(pooled), 5000)
-        mode = xkde[np.argmax(kde(xkde))]
-        print(f"\n  {label}")
-        print(
-            f"    n={len(pooled)}, min={np.min(pooled):.1f}, max={np.max(pooled):.1f}"
-        )
-        print(
-            f"    median={np.median(pooled):.1f}, "
-            f"mean={np.mean(pooled):.1f}, "
-            f"mode≈{mode:.1f}"
-        )
-        print(
-            f"    IQR=[{np.percentile(pooled, 25):.1f}, "
-            f"{np.percentile(pooled, 75):.1f}]"
-        )
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -433,7 +359,7 @@ def main():
         timing = json.load(f)
 
     # --- Summary statistics for manuscript ---
-    print_summary(data, timing)
+    write_stats("allocation_15_fish", print_summary(data, timing))
 
     # --- Main figure ---
     fig, bar_axes, rate_axes, timing_axes = setup_main_plot()

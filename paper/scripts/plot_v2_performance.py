@@ -53,7 +53,9 @@ Environment: ``paper/.venv``::
 
     cd paper && unset VIRTUAL_ENV && uv run python scripts/plot_v2_performance.py
 
-Runtime: ~15 s cold, ~3 s warm. Prints every number it plots.
+Runtime: ~15 s cold, ~3 s warm. Prints every number it plots and writes
+them with write_stats ("v2_performance"; bins and thresholds as word keys,
+e.g. ``agreement.t0_8``, ``benchmark.dualhead.by_snr.below_m20_db``).
 """
 
 from __future__ import annotations
@@ -69,6 +71,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, NullFormatter, NullLocator
 
 import v2_fig_common as C
+from manuscript_stats import write_stats
 from style import loser_color, set_light_style, winner_color
 
 NAME = "plot_v2_performance"
@@ -77,11 +80,15 @@ THR = C.OPERATING
 REAL_V1 = C.CHIRP_DATA / "labels" / "real_v1" / "report"
 REAL_DATASET = "2019"  # the 2019/2020 tube competitions (the paper's data)
 MARKED = (0.5, 0.9)  # thresholds marked in A besides the operating one
+# bins as labelled in the input tables, and as keys of the stats
 STATUS_BINS = ["0.5-0.7", "0.7-0.9", "0.9-1"]
+STATUS_KEYS = ["score_0_5_to_0_7", "score_0_7_to_0_9", "score_0_9_to_1"]
 STATUS_CENTRES = [0.6, 0.8, 0.95]  # centres of the score bins in D
 DF_BINS = ["0-10", "10-25", "25-50", "50-100", "100+"]
+DF_KEYS = ["df_0_to_10_hz", "df_10_to_25_hz", "df_25_to_50_hz", "df_50_to_100_hz", "df_100_hz_up"]
 DF_POS = [5.0, 15.8, 35.4, 70.7, 141.0]  # geometric bin centres; open bins at the edge
 SNR_BINS = ["<-20 dB", "-20 to -10 dB", "-10 to 0 dB", "0-10 dB", ">=10 dB"]
+SNR_KEYS = ["below_m20_db", "m20_to_m10_db", "m10_to_0_db", "0_to_10_db", "10_db_up"]
 SNR_POS = [-25.0, -15.0, -5.0, 5.0, 15.0]
 OP_MS = 4.2  # operating-point marker
 PT_MS = 3.6  # proportion markers
@@ -89,6 +96,17 @@ PT_MS = 3.6  # proportion markers
 
 def fmt_thr(t: float) -> str:
     return f"{t:g}"
+
+
+def thr_key(t: float) -> str:
+    """A threshold as a stats key: 0.8 -> t0_8."""
+    return "t" + fmt_thr(t).replace(".", "_")
+
+
+def by_bin(keys, k, n, p, lo, hi) -> dict:
+    """Per bin: successes, items, proportion and its 95 % interval."""
+    return {key: {"k": a, "n": b, "p": c, "ci_95": [d, e]}
+            for key, a, b, c, d, e in zip(keys, k, n, p, lo, hi, strict=True)}
 
 
 # ---------------------------------------------------------------------------
@@ -135,14 +153,13 @@ def agreement_panel(ax, report):
     ax.set_xlabel("Expert's chirps found")
     ax.set_ylabel("Detections judged chirps")
     sns.despine(ax=ax, offset=4, trim=False)
-    as_dict = lambda v, lo, hi: {fmt_thr(t): {"value": float(a), "ci": [float(b), float(c)]}  # noqa: E731
-                                 for t, a, b, c in zip(thr, v, lo, hi, strict=True)}
     report["agreement"] = {
-        "dataset": REAL_DATASET, "thresholds": thr.tolist(), "marked": [*MARKED, THR],
-        "detections_judged_chirps": as_dict(y, ylo, yhi),
-        "expert_chirps_found": as_dict(x, xlo, xhi),
-        "n_candidates": {fmt_thr(t): int(prec.loc[t, "n"]) for t in thr},
+        "thresholds": thr.tolist(), "marked": [*MARKED, THR],
         "windows": int(rec.loc[thr[0], "windows"]), "marks": int(rec.loc[thr[0], "marks"]),
+        **{thr_key(t): {"detections_judged_chirps": {"value": y[i], "ci_95": [ylo[i], yhi[i]]},
+                        "expert_chirps_found": {"value": x[i], "ci_95": [xlo[i], xhi[i]]},
+                        "n_candidates": int(prec.loc[t, "n"])}
+           for i, t in enumerate(thr)},
     }
 
 
@@ -158,7 +175,10 @@ def status_panel(ax, report):
         ax.errorbar(xx, p, yerr=[p - g.ci_low.to_numpy(), g.ci_high.to_numpy() - p], fmt="o",
                     ms=PT_MS, mfc=col, mec="k", mew=0.6, ecolor=col, elinewidth=0.9,
                     capsize=0, zorder=4, clip_on=False, label=status)
-        out[status] = g[["n", "N_hat", "precision", "ci_low", "ci_high"]].round(4).to_dict(orient="index")
+        # "precision" of the session's table = share of detections the expert judged chirps
+        out[status] = {key: {"n": r.n, "n_hat": r.N_hat, "judged_chirps": r.precision,
+                             "ci_95": [r.ci_low, r.ci_high]}
+                       for key, r in zip(STATUS_KEYS, g.itertuples(), strict=True)}
     # score bins as points at their centres between the bin edges (ticks)
     ax.set_xticks([0.5, 0.7, 0.9, 1.0])
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:g}"))
@@ -178,14 +198,15 @@ def status_panel(ax, report):
 # simulated: detection
 # ---------------------------------------------------------------------------
 def pr_panel(ax, models, base, report):
+    report["sim"] = {}
     for m in models:
         curve = pd.read_csv(base(m) / "pr_curve.csv")
         curve = curve[curve["level"] == "all"].sort_values("threshold")
         # the operating point: the curve's row at the threshold (the
         # evaluation re-matches at every threshold)
         op = curve[curve.threshold >= THR].iloc[0]
-        report[f"sim/{m}"] = {k: float(op[k]) for k in ("threshold", "tp", "fp", "fn",
-                                                       "precision", "recall")}
+        report["sim"][m] = {k: float(op[k]) for k in ("threshold", "tp", "fp", "fn",
+                                                     "precision", "recall")}
         col = C.MODEL_COLORS[m]
         ax.plot(curve["recall"], curve["precision"], color=col,
                 lw=1.5 if m == "dualhead" else 1.0, zorder=3 if m == "dualhead" else 2,
@@ -232,11 +253,10 @@ def benchmark_panel(ax, report):
         g = t.groupby("snr_bin")[name].agg(["sum", "size"]).reindex(SNR_BINS)
         p, lo, hi = proportion_points(ax, SNR_POS, g["sum"].to_numpy(float),
                                       g["size"].to_numpy(float), C.MODEL_COLORS[key], dx=dx)
-        out[name] = {"by_snr": dict(zip(SNR_BINS, np.round(p, 4).tolist(), strict=True)),
-                     "lo": np.round(lo, 4).tolist(), "hi": np.round(hi, 4).tolist(),
-                     "n": g["size"].astype(int).tolist(), "overall": float(t[name].mean())}
-    for name in ("human_emitter_ok", "model_emitter_ok"):
-        out[name] = float(t[name].astype(bool).mean())
+        out[key] = {"recall": float(t[name].mean()),
+                    "by_snr": by_bin(SNR_KEYS, g["sum"], g["size"], p, lo, hi)}
+    out["human"]["emitter_ok"] = float(t["human_emitter_ok"].astype(bool).mean())
+    out["dualhead"]["emitter_ok"] = float(t["model_emitter_ok"].astype(bool).mean())
     n = t.groupby("snr_bin").size().reindex(SNR_BINS)
     n_row(ax, SNR_POS, n, 0.505, fmt="{}")
     ax.set_xlim(-30, 20)
@@ -299,14 +319,13 @@ def benchmark_emitter_panel(ax, report):
         p, lo, hi = proportion_points(ax, DF_POS, g["sum"].to_numpy(float),
                                       g["size"].to_numpy(float), C.MODEL_COLORS[key],
                                       dx=dx, logx=True)
-        out[key] = {"by_df": dict(zip(DF_BINS, np.round(p, 4).tolist(), strict=True)),
-                    "lo": np.round(lo, 4).tolist(), "hi": np.round(hi, 4).tolist(),
-                    "n_called": g["size"].astype(int).tolist(),
-                    "overall": float(d[ok[key]].astype(bool).mean()), "n": int(len(d))}
+        # n of a bin: the chirps of that bin this one called chirps
+        out[key] = {"overall": float(d[ok[key]].astype(bool).mean()), "n": int(len(d)),
+                    "by_df": by_bin(DF_KEYS, g["sum"], g["size"], p, lo, hi)}
     n = t.groupby("df_bin", observed=False).size().reindex(DF_BINS)
     n_row(ax, DF_POS, n, 0.305, fmt="{}")
     df_axis(ax, ylabel=False)
-    out["n_true_chirps_per_bin"] = n.astype(int).tolist()
+    out["n_true_chirps_per_bin"] = dict(zip(DF_KEYS, n.astype(int).tolist(), strict=True))
     out["n_df_unknown"] = n_unknown
     out["threshold"] = THR
     report["benchmark_emitter"] = out
@@ -327,7 +346,7 @@ def assignment_panel(ax, report):
     # closest pair of any two tracks)
     a = a[a["emitter_df_bin"].isin(DF_BINS)]
     twofish = {k: float(a[k].mean()) for k in allp}
-    rows = []
+    by_df = {}
     for name, col, dx, filled in (
         ("head_correct", C.MODEL_COLORS["dualhead"], -0.025, True),
         ("edge_offset_correct", C.MODEL_COLORS["edge"], 0.025, False),
@@ -336,8 +355,7 @@ def assignment_panel(ax, report):
         p, lo, hi = proportion_points(ax, DF_POS, g["sum"].to_numpy(float),
                                       g["size"].to_numpy(float), col, dx=dx, logx=True,
                                       filled=filled)
-        rows.append(pd.DataFrame({"method": name, "df_bin": DF_BINS, "k": g["sum"],
-                                  "n": g["size"], "p": p, "lo": lo, "hi": hi}))
+        by_df[name] = by_bin(DF_KEYS, g["sum"], g["size"], p, lo, hi)
     n = a.groupby("emitter_df_bin").size().reindex(DF_BINS)
     n_row(ax, DF_POS, n, 0.305)
     df_axis(ax)
@@ -349,10 +367,10 @@ def assignment_panel(ax, report):
               frameon=False, borderaxespad=0.1, handletextpad=0.4, handlelength=1.4)
     report["assignment"] = {
         "threshold": THR,
-        "table": pd.concat(rows).round(4).to_dict(orient="records"),
+        "by_df": by_df,
         "all_tp": allp,
         "n_all_tp": n_all,
-        "n_tp_at_0.5": n_tp_05,
+        "n_tp_evaluation": n_tp_05,  # true positives of the evaluation (at 0.5)
         "emitter_df_known": twofish,
         "n_emitter_df_known": int(len(a)),
         "offset_hz": meta["offset_hz"],
@@ -383,22 +401,23 @@ def decoder_panel(ax, sim, param, scale, unit, lims, ticks, report):
     ax.set_aspect("equal")
     sns.despine(ax=ax, offset=4, trim=False)
     err = np.abs(est - true)
-    out = {
+    out = {  # errors in `unit`
         "threshold": THR,
         "n_sim": int(len(true)),
         "median_abs_error": float(np.median(err)),
         "median_rel_error": float(np.median(err / true)),
         "median_signed_error": float(np.median(est - true)),
-        "unit": unit,
     }
-    report[f"decoder/{param}"] = out
+    # keyed by the parameter in the unit of the errors: height_hz, fwhm_ms
+    report.setdefault("decoder", {})[f"{param.rsplit('_', 1)[0]}_{unit.lower()}"] = out
     return out
 
 
 def main() -> None:
     set_light_style()
     C.rc_tweaks()
-    report: dict = {"operating_threshold": THR, "detections": C.DETECTIONS}
+    print(f"detections {C.DETECTIONS}, operating threshold {THR}, real data {REAL_DATASET}")
+    report: dict = {"operating_threshold": THR}
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
 
     # layout [cm]: one row per pipeline stage: detection (A-D: simulated A, B;
@@ -418,7 +437,7 @@ def main() -> None:
     # --- detection -------------------------------------------------------------
     pr_panel(ax_a, ["dualhead"], lambda m: C.PP_EVAL[m] / "sim_test_after", report)
     ax_a.set_title("Simulated", loc="left", pad=6)
-    op = report["sim/dualhead"]
+    op = report["sim"]["dualhead"]
     C.annotate(ax_a, rf"score $\geq$ {fmt_thr(THR)}", xy=(op["recall"], op["precision"]),
                xytext=(0.865, 0.905), color="k", rad=0.2, shrink_b=4)
     benchmark_panel(ax_b, report)
@@ -464,6 +483,7 @@ def main() -> None:
     paths = C.save(fig, NAME)
     print(json.dumps(report, indent=1, default=float))
     print("\n".join(map(str, paths)))
+    write_stats("v2_performance", report)
 
 
 if __name__ == "__main__":
