@@ -63,14 +63,19 @@ log = logging.getLogger("v2_fig_extract")
 CHIRP_DATA = Path("/mnt/data1/chirp_v2")
 # the detections follow PAPER_DETECTIONS (paper_config): the production run,
 # or its dataset patch with the trial fish's track gaps filled
-RUNS = {
-    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet"),
+RUNS = {  # run directory, chirp table, run holding tracks_gapfill.npz (or None)
+    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet", None),
     "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill",
-                       "chirps_rtdetr_gapfill.parquet"),
+                       "chirps_rtdetr_gapfill.parquet",
+                       "competition2019_v2_20261113_gapfill"),
+    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080",
+                            "chirps_rtdetr_gapfill_t080.parquet",
+                            "competition2019_v2_20261113_gapfill"),
 }
 DETECTIONS = paper_config.DETECTIONS
 RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
 PARQUET = RUNS[DETECTIONS][1]
+TRACKS_RUN = (CHIRP_DATA / "detections" / RUNS[DETECTIONS][2]) if RUNS[DETECTIONS][2] else None
 BUNDLE = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "final" / "bundle"
 REC_2019 = Path("/mnt/data2/2019_tube_competition")
 SIM_V4 = Path("~/chirp_v2_fast/datasets/sim_v4").expanduser()
@@ -95,6 +100,11 @@ SNIPPETS: dict[str, tuple[str, float, float]] = {
     "g_close_15388": ("2019-12-09-10_00", 15387.9, 15389.1),
     "g_close_9394": ("2020-03-13-10_00", 9393.9, 9395.1),
     "g_missed_1208": ("2019-12-09-10_00", 1207.9, 1209.1),
+    # candidates for Fig. 1D (duplicate) at operating threshold 0.8: both
+    # boxes >= 0.8, in the analysed trials (proposals, not plotted)
+    "f1_dup_c1": ("2019-12-09-10_00", 9953.6, 9954.8),
+    "f1_dup_c2": ("2019-12-02-10_00", 1196.5, 1197.7),
+    "f1_dup_c3": ("2019-11-27-10_00", 4553.5, 4554.7),
 }
 
 # Fig. 1E: chirps of the f1_tile recording whose traces are extracted
@@ -117,8 +127,8 @@ def _run_tracks(rec_name: str) -> list[tuple[int, np.ndarray, np.ndarray, np.nda
     for tr in load_tracks(REC_2019 / rec_name):
         out[int(tr.ident)] = (np.asarray(tr.times_s, float), np.asarray(tr.freqs_hz, float),
                               np.zeros(len(tr.times_s), bool))
-    patched = RUN / rec_name / "tracks_gapfill.npz"
-    if DETECTIONS == "rtdetr_gapfill" and patched.exists():
+    patched = TRACKS_RUN / rec_name / "tracks_gapfill.npz" if TRACKS_RUN else None
+    if patched is not None and patched.exists():
         z = np.load(patched)
         times = z["times"][z["idx_v"]]
         for ident in np.unique(z["ident_v"][np.isfinite(z["ident_v"])]):
@@ -182,6 +192,7 @@ def snippets(names: list[str] | None = None) -> None:
             "weights_sha256": bundle.weights_sha256,
             "detections": DETECTIONS,
             "run": str(RUN),
+            "tracks_run": str(TRACKS_RUN) if TRACKS_RUN else "wavetracker",
         }
         np.savez_compressed(
             OUT / f"{name}.npz",
@@ -210,8 +221,8 @@ def traces() -> None:
         row = table.set_index("chirp_id").loc[chirp_id]
         # the harvest uses the wavetracker tracks; with the gap-filled run this
         # is only valid if the chirp does not lie in a filled gap of its fish
-        patched = RUN / rec_name / "tracks_gapfill.npz"
-        if patched.exists():
+        patched = TRACKS_RUN / rec_name / "tracks_gapfill.npz" if TRACKS_RUN else None
+        if patched is not None and patched.exists():
             g = np.load(patched)
             inside = ((g["gap_fish_id"] == row.track_id) & (g["gap_action"] == "filled")
                       & (g["gap_start_s"] < row.t_end_s) & (g["gap_end_s"] > row.t_start_s))

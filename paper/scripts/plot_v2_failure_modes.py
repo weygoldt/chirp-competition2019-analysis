@@ -12,7 +12,7 @@ failures that can be checked by eye, or against hand labels, are marked:
 
 A   2019-12-09-10_00, 4312-4328 s, inside a hand-labelled test region:
     hand labels (triangles above the image) against detections. One faint
-    labelled chirp scored 0.33 and is missed at the 0.5 threshold (zoom at
+    labelled chirp scored 0.33 and is below the operating threshold (zoom at
     right, with the crop's own display contrast); two detections have no
     label ("?").
 B   2019-12-04-10_00, 7468-7488 s: the wavetracker track of the lower fish
@@ -114,9 +114,14 @@ def panel_labelled(ax, ax_zoom, fig, report):
     lab_c, unmatched_lab, unmatched_det = match_labels(labels, kept)
     C.label_marks(ax, lab_c - t0)
     miss = rows.set_index("chirp_id").loc[MISSED_A]
+    if miss.operating:
+        msg = f"chirp {MISSED_A} (score {miss.score:.2f}) is not below the threshold {C.OPERATING}"
+        raise ValueError(msg)
     C.draw_missed(ax, miss, t0)
+    DRAWN.add("missed")
     # "?" above the highest box at that time (clear of every box edge)
     for r in unmatched_det.itertuples():
+        DRAWN.add("qmark")
         near = kept[(kept.t_start_s < r.t_center_s + 0.06) & (kept.t_end_s > r.t_center_s - 0.06)]
         ax.text(r.t_center_s - t0, float(near.f_high_hz.max()) + 6, "?", ha="center",
                 va="bottom", fontweight="bold", **C.ANNOT)
@@ -188,7 +193,7 @@ def panel_trackgap(ax, report):
     rec_rows = C.detections(m["recording"])
     if C.GAPFILL:
         # the gap and what the patch did with it: the run's patched tracks
-        z = np.load(C.RUN / m["recording"] / "tracks_gapfill.npz")
+        z = np.load(C.TRACKS_RUN / m["recording"] / "tracks_gapfill.npz")
         k = int(np.flatnonzero((z["gap_fish_id"] == lower)
                                & (np.abs(z["gap_start_s"] - end) < 0.01))[0])
         gap = {"start_s": float(z["gap_start_s"][k]), "end_s": float(z["gap_end_s"][k]),
@@ -346,8 +351,8 @@ def main() -> None:
         ("label", {}, "hand label"),
         ("qmark", {}, "no hand label"),
     ]
-    if "unassigned" not in DRAWN:
-        items = [it for it in items if it[2] != "unassigned"]
+    needed = {"unassigned": "unassigned", "below threshold": "missed", "no hand label": "qmark"}
+    items = [it for it in items if it[2] not in needed or needed[it[2]] in DRAWN]
     width = C.key_strip(fig, 0.0, H - 0.3, items, measure=True)
     C.key_strip(fig, (W - width) / 2, H - 0.3, items)
     report["key"] = [it[2] for it in items]

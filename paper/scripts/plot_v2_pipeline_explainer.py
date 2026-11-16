@@ -24,7 +24,9 @@ C   assignment of two chirps 61 ms apart whose boxes overlap the other
     fish's baseline: each goes to the live track nearest its predicted
     emitter EODf, within 20 Hz (shaded);
 D   post-processing removes a box on the second harmonic (the first chirp of
-    B) and a duplicate box on one chirp (2020-03-18-10_34, a draw not among
+    B) and a duplicate box on one chirp (2019-12-02-10_00, chirps 244 kept /
+    245 removed, both above the operating threshold of 0.8; earlier example
+    2020-03-18-10_34, a draw not among
     the 33 analysed trials);
 E   decoder estimates (calibrated, +- 1 calibrated SD) of the first small
     chirp of B and the big chirp of C, next to their instantaneous-frequency
@@ -62,7 +64,8 @@ NAME = "plot_v2_pipeline_explainer"
 REC = "2020-05-29-10_00"
 TILE = (10850.4, 10853.6)
 SMALL, BIG, PAIR_SMALL, HARMONIC = 2085, 2086, 2087, 2084
-DUP_KEPT, DUP_DROPPED = 49386, 49385
+# duplicate example (author's choice 2026-11-16): both boxes >= 0.8
+DUP_SNIPPET, DUP_KEPT, DUP_DROPPED = "f1_dup_c2", 244, 245
 FRONT_END = "f1_fe_e"  # 2020-06-05-10_00, 89.9-91.1 s: fish 29 Hz apart
 BAND = (590.0, 1190.0)  # B and C: the fundamentals of the two fish
 
@@ -282,7 +285,7 @@ def panel_harmonic(ax, snip, rows, colors):
 
 
 def panel_duplicate(ax):
-    snip = C.load_snippet("f1_dup")
+    snip = C.load_snippet(DUP_SNIPPET)
     rows = C.window(snip, snip["meta"]["t_start_s"], snip["meta"]["t_end_s"])
     by = rows.set_index("chirp_id")
     k, d = by.loc[DUP_KEPT], by.loc[DUP_DROPPED]
@@ -463,13 +466,16 @@ def main() -> None:
                        (ax_e1, "E", 1.25, 0.25)])
 
     paths = C.save(fig, NAME)
-    shown = by_id.loc[[SMALL, BIG, PAIR_SMALL, HARMONIC, 2088]]
-    cols = ["t_start_s", "t_end_s", "f_low_hz", "f_high_hz", "score", "emitter_hz",
-            "track_id", "track_hz", "emitter_track_df_hz", "assign_confidence",
+    # every stored row of the tile at score >= 0.5 (the operating column says
+    # which ones the run keeps at its threshold)
+    allrows = C.window(snip, t0, t1)
+    shown = allrows[allrows.score >= 0.5].set_index("chirp_id")
+    cols = ["t_start_s", "t_end_s", "f_low_hz", "f_high_hz", "score", "operating",
+            "emitter_hz", "track_id", "track_hz", "emitter_track_df_hz", "assign_confidence",
             "pp_drop_reason", "pp_harmonic_of_track", "height_hz", "height_sd_hz",
             "fwhm_s", "fwhm_sd_s", "width10_s", "width10_sd_s", "undershoot_hz",
             "undershoot_sd_hz"]
-    print(f"{REC} tile {TILE}:")
+    print(f"{REC} tile {TILE}, operating threshold {C.OPERATING}:")
     print(shown[cols].round(4).to_string())
     print("trace baselines:", {k: round(v["trace_baseline_hz"], 2) for k, v in tmeta.items()})
     print(json.dumps(report, indent=1, default=float))

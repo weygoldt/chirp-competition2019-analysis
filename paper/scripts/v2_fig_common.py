@@ -42,18 +42,39 @@ FIG_WIDTH = 17.4 * CM  # width of the manuscript's full-width figures
 
 CHIRP_DATA = Path("/mnt/data1/chirp_v2")
 # the detections follow PAPER_DETECTIONS (paper_config): the production run,
-# or its dataset patch with the trial fish's track gaps filled (interior gaps
-# 10-300 s with an EODf jump <= 15 Hz, linear interpolation)
+# its dataset patch with the trial fish's track gaps filled (interior gaps
+# 10-300 s with an EODf jump <= 15 Hz, linear interpolation), and that patch
+# at another operating threshold. Per run: directory, chirp table, and the run
+# whose tracks_gapfill.npz holds the patched trial-fish tracks (None: the
+# wavetracker tracks as they are)
 RUNS = {
-    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet"),
+    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet", None),
     "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill",
-                       "chirps_rtdetr_gapfill.parquet"),
+                       "chirps_rtdetr_gapfill.parquet",
+                       "competition2019_v2_20261113_gapfill"),
+    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080",
+                            "chirps_rtdetr_gapfill_t080.parquet",
+                            "competition2019_v2_20261113_gapfill"),
 }
 DETECTIONS = paper_config.DETECTIONS
-GAPFILL = DETECTIONS == "rtdetr_gapfill"
 SOURCE_RUN = CHIRP_DATA / "detections" / RUNS["rtdetr"][0]
 RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
 PARQUET = RUNS[DETECTIONS][1]
+TRACKS_RUN = (CHIRP_DATA / "detections" / RUNS[DETECTIONS][2]) if RUNS[DETECTIONS][2] else None
+GAPFILL = TRACKS_RUN is not None
+
+
+def _operating_threshold() -> float:
+    """The run's operating threshold (meta.json of its recordings; one value)."""
+    values = {json.loads(m.read_text())["operating_threshold"]
+              for m in sorted(RUN.glob("*/meta.json"))}
+    if len(values) != 1:
+        msg = f"{RUN}: operating thresholds {sorted(values)}"
+        raise ValueError(msg)
+    return float(values.pop())
+
+
+OPERATING = _operating_threshold()  # the run's operating threshold
 REAL_EVAL = CHIRP_DATA / "eval" / "real_labels_365"
 REAL_LABELS = REAL_EVAL / "labels"
 PP_EVAL = {
@@ -67,7 +88,6 @@ TRIAL_SUMMARY = Path("/mnt/data2/2019_tube_competition/trial_summary.csv")
 SNIPPETS = paper_config.PROCESSED / "v2_figures"
 FIGURES = paper_config.FIGURES
 
-OPERATING = 0.5  # the run's operating threshold
 TOLERANCE_HZ = 20.0  # assignment tolerance of the run
 
 # ---------------------------------------------------------------------------
