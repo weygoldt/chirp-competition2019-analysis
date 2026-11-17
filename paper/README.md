@@ -127,14 +127,17 @@ script owns each namespace:
 paper/run_all.sh                                          # writes $PAPER_OUT/stats/
 python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t080   # -> manuscript/stats.json
 python3 paper/scripts/manuscript_stats.py check                         # what changed since
+# the sensitivity runs of Table S1 (detection thresholds 0.5 and 0.9)
+python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill --out manuscript/stats_t050.json
+python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t090 --out manuscript/stats_t090.json
 ```
 
 `collect` refuses stats written by uncommitted code in `paper/scripts`;
 `stats.json` records per input file its sha256, script and commit. The
 manuscript reads it with `#stat("namespace.key…", digits: …)` (`stats.typ`),
 and its `make` runs `check` first and stops on any difference, so the text
-cannot build on numbers that no longer match the outputs. Commit
-`manuscript/stats.json` in the manuscript submodule, then the submodule
-pointer here. `compare_runs.py` tabulates the same stats files across the
+cannot build on numbers that no longer match the outputs; `#stat(…, run:
+"0.5")` reads a sensitivity run's file instead (Table S1). Commit the stats
+files in the manuscript submodule, then the submodule pointer here. `compare_runs.py` tabulates the same stats files across the
 runs (0.5, 0.8, 0.9) in `paper/output/compare/comparison.md`.
 
