@@ -90,7 +90,7 @@ SPEC_HOP_S = 0.001
 SPEC_NFFT = 4096
 BASELINE_LOBE_HZ = 2 / SPEC_WINDOW_S  # half width of the window's main lobe (78 Hz)
 DB_RANGE = 30
-EXAMPLE_MARKER = dict(marker="o", s=22, edgecolor="w", linewidths=0.8)  # colored by undershoot
+EXAMPLE_MARKER = dict(marker="o", s=22, edgecolor="k", linewidths=0.8)  # colored by undershoot
 
 
 # ---------------------------------------------------------------------------
