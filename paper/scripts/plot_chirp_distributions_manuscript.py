@@ -2,7 +2,7 @@
 # v1 plotted the spectrogram boxes (width t2 - t1, height f2 - emitter EODf, trough f1 - emitter
 # EODf). v2 boxes span the long spectrogram window around every chirp (widths 200-700 ms), so the
 # figure now shows the chirp-parameter decoder's calibrated estimates (the values the Methods
-# report): FWHM, height and undershoot (as the frequency below the baseline, -undershoot), on
+# report): width at 10 % of the height, height and undershoot (as the frequency below the baseline, -undershoot), on
 # linear axes, of the chirps inside the decoder's validated domain (params_ok; the others are
 # counted). Axes and color scale end at a high quantile of the shown chirps (AXIS_QUANTILE),
 # rounded up to a round number; the chirps beyond them are counted. Rows: v2 parquet of PAPER_DETECTIONS
@@ -29,7 +29,7 @@ set_light_style()
 
 cmap = sns.color_palette("mako", as_cmap=True)
 
-# Axes (FWHM, height) and color scale (undershoot) end at this quantile of the shown chirps,
+# Axes (width, height) and color scale (undershoot) end at this quantile of the shown chirps,
 # rounded up to a round number: the few extreme estimates do not set the scale.
 AXIS_QUANTILE = 0.995
 ROUND_NUMBERS = (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10)
@@ -74,7 +74,7 @@ def setup_plot():
     scatter_right.spines["bottom"].set_visible(False)
 
     for ax in (scatter_ax, hex_ax):
-        ax.set_xlabel("Chirp FWHM [ms]")
+        ax.set_xlabel("Chirp width at 10 \\% height [ms]")  # usetex: \\%
     scatter_ax.set_ylabel("Chirp height [Hz]")
 
     plt.subplots_adjust(
@@ -133,28 +133,28 @@ def distribution(values: np.ndarray) -> dict:
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
-def plot_scatter(axes, limits, fwhm, height, undershoot):
+def plot_scatter(axes, limits, width, height, undershoot):
     main_ax, top_ax, right_ax, cb_ax = axes
 
     below = -undershoot  # Hz relative to the baseline: strong undershoots dark, none bright
     order = np.argsort(below)[::-1]  # strong undershoots on top
-    points = main_ax.scatter(fwhm[order], height[order], c=below[order], cmap=cmap,
+    points = main_ax.scatter(width[order], height[order], c=below[order], cmap=cmap,
                              norm=Normalize(-limits["undershoot"], 0), s=1, linewidths=0,
                              rasterized=True)
-    main_ax.set_xlim(0, limits["fwhm"])
+    main_ax.set_xlim(0, limits["width"])
     main_ax.set_ylim(0, limits["height"])
 
-    circle_annotate(main_ax, (30, 100), (0, 0), "2")  # small and short
+    circle_annotate(main_ax, (40, 130), (0, 0), "2")  # small and short
     circle_annotate(main_ax, (25, 480), (0, 0), "1")  # large and short
-    circle_annotate(main_ax, (100, 330), (0, 0), "4")  # large and long
+    circle_annotate(main_ax, (100, 330), (0, 0), "3")  # large and long
 
-    main_ax.text(0.97, 0.5, f"n={len(fwhm)}", transform=main_ax.transAxes,
+    main_ax.text(0.97, 0.5, f"n={len(width)}", transform=main_ax.transAxes,
                  ha="right", va="center", fontsize="small")
 
     kde_kwargs = dict(color=cmap(0.5), fill=True, linewidth=0, alpha=0.5)
-    sns.kdeplot(x=fwhm, ax=top_ax, legend=False, **kde_kwargs)
+    sns.kdeplot(x=width, ax=top_ax, legend=False, **kde_kwargs)
     sns.kdeplot(y=height, ax=right_ax, legend=False, **kde_kwargs)
-    top_ax.set_xlim(0, limits["fwhm"])
+    top_ax.set_xlim(0, limits["width"])
     right_ax.set_ylim(0, limits["height"])
     for marginal in (top_ax, right_ax):
         marginal.set_xticks([])
@@ -167,13 +167,13 @@ def plot_scatter(axes, limits, fwhm, height, undershoot):
     cbar.ax.xaxis.set_label_position("bottom")
 
 
-def plot_hexbin(axes, limits, fwhm, height):
+def plot_hexbin(axes, limits, width, height):
     main_ax, cb_ax = axes
     # the hexagons cover the axes; chirps beyond them are not binned
-    hb = main_ax.hexbin(fwhm, height, gridsize=60, extent=(0, limits["fwhm"], 0, limits["height"]),
+    hb = main_ax.hexbin(width, height, gridsize=60, extent=(0, limits["width"], 0, limits["height"]),
                         cmap=cmap, mincnt=1, linewidths=0.0, edgecolors="none", norm=LogNorm(),
                         rasterized=True)
-    main_ax.set_xlim(0, limits["fwhm"])
+    main_ax.set_xlim(0, limits["width"])
     main_ax.set_ylim(0, limits["height"])
 
     cbar = plt.colorbar(hb, cax=cb_ax, orientation="horizontal")
@@ -190,25 +190,25 @@ def plot_hexbin(axes, limits, fwhm, height):
 def main():
     df = get_data()
     shown = df[df["params_ok"]]
-    fwhm = shown["fwhm_s"].to_numpy() * 1000
+    width = shown["width10_s"].to_numpy() * 1000  # width at 10 % of the height
     height = shown["height_hz"].to_numpy()
     undershoot = shown["undershoot_hz"].to_numpy()
-    limits = {"fwhm": bound(fwhm), "height": bound(height), "undershoot": bound(undershoot)}
+    limits = {"width": bound(width), "height": bound(height), "undershoot": bound(undershoot)}
     write_stats("chirp_distributions", {
         "n_competitions": df["recording"].nunique(), "n_chirps": len(df),
         "n_outside_domain": int((~df["params_ok"]).sum()), "n_shown": len(shown),
         "axis_quantile": AXIS_QUANTILE,
-        "axis_limits": {"fwhm_ms": limits["fwhm"], "height_hz": limits["height"],
+        "axis_limits": {"width10_ms": limits["width"], "height_hz": limits["height"],
                         "undershoot_hz": limits["undershoot"]},
-        "n_beyond_axes": int(((fwhm > limits["fwhm"]) | (height > limits["height"])).sum()),
+        "n_beyond_axes": int(((width > limits["width"]) | (height > limits["height"])).sum()),
         "n_beyond_color_scale": int((undershoot > limits["undershoot"]).sum()),
-        "fwhm_ms": distribution(fwhm), "height_hz": distribution(height),
+        "width10_ms": distribution(width), "height_hz": distribution(height),
         "undershoot_hz": distribution(undershoot),
     })
 
     fig, scatter_axes, hex_axes = setup_plot()
-    plot_scatter(scatter_axes, limits, fwhm, height, undershoot)
-    plot_hexbin(hex_axes, limits, fwhm, height)
+    plot_scatter(scatter_axes, limits, width, height, undershoot)
+    plot_hexbin(hex_axes, limits, width, height)
     letter_subplots(
         [scatter_axes[0], hex_axes[0]], xoffset=[-0.2, -0.2], yoffset=[1.1, 1.1]
     )
