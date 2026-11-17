@@ -58,7 +58,7 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 |---|---|---|---|
 | `fig:chirp_demo` (`plot_what_is_a_chirp_and_why_use_spetrograms`) | descriptive | `collect_chirp_overview_plot_data`, plot (uses `legacy_spectrogram`) | `chirp_overview_plot_data.npz`; no competition detections |
 | `fig:trial_overview` (`plot_competition_trial_overview`) | descriptive | `make_competition_overview` (new: the old writer was never committed), plot | `competition_overview_2020-06-09-10_00.json` |
-| `fig:chirp_space` (`plot_chirp_distributions_manuscript`) | descriptive | plot (reads `chirps_rtdetr.parquet` boxes) | — |
+| `fig:chirp_space` (`plot_chirp_distributions_manuscript`) | descriptive | plot (reads the decoder's calibrated FWHM, height and undershoot from `chirps_<detections>.parquet`; until 2026-11-17 the boxes) | — |
 | `fig:trial_progressions` (`plot_event_trial_progression_correlations_all_fish`, + `_supplement` = `fig:temporal_allocation_supp`) | allocation | `analyze_event_trial_progression_trial`, `summarize_all_timing_distributions`, plot | `trial_event_progressions_all_fish/`, `agonistic_behavior_timing*.json` |
 | `fig:temporal_allocation_15_supp` (`plot_event_trial_progression_correlations_15_fish`) | allocation | `analyze_event_trial_progression_trial --annotated-only`, plot | `trial_event_progressions_annotated_subset/` |
 | `fig:chirp_status` (`plot_chirp_winner_loser_trial_summary`) | status | `make_trial_summary` (new), `tool_pivot_trial_summary_to_long_format`, `stats_bayesian_glmm_chirps_status_v3`, plot | `trial_summary.csv`, `trial_summary_long.csv`, `stats_bayesian_glmm_chirps_status_v3/` |
@@ -110,7 +110,7 @@ script owns each namespace:
 | `progression`, `progression_annotated_subset` | `analyze_event_trial_progression_trial` | trials with events, trials with fewer than two events |
 | `allocation`, `allocation_15_fish` | `plot_event_trial_progression_correlations_{all,15}_fish` | rates, first/last-hour rates, durations and intervals |
 | `status_model`, `status_figure` | `stats_bayesian_glmm_chirps_status_v3`, `plot_chirp_winner_loser_trial_summary` | model size; per-trial medians |
-| `chirp_distributions` | `plot_chirp_distributions_manuscript` | the plotted box widths, heights, troughs |
+| `chirp_distributions` | `plot_chirp_distributions_manuscript` | the plotted decoder FWHMs, heights, undershoots; chirps outside the decoder's validated domain |
 | `event_rates` | `plot_event_time_rates_winner_loser_chirp_src_paper` | peaks and troughs of the event-triggered rates |
 | `echo` | `stats_bayesian_logreg_echo_responses_new` | observed, chance and model echo fractions, diagnostics |
 | `chase_windows` | `summarize_chirp_event_correlation_around_chasing` | chases, merged chases, overlap of the -3..13 s windows |
