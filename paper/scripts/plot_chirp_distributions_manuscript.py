@@ -90,7 +90,7 @@ SPEC_HOP_S = 0.001
 SPEC_NFFT = 4096
 BASELINE_LOBE_HZ = 2 / SPEC_WINDOW_S  # half width of the window's main lobe (78 Hz)
 DB_RANGE = 30
-EXAMPLE_MARKER = dict(marker="D", s=9, facecolor="#e2655c", edgecolor="k", linewidths=0.4)
+EXAMPLE_MARKER = dict(marker="o", s=22, edgecolor="w", linewidths=0.8)  # colored by undershoot
 
 
 # ---------------------------------------------------------------------------
@@ -323,10 +323,10 @@ def plot_scatter(axes, limits, width, height, undershoot, examples):
     main_ax, top_ax, right_ax, cb_ax = axes
 
     below = -undershoot  # Hz relative to the baseline: strong undershoots dark, none bright
+    color_scale = dict(cmap=cmap, norm=Normalize(-limits["undershoot"], 0))
     order = np.argsort(below)[::-1]  # strong undershoots on top
-    points = main_ax.scatter(width[order], height[order], c=below[order], cmap=cmap,
-                             norm=Normalize(-limits["undershoot"], 0), s=1, linewidths=0,
-                             rasterized=True)
+    points = main_ax.scatter(width[order], height[order], c=below[order], s=1, linewidths=0,
+                             rasterized=True, **color_scale)
     main_ax.set_xlim(0, limits["width"])
     main_ax.set_ylim(0, limits["height"])
 
@@ -334,10 +334,11 @@ def plot_scatter(axes, limits, width, height, undershoot, examples):
     circle_annotate(main_ax, (25, 480), (0, 0), "1")  # large and short
     circle_annotate(main_ax, (100, 330), (0, 0), "3")  # large and long
 
-    # the example chirps of C
+    # the example chirps of C, colored like the other chirps
     main_ax.scatter([e["chirp"]["width10_ms"] for e in examples.values()],
                     [e["chirp"]["height_hz"] for e in examples.values()],
-                    zorder=1000, **EXAMPLE_MARKER)
+                    c=[-e["chirp"]["undershoot_hz"] for e in examples.values()],
+                    zorder=1000, **EXAMPLE_MARKER, **color_scale)
 
     main_ax.text(0.97, 0.5, f"n={len(width)}", transform=main_ax.transAxes,
                  ha="right", va="center", fontsize="small")
