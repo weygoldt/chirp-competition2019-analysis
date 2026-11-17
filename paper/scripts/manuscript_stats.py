@@ -172,22 +172,27 @@ def main() -> None:
     p = sub.add_parser("collect", help="merge the stats files of a run into stats.json")
     p.add_argument("run", help="output directory under paper/output, e.g. rtdetr_gapfill_t080")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    p = sub.add_parser("check", help="fail if stats.json differs from its run's stats files")
-    p.add_argument("path", type=Path, nargs="?", default=DEFAULT_OUT)
+    p = sub.add_parser("check", help="fail if a stats.json differs from its run's stats files")
+    p.add_argument("paths", type=Path, nargs="*", default=[DEFAULT_OUT])
     args = parser.parse_args()
 
     if args.command == "collect":
         out = collect(args.run, args.out)
         print(f"{out}: {len(json.loads(out.read_text())['inputs'])} stats files of {args.run}")
         return
-    problems = check(args.path)
-    if problems:
-        run = json.loads(args.path.read_text())["run"]
-        print(f"{args.path} does not match the analysis outputs:", *problems,
-              f"after rerunning what changed: python3 {Path(__file__).resolve().relative_to(REPO)} collect {run}",
-              sep="\n  ", file=sys.stderr)
+    failed = False
+    for path in args.paths:
+        problems = check(path)
+        if problems:
+            run = json.loads(path.read_text())["run"]
+            print(f"{path} does not match the analysis outputs:", *problems,
+                  f"after rerunning what changed: python3 {Path(__file__).resolve()} "
+                  f"collect {run} --out {path}", sep="\n  ", file=sys.stderr)
+            failed = True
+        else:
+            print(f"{path}: matches the analysis outputs")
+    if failed:
         sys.exit(1)
-    print(f"{args.path}: matches the analysis outputs")
 
 
 if __name__ == "__main__":

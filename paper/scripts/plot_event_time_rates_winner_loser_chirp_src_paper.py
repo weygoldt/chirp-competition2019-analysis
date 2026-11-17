@@ -548,10 +548,12 @@ PANEL_EVENTS = ["other_chirps", "chase_onset", "chase_offset", "contact"]
 
 
 def extrema_stats(extrema):
-    """The extrema of one panel for write_stats: side (before/after) -> type (peak/trough)."""
-    out = {}
-    for e in extrema:
-        out.setdefault(e["side"], {})[e["type"]] = {
+    """The extrema of one panel for write_stats: side (before/after) -> type (peak/trough),
+    and ``peak``, the strongest peak on either side (largest excess over the CI), which
+    can move across the event time between detection thresholds."""
+
+    def entry(e):
+        return {
             "time_s": e["time"],
             "rate_per_min": e["rate"],
             "baseline_per_min": e["baseline_med"],
@@ -561,6 +563,13 @@ def extrema_stats(extrema):
             "fold_point": e["fold_point"],
             "fold_window": e["fold_window"],
         }
+
+    out = {}
+    for e in extrema:
+        out.setdefault(e["side"], {})[e["type"]] = entry(e)
+    peaks = [e for e in extrema if e["type"] == "peak"]
+    if peaks:
+        out["peak"] = entry(max(peaks, key=lambda e: e["delta"]))
     return out
 
 

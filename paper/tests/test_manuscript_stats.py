@@ -97,3 +97,22 @@ def test_check_finds_hand_edits(run, tmp_path):
     stats["values"]["a"]["x"] = 2
     out.write_text(json.dumps(stats))
     assert ms.check(out) == ["value a.x: 2 -> 1"]
+
+
+def test_check_command_checks_every_file(run, tmp_path, monkeypatch, capsys):
+    """`check A B`: each file against its own run; fails if any differs."""
+    ms.write_stats("a", {"x": 1})
+    good = ms.collect("testrun", tmp_path / "stats.json")
+    stale = ms.collect("testrun", tmp_path / "stats_other.json")
+    stats = json.loads(stale.read_text())
+    stats["values"]["a"]["x"] = 2
+    stale.write_text(json.dumps(stats))
+
+    monkeypatch.setattr(ms.sys, "argv", ["manuscript_stats.py", "check", str(good), str(stale)])
+    with pytest.raises(SystemExit) as exit_info:
+        ms.main()
+    assert exit_info.value.code == 1
+    out, err = capsys.readouterr()
+    assert f"{good}: matches" in out
+    assert f"{stale} does not match" in err
+    assert "value a.x: 2 -> 1" in err
