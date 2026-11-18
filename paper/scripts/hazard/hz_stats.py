@@ -162,20 +162,31 @@ def _sim_stats(sdir: Path, E: pd.DataFrame) -> dict[str, Any]:
     def row(sc: str, kind: str, backend: str = CHECK, term: str = TAU_TERM) -> pd.Series | None:
         return _pick(summ, scenario=sc, kind=kind, term=term, backend=backend)
 
+    def dyad_sd(sc: str, kind: str) -> float | None:
+        """True between-dyad SD of the log HR in a scenario (0 = one common effect)."""
+        r = row(sc, kind, META, "dyad_sd_sub_effect")
+        return r["truth"] if r is not None else None
+
     v: dict[str, Any] = {}
     for kind in hz_hazard.KINDS:
         k: dict[str, Any] = {}
-        rec = row("recovery", kind)
-        if rec is not None:
-            k["recovery"] = dict(truth=math.exp(rec["truth"]), fe=rec["ratio_median"],
-                                 fe_low=rec["ratio_q025"], fe_high=rec["ratio_q975"],
-                                 power_fe_cluster=rec["reject_cluster"])
+        # one common effect (recovery) and dyad-specific effects around it (het_recovery)
+        for sc in ("recovery", "het_recovery"):
+            rec, re_ = row(sc, kind), row(sc, kind, META)
+            if rec is not None:
+                k[sc] = dict(truth=math.exp(rec["truth"]), fe=rec["ratio_median"],
+                             fe_low=rec["ratio_q025"], fe_high=rec["ratio_q975"],
+                             power_fe_cluster=rec["reject_cluster"],
+                             re=re_["ratio_median"] if re_ is not None else None,
+                             power_re=re_["reject_naive"] if re_ is not None else None,
+                             dyad_sd=dyad_sd(sc, kind))
         for sc in ("no_effect", "het_no_effect"):
             a, b, c = row(sc, kind), row(sc, kind, PRIMARY), row(sc, kind, META)
             if a is not None:
                 k[f"fpr_{sc}"] = dict(fe_wald=a["reject_naive"], fe_cluster=a["reject_cluster"],
                                       glmm=b["reject_naive"] if b is not None else None,
-                                      re=c["reject_naive"] if c is not None else None)
+                                      re=c["reject_naive"] if c is not None else None,
+                                      dyad_sd=dyad_sd(sc, kind))
         for sc in ("annotation", "detection", "lag_0.25", "lag_0.5", "lag_0.75", "hidden_state",
                    "hidden_state_short"):
             r = row(sc, kind)

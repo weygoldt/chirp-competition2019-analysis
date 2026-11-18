@@ -210,6 +210,19 @@ def main() -> None:
                    f"{get(s, f'simulation.{k}.recovery.fe'):.2f} "
                    f"[{get(s, f'simulation.{k}.recovery.fe_low'):.2f}, "
                    f"{get(s, f'simulation.{k}.recovery.fe_high'):.2f}]"),
+            by_run(stats, f"{k}: power FE cluster / RE, one common effect",
+                   lambda s, k=k: DASH if not get(s, f"simulation.{k}.recovery.power_re") else
+                   f"{get(s, f'simulation.{k}.recovery.power_fe_cluster'):.0%} / "
+                   f"{get(s, f'simulation.{k}.recovery.power_re'):.0%}"),
+            by_run(stats, f"{k}: dyads differ (SD) around the same mean, FE median; power FE / RE",
+                   lambda s, k=k: DASH if not get(s, f"simulation.{k}.het_recovery") else
+                   f"SD {num(get(s, f'simulation.{k}.het_recovery.dyad_sd'), '{:.2f}')}: "
+                   f"{get(s, f'simulation.{k}.het_recovery.truth'):.2f} → "
+                   f"{get(s, f'simulation.{k}.het_recovery.fe'):.2f} "
+                   f"[{get(s, f'simulation.{k}.het_recovery.fe_low'):.2f}, "
+                   f"{get(s, f'simulation.{k}.het_recovery.fe_high'):.2f}]; "
+                   f"{get(s, f'simulation.{k}.het_recovery.power_fe_cluster'):.0%} / "
+                   f"{num(get(s, f'simulation.{k}.het_recovery.power_re'), '{:.0%}')}"),
             by_run(stats, f"{k}: FPR FE cluster / RE, dyads differ, no mean effect",
                    lambda s, k=k: DASH if not get(s, f"simulation.{k}.fpr_het_no_effect") else
                    f"{get(s, f'simulation.{k}.fpr_het_no_effect.fe_cluster'):.0%} / "
