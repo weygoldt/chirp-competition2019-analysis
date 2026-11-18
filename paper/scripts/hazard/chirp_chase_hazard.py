@@ -1,3 +1,6 @@
+# Ported from chirp_competition b65108e (src_hazard/chirp_chase_hazard.py).
+# Changes: data root (optional, default paper_config.DATA_ROOT), output directory
+# $PAPER_OUT/data/processed/chirp_chase_hazard. Models, windows, seeds and simulations unchanged.
 """Does subordinate chirping change the dominant's chasing? Event-level pipeline.
 
 Dyadic competition trials of Apteronotus leptorhynchus (2019/2020 tube
@@ -26,10 +29,10 @@ Steps (one module each; all times in s, frequencies in Hz):
                 --skip-acausal or --skip-sim)   -> simulation/acausal_sim_*, figures/acausal_sim_*
   6. (here)     effects.csv (one tidy table), summary.txt, timings.csv, config.json, run.log
 
-Usage (the interpreter is the analysis venv, /home/weygoldt/wrk/analyses/chirp_competition/.venv):
+Usage (paper environment; detections from PAPER_DETECTIONS, see paper/README.md):
 
-  <venv>/bin/python src_hazard/chirp_chase_hazard.py /mnt/data2/2019_tube_competition
-  <venv>/bin/python src_hazard/chirp_chase_hazard.py DATA --quick --out /tmp/quick_out
+  PAPER_DETECTIONS=rtdetr_gapfill_t080 paper/run.sh hazard/chirp_chase_hazard.py
+  PAPER_DETECTIONS=rtdetr_gapfill_t080 paper/run.sh hazard/chirp_chase_hazard.py --quick --out /tmp/q
 
 See src_hazard/README.md for assumptions, the backend choice and open issues.
 """
@@ -40,6 +43,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # paper/scripts
 
 import argparse  # noqa: E402
 import json  # noqa: E402
@@ -59,6 +63,7 @@ import hz_data  # noqa: E402
 import hz_desc  # noqa: E402
 import hz_hazard  # noqa: E402
 import hz_sim  # noqa: E402
+import paper_config  # noqa: E402
 from hz_config import Config  # noqa: E402
 
 PRIMARY, CHECK, VB, META = "mixed_laplace", "glm_fe", "mixed_vb", "re_meta"
@@ -70,8 +75,7 @@ QUESTION = {
 }
 EVENT_NAME = {"offset": "chase offsets", "onset": "chase onsets"}
 RISK_NAME = {"offset": "in-chase", "onset": "out-of-chase"}
-REPO = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = REPO / "outputs" / "chirp_chase_hazard"
+DEFAULT_OUT = paper_config.PROCESSED / "chirp_chase_hazard"
 # boundary-shift sensitivity: annotated offsets / onsets moved by these amounts (s)
 SHIFTS = {"offset": (-0.75, -0.5, -0.25, 0.5), "onset": (-0.5, 0.5)}
 
@@ -82,7 +86,8 @@ SHIFTS = {"offset": (-0.75, -0.5, -0.25, 0.5), "onset": (-0.5, 0.5)}
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description="Event-level analysis: do subordinate chirps change dominant chasing?")
-    ap.add_argument("data_root", type=Path, help="dataset root (read only)")
+    ap.add_argument("data_root", type=Path, nargs="?", default=paper_config.DATA_ROOT,
+                    help=f"dataset root (read only; default {paper_config.DATA_ROOT})")
     ap.add_argument("--out", type=Path, default=None,
                     help=f"output directory (default {DEFAULT_OUT})")
     ap.add_argument("--bin-width", type=float, default=None, help="s (default 0.05)")
@@ -127,7 +132,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def build_config(a: argparse.Namespace) -> Config:
     """Config from CLI flags; unset flags keep the Config defaults. The default
     output directory is resolved relative to the repository, not the cwd."""
-    cfg = Config(data_root=a.data_root, out_dir=a.out or DEFAULT_OUT).updated(
+    out = a.out or paper_config.processed_dir("chirp_chase_hazard")
+    cfg = Config(data_root=a.data_root, out_dir=out).updated(
         bin_width=a.bin_width, hist_max=a.hist_max, n_basis=a.n_basis,
         n_jitter=a.n_jitter, n_sims=a.n_sims, max_time=a.max_time, seed=a.seed,
         use_rises=a.use_rises or None, quick=a.quick or None,

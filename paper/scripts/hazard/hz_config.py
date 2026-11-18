@@ -1,3 +1,6 @@
+# Ported from chirp_competition b65108e (src_hazard/hz_config.py).
+# Changes: data root and output directory from paper_config
+# (CHIRP_REC_2019, $PAPER_OUT/data/processed/chirp_chase_hazard).
 """Configuration for the event-level chirp -> chase hazard analysis.
 
 All times are in seconds (grid/recording time), all frequencies in Hz.
@@ -5,12 +8,16 @@ All times are in seconds (grid/recording time), all frequencies in Hz.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
-DEFAULT_DATA_ROOT = Path("/mnt/data2/2019_tube_competition")
-DEFAULT_OUT_DIR = Path("outputs/chirp_chase_hazard")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # paper/scripts
+import paper_config  # noqa: E402
+
+DEFAULT_DATA_ROOT = paper_config.DATA_ROOT
+DEFAULT_OUT_DIR = paper_config.PROCESSED / "chirp_chase_hazard"
 
 # Recordings where the two EODfs are so close that chirp-to-sender assignment is
 # unreliable (inherited from src/analyze_event_time_rates_trial.py).
