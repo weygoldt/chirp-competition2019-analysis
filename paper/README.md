@@ -81,7 +81,7 @@ writes the chirp counts per trial and status, v1 against v2 (the run's
 `counts`) describes the dataset: trials per year and sex combination, the
 recordings' durations, the annotated trials and their chases and contacts.
 
-Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun).
+Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun), `REPORT_hazard_v2.md` (the event-level hazard analysis of loser chirps vs chasing, `scripts/hazard/`, v1 vs v2, and the BORIS/LED converter check; chain `hazard`, not in the default `run_all.sh`).
 
 ## Figures into the manuscript
 
@@ -122,6 +122,8 @@ script owns each namespace:
 | `posteriors` | `summarize_reported_posteriors` | median and 95 % HDI of every reported posterior |
 | `v2_performance`, `v2_failure_modes`, `v2_pipeline_explainer` | the three v2 figures | the numbers of their panels and captions |
 | `pipeline` | `summarize_pipeline` | templates, scenes, expert benchmark, real-data session, production run (from the pipeline's result files) |
+| `chase_hazard` | `hazard/chirp_chase_hazard` | event-level hazard of chase offsets / onsets after loser chirps: GLMM, FE and RE ratios, per-dyad O/E, sensitivity, jitter, simulations, acausal control (`REPORT_hazard_v2.md`) |
+| `boris_led_check` | `hazard/hz_led_check` | per trial, the paper's BORIS/LED conversion minus the repaired map of the hazard data layer |
 
 ```sh
 paper/run_all.sh                                          # writes $PAPER_OUT/stats/

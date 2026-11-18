@@ -36,7 +36,7 @@ Usage (paper environment; detections from PAPER_DETECTIONS, see paper/README.md)
   PAPER_DETECTIONS=rtdetr_gapfill_t080 paper/run.sh hazard/chirp_chase_hazard.py
   PAPER_DETECTIONS=rtdetr_gapfill_t080 paper/run.sh hazard/chirp_chase_hazard.py --quick --out /tmp/q
 
-See src_hazard/README.md for assumptions, the backend choice and open issues.
+See README.md (this directory) for assumptions, the backend choice and open issues.
 """
 
 from __future__ import annotations

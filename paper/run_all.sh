@@ -129,6 +129,12 @@ chain_posteriors() {   # every reported posterior number (needs all fits)
   step summarize_reported_posteriors.py
 }
 
+# Not in ALL (not yet in the manuscript; ~3 h): run with `run_all.sh hazard`.
+chain_hazard() {       # event-level hazard of chase offsets/onsets after loser chirps (REPORT_hazard_v2.md)
+  step hazard/hz_led_check.py
+  heavy hazard 24G hazard/chirp_chase_hazard.py
+}
+
 # v2figs last: its extraction knows only the runs in v2_fig_extract.RUNS (the
 # pipeline figures belong to the primary run), so on a sensitivity run such as
 # rtdetr_gapfill_t090 it stops the script after all analyses are done.

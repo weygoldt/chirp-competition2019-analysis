@@ -1,5 +1,17 @@
 # Does subordinate chirping change the dominant's chasing?
 
+> **Port.** Copied from `src_hazard/` of the old analysis repository
+> (`chirp_competition`, branch `chirp-chase-hazard`, b65108e) and adapted only
+> where it reads data and writes outputs: data root and output directory from
+> `paper_config`, chirps from the v2 detections named by `PAPER_DETECTIONS`
+> (`chirps_<det>.parquet`, rows with `keep`, box centre `t_center_s`, sender
+> `track_id`; `rcnn` still reads the v1 npy files), the cited numbers to
+> `write_stats("chase_hazard")` (`hz_stats.py`). `hz_led_check.py` is new: it
+> compares the paper's BORIS/LED converter with the repaired map of `hz_data`.
+> **Every number quoted in this README is from the v1 run (RCNN detections);**
+> the v2 results and the comparison are in `paper/REPORT_hazard_v2.md` and in
+> each run's `summary.txt`.
+
 Event-level analysis of the 2019/2020 tube-competition trials (*Apteronotus
 leptorhynchus*, dyads with one winner = dominant and one loser = subordinate).
 
@@ -19,35 +31,41 @@ Units are seconds and Hz throughout.
 
 ## How to run
 
-The interpreter is the analysis venv at
-`/home/weygoldt/wrk/analyses/chirp_competition/.venv` (numpy, pandas, scipy,
-statsmodels, patsy, matplotlib; nothing else is needed). The worktree has no
-`.venv` of its own. From the repository (or worktree) root:
+In the paper environment (`paper/pyproject.toml`; see `paper/README.md`), with
+the detections in `PAPER_DETECTIONS` (the data root is the `CHIRP_REC_2019`
+default, `/mnt/data2/2019_tube_competition`, and may be given as the
+positional argument). From the repository root:
 
 ```sh
-PY=/home/weygoldt/wrk/analyses/chirp_competition/.venv/bin/python
+export PAPER_DETECTIONS=rtdetr_gapfill_t080
 
-# full run, default settings (~2.5 h: steps 1-5 ~50 min with 8 workers, step 4b ~20 min,
-# step 5b ~80 min with 4 workers; see timings.csv)
-$PY src_hazard/chirp_chase_hazard.py /mnt/data2/2019_tube_competition
+# full run, default settings (v1 took ~2.5 h: steps 1-5 ~50 min with 8 workers,
+# step 4b ~20 min, step 5b ~80 min with 4 workers; see timings.csv)
+paper/run.sh hazard/chirp_chase_hazard.py
 
-# smoke test (31 min with --workers 4, peak 11.2 GB for the process tree): 20 jitters per
-# null, 8 simulation replicates, 4 acausal-simulation datasets per account; not for inference
-$PY src_hazard/chirp_chase_hazard.py /mnt/data2/2019_tube_competition --quick --out /tmp/quick_out
+# smoke test: 20 jitters per null, 8 simulation replicates, 4 acausal-simulation
+# datasets per account; not for inference (writes no stats)
+paper/run.sh hazard/chirp_chase_hazard.py --quick --out /tmp/quick_out
 
 # acausal control alone, into an existing output directory, then rebuild the report
-$PY src_hazard/hz_acausal.py /mnt/data2/2019_tube_competition --out outputs/chirp_chase_hazard
-$PY src_hazard/chirp_chase_hazard.py /mnt/data2/2019_tube_competition --report-only
+OUT=paper/output/$PAPER_DETECTIONS/data/processed/chirp_chase_hazard
+paper/run.sh hazard/hz_acausal.py --out "$PWD/$OUT"
+paper/run.sh hazard/chirp_chase_hazard.py --report-only
+
+# the BORIS/LED converter check (paper converter vs hz_data's map)
+paper/run.sh hazard/hz_led_check.py
 ```
 
 The data root is only read, never written. The default output directory is
-`outputs/chirp_chase_hazard` next to `src_hazard/` (resolved from the script
-location, not the working directory).
+`$PAPER_OUT/data/processed/chirp_chase_hazard` (`paper_config.PROCESSED`).
+A full run (not `--quick`, also `--report-only`) writes the cited numbers to
+`$PAPER_OUT/stats/chase_hazard.json`; `hz_led_check.py` writes
+`boris_led_check.json`.
 
 | flag | default | meaning |
 |---|---|---|
-| `data_root` (positional) | | dataset root with `trial_summary.csv` and one folder per recording |
-| `--out` | `<repo>/outputs/chirp_chase_hazard` | output directory |
+| `data_root` (positional, optional) | `CHIRP_REC_2019` | dataset root with `trial_summary.csv` and one folder per recording |
+| `--out` | `$PAPER_OUT/data/processed/chirp_chase_hazard` | output directory |
 | `--bin-width` | 0.05 | hazard bin width (s) |
 | `--hist-max` | 2.0 | extent of the raised-cosine chirp-history basis (s) |
 | `--n-basis` | 5 | number of raised-cosine bumps |
@@ -67,14 +85,16 @@ location, not the working directory).
 | `--quick` | off | caps: 50 descriptive nulls, 20 jitters per null (min p 0.095), 8 simulation replicates, 4 acausal-simulation datasets per account, no VB; `config.json` records the effective values under `effective` |
 | `--report-only` | off | rebuild `effects.csv` and `summary.txt` from the tables in `--out`, including `acausal/` and `simulation/acausal_sim_*` when present (uses its `config.json` and its start time; no refitting; floats are rewritten bit-identically) |
 
-Each module also runs on its own (`$PY src_hazard/hz_data.py DATA`,
+Each module also runs on its own (`paper/run.sh hazard/hz_data.py`,
 `hz_desc.py`, `hz_hazard.py`, `hz_sim.py`, `hz_acausal.py DATA --out DIR
 [--quick] [--n-boot N]`, `hz_acausal.py --out DIR --report-only` to redraw its
 figures and `acausal_summary.txt` from the saved tables, `hz_acausal_sim.py DATA
 --out DIR [--quick] [--n-reps N]` and `hz_acausal_sim.py --out DIR
 --report-only`; see their `--help`).
 
-Tests (pytest is not installed in the venv; both files carry a fallback runner):
+Tests (in the paper environment: `cd paper && uv run pytest scripts/hazard`;
+not part of `make paper-test`. The files' fallback runner below, for an
+environment without pytest, cannot run the parametrized tests):
 
 ```sh
 $PY src_hazard/test_hz_hazard.py   # 23 tests: no leakage, risk sets, guard window, solvers,
@@ -184,7 +204,10 @@ modes along that ridge).
 
 1. **Load and validate** (`hz_data.py`). Chirps from `chirp_times_rcnn.npy` /
    `chirp_ids_rcnn.npy` (sender = track id), checked against the detector's
-   own `chirpdetector_bboxes.csv` (Data contradictions 10, 11); EODf tracks
+   own `chirpdetector_bboxes.csv` (Data contradictions 10, 11); for v2
+   detections from `chirps_<det>.parquet` (rows with `keep`, time
+   `t_center_s`, sender `track_id`), checked against the parquet's chirp boxes
+   (unassigned = `chirp` without `track_id`, not dropped by post-processing); EODf tracks
    from `fund_v.npy`, `ident_v.npy`, `idx_v.npy`, `times.npy` (baseline =
    trailing 60 s rolling median, step-held on a 1 s grid so each grid point
    uses only raw samples at or before it, read 1 s before each bin); BORIS
