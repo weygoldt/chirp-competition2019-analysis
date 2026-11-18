@@ -1,7 +1,8 @@
 # Ported from chirp_competition b65108e (src_hazard/chirp_chase_hazard.py).
 # Changes: data root (optional, default paper_config.DATA_ROOT), output directory
 # $PAPER_OUT/data/processed/chirp_chase_hazard, chirp detections PAPER_DETECTIONS (hz_data);
-# detector names in the summary texts. Models, windows, seeds and simulations unchanged.
+# detector names in the summary texts; the cited numbers go to
+# write_stats("chase_hazard") (hz_stats). Models, windows, seeds and simulations unchanged.
 """Does subordinate chirping change the dominant's chasing? Event-level pipeline.
 
 Dyadic competition trials of Apteronotus leptorhynchus (2019/2020 tube
@@ -64,8 +65,10 @@ import hz_data  # noqa: E402
 import hz_desc  # noqa: E402
 import hz_hazard  # noqa: E402
 import hz_sim  # noqa: E402
+import hz_stats  # noqa: E402
 import paper_config  # noqa: E402
 from hz_config import Config  # noqa: E402
+from manuscript_stats import write_stats  # noqa: E402
 
 PRIMARY, CHECK, VB, META = "mixed_laplace", "glm_fe", "mixed_vb", "re_meta"
 TAU_MODEL, TAU_TERM = "tau_1000ms", "sub_any_1000ms"  # >= 1 sub chirp in the preceding 1 s
@@ -1101,6 +1104,16 @@ def _report_only(cfg: Config, out: Path) -> None:
                        acausal_sim)
     (out / "summary.txt").write_text(text + "\n")
     print(text)
+    _write_stats(out, trials, flags, cfg)
+
+
+def _write_stats(out: Path, trials: list[hz_data.Trial], flags: pd.DataFrame, cfg: Config) -> None:
+    """The cited numbers of a full-size run (not --quick) to write_stats('chase_hazard')."""
+    if cfg.quick:
+        print("stats: not written (--quick)")
+        return
+    led = sensitivity_sets(trials, flags).get("drop_led_corrected", [])
+    write_stats("chase_hazard", hz_stats.chase_hazard_stats(out, trials, flags, cfg, led))
 
 
 def _run(a: argparse.Namespace, cfg: Config, out: Path) -> None:
@@ -1194,6 +1207,7 @@ def _run(a: argparse.Namespace, cfg: Config, out: Path) -> None:
     (out / "summary.txt").write_text(text + "\n")
     print("\n" + text)
     print("\nTimings (s):\n" + tim.to_string(index=False))
+    _write_stats(out, trials, flags, cfg)
 
 
 if __name__ == "__main__":
