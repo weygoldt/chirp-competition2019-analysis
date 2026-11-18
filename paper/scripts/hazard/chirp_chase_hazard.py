@@ -1,6 +1,7 @@
 # Ported from chirp_competition b65108e (src_hazard/chirp_chase_hazard.py).
 # Changes: data root (optional, default paper_config.DATA_ROOT), output directory
-# $PAPER_OUT/data/processed/chirp_chase_hazard. Models, windows, seeds and simulations unchanged.
+# $PAPER_OUT/data/processed/chirp_chase_hazard, chirp detections PAPER_DETECTIONS (hz_data);
+# detector names in the summary texts. Models, windows, seeds and simulations unchanged.
 """Does subordinate chirping change the dominant's chasing? Event-level pipeline.
 
 Dyadic competition trials of Apteronotus leptorhynchus (2019/2020 tube
@@ -618,7 +619,8 @@ def _scope(trials: list[hz_data.Trial], cfg: Config) -> str:
         "whole recordings"
     return (f"Scope: Apteronotus leptorhynchus, lab tube competitions; {len(trials)} dyads "
             f"({mixed} mixed-sex: {comp}) from {len(fish)} fish that recur across dyads; "
-            f"{win}; all RCNN-detected chirps pooled regardless of chirp type (no small/big "
+            f"{win}; all chirps of the {cfg.chirp_detector} detections pooled regardless of "
+            "chirp type (no small/big "
             "or type split). Sex-specific effects were not tested; with mostly mixed-sex dyads, "
             "courtship-context chirping is a live alternative reading of 'subordinate chirp'.")
 
@@ -959,6 +961,7 @@ def _caveats(trials: list[hz_data.Trial], flags: pd.DataFrame, haz: dict[str, An
     un = fl[fl["category"] == "chirp_unassigned_upstream"]
     n_un = int(un["value"].sum()) if len(un) else 0
     amb = sets.get("drop_sender_ambiguous", [])
+    most = f"mostly {un.loc[un['value'].idxmax(), 'recording'][:10]}; " if n_un else ""
     close = sets.get("drop_close_eodf", [])
     la = np.array([float(tr.meta.get("last_boris_event", np.nan)) for tr in trials]) / 3600
     lo_a, hi_a = (float(np.nanmin(la)), float(np.nanmax(la))) if np.isfinite(la).any() else (
@@ -985,14 +988,13 @@ def _caveats(trials: list[hz_data.Trial], flags: pd.DataFrame, haz: dict[str, An
          "the shortest lags), and boundary error attenuates effects, most for onsets (see the "
          "simulated boundary-error estimate). The lag-guarded model is the pre-specified check; "
          "for (b) the across-dyad verdict depends on how lags < 0.5 s are handled."),
-        (f"3. Chirp detection and sender assignment are automatic (RCNN + EODf tracks). The "
-         f"detector dropped {n_un} distinct detections without a sender inside the analysis "
-         f"window before writing chirp_times_rcnn.npy (mostly 2020-06-02; flag "
-         f"chirp_unassigned_upstream), so the npy files only look fully assigned. Sender "
+        (f"3. Chirp detection and sender assignment are automatic ({cfg.chirp_detector} "
+         f"detections + EODf tracks). {n_un} distinct detections without a sender inside the "
+         f"analysis window are not used ({most}flag chirp_unassigned_upstream). Sender "
          f"assignment is geometrically ambiguous (both EODfs inside the chirp box) for most "
-         f"chirps in {len(amb)} dyads ({', '.join(_short(r) for r in amb)}), which includes the "
-         f"two with large boxes (06-02, 06-11); close EODfs ({len(close)} dyads) are one cause, "
-         "large boxes another. See the drop_sender_ambiguous, unambiguous_chirps and "
+         f"chirps in {len(amb)} dyads ({', '.join(_short(r) for r in amb)}); close EODfs "
+         f"({len(close)} dyads) are one cause, large boxes another. See the "
+         "drop_sender_ambiguous, unambiguous_chirps and "
          "drop_close_eodf sensitivity rows. Missed chirps were simulated; misassigned chirps "
          "were not."),
         (f"4. Few dyads that disagree: {G} dyads from {len(fish)} fish; fish recur across dyads, "

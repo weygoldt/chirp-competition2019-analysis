@@ -1,10 +1,15 @@
+# Ported from chirp_competition b65108e (src_hazard/hz_data.py).
+# Changes: chirps of the v2 detections (cfg.chirp_detector = PAPER_DETECTIONS, rtdetr*) from
+# chirps_<det>.parquet via chirps.load_chirp_table (rows with keep, box centre t_center_s,
+# sender track_id); the sender QC uses that parquet's boxes instead of chirpdetector_bboxes.csv;
+# detector names in the flag texts. v1 (rcnn) still reads the npy files as before.
 """Data layer: load, validate and tidy the 2019/2020 tube-competition trials.
 
 Units: seconds (grid/recording time, t = grid sample index / 20 kHz) and Hz.
 
 Per trial this module builds a :class:`Trial` holding chase intervals and
 contacts (BORIS video annotations converted to grid time), dominant and
-subordinate chirp times (automated RCNN detector), optional rise times, and a
+subordinate chirp times (automated detector, ``cfg.chirp_detector``), optional rise times, and a
 smoothed baseline EODf per fish. Everything that contradicts the analysis
 assumptions is written to a structured flags table instead of being silently
 fixed. Where the data layer does repair something (unpaired BORIS events,
@@ -31,7 +36,9 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hz_config import Config
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # paper/scripts
+from chirps import load_chirp_table  # noqa: E402
+from hz_config import Config  # noqa: E402
 
 # BORIS "Behavior" codes as found in the csv files. The dataset README.txt
 # states 1/2/3 for onset/offset/contact; the files use 0/1/2 (verified: every
@@ -490,6 +497,39 @@ def _dedup(t: np.ndarray, window: float) -> tuple[np.ndarray, np.ndarray]:
     return t[keep], t[~keep]
 
 
+def _load_chirps(d: Path, det: str) -> tuple[np.ndarray, np.ndarray, pd.DataFrame | None]:
+    """Chirp times (s), sender ids and the detector's boxes of one recording.
+
+    v2 (``det`` = ``rtdetr*``): ``chirps_<det>.parquet`` via
+    ``chirps.load_chirp_table``. The chirps are the rows with ``keep`` (score
+    at or above the operating threshold, assigned to a track, not dropped by
+    post-processing); time = box centre ``t_center_s`` (the v1 times are box
+    centres too), sender = ``track_id``. The boxes are the chirps before
+    track assignment (``chirp`` and not dropped by post-processing), so
+    chirps without a sender can be counted.
+    Otherwise (v1 ``rcnn``): ``chirp_times_<det>.npy`` / ``chirp_ids_<det>.npy``
+    and the boxes of ``chirpdetector_bboxes.csv`` (None if it is missing).
+    Box columns: t1, t2 (s), f1, f2 (Hz), track_id.
+    """
+    cols = ["t1", "t2", "f1", "f2", "track_id"]
+    if det.startswith("rtdetr"):
+        tab = load_chirp_table(d, det)
+        kept = tab[tab["keep"]]
+        boxes = tab[tab["chirp"] & (tab["pp_drop_reason"] == "")].rename(columns=dict(
+            t_start_s="t1", t_end_s="t2", f_low_hz="f1", f_high_hz="f2"))
+        return (kept["t_center_s"].to_numpy(float), kept["track_id"].to_numpy(float),
+                boxes[cols].reset_index(drop=True))
+    ct = np.load(d / f"chirp_times_{det}.npy").astype(float)
+    ci = np.load(d / f"chirp_ids_{det}.npy").astype(float)
+    f = d / "chirpdetector_bboxes.csv"
+    return ct, ci, (pd.read_csv(f, usecols=cols) if f.exists() else None)
+
+
+def _chirp_files(det: str) -> str:
+    """The chirp file(s) of a detection set, for flag texts."""
+    return f"chirps_{det}.parquet" if det.startswith("rtdetr") else f"chirp_times_{det}.npy"
+
+
 def _eodf_at(track: tuple[np.ndarray, np.ndarray], t: np.ndarray, max_dt: float = 2.0
              ) -> np.ndarray:
     """Raw EODf (Hz) of the track sample nearest to each t (NaN if > max_dt s away)."""
@@ -515,27 +555,29 @@ def _nearest_dist(ref: np.ndarray, t: np.ndarray) -> np.ndarray:
 
 
 def _bbox_qc(
-    d: Path, rec: str, ct_assigned: np.ndarray, chirps: dict[str, np.ndarray],
+    bb: pd.DataFrame | None, rec: str, ct_assigned: np.ndarray, chirps: dict[str, np.ndarray],
     raw: dict[str, tuple[np.ndarray, np.ndarray]], chases: np.ndarray, t_lo: float,
     t_hi: float, cfg: Config, log: FlagLog,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Checks against the detector's own bounding boxes (chirpdetector_bboxes.csv).
+    """Checks against the detector's own bounding boxes ``bb`` (see _load_chirps:
+    v1 chirpdetector_bboxes.csv, v2 the chirps of chirps_<det>.parquet).
 
-    1. Unassigned detections: the chirp detector drops boxes without a track
+    1. Unassigned detections: the v1 chirp detector drops boxes without a track
        id before writing chirp_times_rcnn.npy, so the npy files always look
-       fully assigned. Boxes with track_id NaN farther than chirp_dedup_window
-       from every assigned chirp are distinct chirps of unknown sender.
+       fully assigned; in v2 they are the parquet's chirps without a track_id,
+       which are not in the analysed selection (keep). Boxes with track_id NaN
+       farther than chirp_dedup_window from every assigned chirp are distinct
+       chirps of unknown sender.
     2. Sender ambiguity: for each kept chirp, both fish's EODf inside the box's
        frequency range means the box alone cannot tell the sender; the id then
-       rests on the RCNN emitter model only.
+       rests on the detector's emitter assignment only.
     Returns (summary columns, meta arrays).
     """
-    f = d / "chirpdetector_bboxes.csv"
-    if not f.exists():
+    det = cfg.chirp_detector
+    if bb is None:
         log.add(rec, "chirp_bboxes_missing", "chirpdetector_bboxes.csv missing; unassigned "
                 "detections and sender ambiguity not checked", "info")
         return {}, {}
-    bb = pd.read_csv(f, usecols=["t1", "t2", "f1", "f2", "track_id"])
     tc = 0.5 * (bb["t1"].to_numpy(float) + bb["t2"].to_numpy(float))
     f1, f2 = bb["f1"].to_numpy(float), bb["f2"].to_numpy(float)
     tid = bb["track_id"].to_numpy(float)
@@ -552,10 +594,13 @@ def _bbox_qc(
              n_unassigned_distinct_window=len(dw), n_unassigned_distinct_in_chase_window=n_in)
     meta["unassigned_distinct"] = distinct
     if na.any():
+        src = (f"{_chirp_files(det)} has {int(na.sum())} chirps without a track_id that are "
+               "not in the analysed selection (keep)" if det.startswith("rtdetr") else
+               f"chirpdetector_bboxes.csv has {int(na.sum())} detections with track_id NaN that "
+               f"the detector dropped before writing {_chirp_files(det)} (so the npy files "
+               "always look fully assigned)")
         log.add(rec, "chirp_unassigned_upstream",
-                f"chirpdetector_bboxes.csv has {int(na.sum())} detections with track_id NaN that "
-                "the detector dropped before writing chirp_times_rcnn.npy (so the npy files "
-                f"always look fully assigned); {len(distinct)} are >= "
+                f"{src}; {len(distinct)} are >= "
                 f"{cfg.chirp_dedup_window * 1e3:.0f} ms from any assigned chirp (distinct chirps "
                 f"of unknown sender), {len(dw)} of them in the analysis window ({n_in} inside "
                 f"chases, {len(dw) - n_in} outside); the rest duplicate an assigned chirp. "
@@ -590,7 +635,7 @@ def _bbox_qc(
                 f"for {n_a}/{n_w} chirps in the window ({s['n_sub_ambiguous_window']} sub, "
                 f"{s['n_dom_ambiguous_window']} dom) both fish's EODf lie inside the chirp's "
                 f"bounding box (median box height {s['bbox_height_median']:.0f} Hz): the sender "
-                "id rests on the RCNN emitter model only", "warning", value=share)
+                f"id rests on the {det} emitter assignment only", "warning", value=share)
     return s, meta
 
 
@@ -743,8 +788,7 @@ def _build_trial(
 
     # --- chirps --------------------------------------------------------------
     det = cfg.chirp_detector
-    ct = np.load(d / f"chirp_times_{det}.npy").astype(float)
-    ci = np.load(d / f"chirp_ids_{det}.npy").astype(float)
+    ct, ci, boxes = _load_chirps(d, det)
     s.update(n_chirps_raw=len(ct), chirps_win_summary=int(row["chirps_win"]),
              chirps_lose_summary=int(row["chirps_lose"]))
     if len(ct) != len(ci):
@@ -1057,7 +1101,7 @@ def _build_trial(
         s["frac_time_in_chase"] = round(in_frac / (obs_end - t_start), 3)
 
     # detector bounding boxes: unassigned detections, sender ambiguity
-    s_bb, meta_bb = _bbox_qc(d, rec, ct[np.isfinite(ci)], chirps, raw, chases_g, t_start,
+    s_bb, meta_bb = _bbox_qc(boxes, rec, ct[np.isfinite(ci)], chirps, raw, chases_g, t_start,
                              obs_end, cfg, log)
     s.update(s_bb)
 
@@ -1272,15 +1316,17 @@ def write_validation_report(
     L += ["## Units and sampling", "",
           ("- Time: grid seconds (sample index / 20 kHz). Spectrogram frames (EODf tracks, "
            "rise indices) every ~0.328 s (groups 3, 5, 6) or ~0.123 s (group 4)."),
-          "- Chirps: RCNN detector times (s) with float sender ids equal to track ids.",
+          (f"- Chirps: {cfg.chirp_detector if cfg is not None else 'detector'} times (s, box "
+           "centre) with float sender ids equal to track ids."),
           ("- Chases/contacts: BORIS point events in video seconds at nominal 25 FPS; the "
            "video actually runs at ~25.86 frames per grid second, mapped to grid time via "
            "LED sync pulses every ~5 s (see led_* columns in trial_summary.csv)."),
           ("- Baseline EODf: per-fish trailing 60 s rolling median of the raw track, "
            "held (step-hold, last sample at or before each point) on a 1 s grid (Hz); "
            "NaN before the first tracked sample."),
-          ("- Chirp sender QC from chirpdetector_bboxes.csv: 'n_unassigned_distinct_window' = "
-           "detections without track id (dropped by the detector) >= 50 ms from any assigned "
+          ("- Chirp sender QC from the detector's boxes (v1 chirpdetector_bboxes.csv, v2 the "
+           "chirps of chirps_<det>.parquet): 'n_unassigned_distinct_window' = "
+           "detections without track id (not analysed) >= 50 ms from any assigned "
            "chirp; 'frac_*_ambiguous_window' = share of chirps whose bounding box contains both "
            "fish's EODf."), ""]
 

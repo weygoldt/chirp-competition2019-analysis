@@ -1,6 +1,6 @@
 # Ported from chirp_competition b65108e (src_hazard/hz_config.py).
-# Changes: data root and output directory from paper_config
-# (CHIRP_REC_2019, $PAPER_OUT/data/processed/chirp_chase_hazard).
+# Changes: data root, output directory and chirp detections from paper_config
+# (CHIRP_REC_2019, $PAPER_OUT/data/processed/chirp_chase_hazard, PAPER_DETECTIONS).
 """Configuration for the event-level chirp -> chase hazard analysis.
 
 All times are in seconds (grid/recording time), all frequencies in Hz.
@@ -65,7 +65,8 @@ class Config:
 
     # --- data layer specifics -----------------------------------------------
     sr: float = 20_000.0  # grid sampling rate, Hz (fishgrid.cfg AISampleRate)
-    chirp_detector: str = "rcnn"  # chirp_times_<det>.npy / chirp_ids_<det>.npy
+    # rtdetr*: chirps_<det>.parquet (rows with keep); else chirp_times/ids_<det>.npy
+    chirp_detector: str = paper_config.DETECTIONS
     # BORIS video-time -> grid-time mapping: "robust" (anchor search + least
     # squares on nearest-LED inliers) or "reference" (first/last LED as in
     # src/analyze_event_time_rates_trial.py).
