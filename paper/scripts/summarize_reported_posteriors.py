@@ -3,6 +3,8 @@
 # skipped (as the script already did for the Gamma GLMMs): the before/after-offset input has no writer (O5);
 # the coupling corners (10th/90th percentiles of the predictors) are computed from the coupling model's
 # data instead of being copied from a printout; every quantity also goes to write_stats ("posteriors").
+# The offset-window labels come from offset_window.py (were "-3..13 s"); the Gamma predictor is
+# loser_chirped_offset_window (was loser_chirped_fixed_m3p13).
 """
 Posterior median and 95% HDI for every model-based number in the manuscript.
 
@@ -28,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from manuscript_stats import write_stats
+from offset_window import offset_window
 from paper_config import PROCESSED
 from stats_chirp_coupling import prepare_data
 
@@ -37,6 +40,7 @@ COUPLING_DIR = PROC / "chirp_coupling/negbin"
 STATUS_DIR = PROC / "stats_bayesian_glmm_chirps_status_v3"
 OUT_CSV = PROC / "reported_posteriors_median_hdi.csv"
 HDI_PROB = 0.95
+WINDOW_PREDICTOR = "loser_chirped_offset_window"  # stats_chirp_affects_chasing.PRIMARY_PREDICTOR
 
 
 def draws(path: Path, var: str, **sel) -> np.ndarray:
@@ -72,6 +76,8 @@ def stats_tree(rows: list[dict]) -> dict:
 
 def main() -> None:
     rows = []
+    left, right = offset_window()
+    window = f"{left:g}..{right:g} s window"
 
     # Chirp production and competition status (negative binomial, v3).
     status_nc = STATUS_DIR / "posterior.nc"
@@ -89,9 +95,9 @@ def main() -> None:
          "stats_bayesian_logreg_echo_responses_new_loser_after_winner_obs_trace.nc"),
         ("echo.winner_after_loser", "echo: winner chirp within 10 s after loser chirp",
          "stats_bayesian_logreg_echo_responses_new_winner_after_loser_obs_trace.nc"),
-        ("offset.loser", "offset: P(loser chirp in -3..13 s window)",
+        ("offset.loser", f"offset: P(loser chirp in {window})",
          "stats_bayesian_logreg_loser_chirps_around_chasing_offset_loser_trace.nc"),
-        ("offset.winner", "offset: P(winner chirp in -3..13 s window)",
+        ("offset.winner", f"offset: P(winner chirp in {window})",
          "stats_bayesian_logreg_loser_chirps_around_chasing_offset_winner_trace.nc"),
         ("before_offset.loser", "before offset: P(loser chirps before offset)",
          "stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset_trace.nc"),
@@ -104,12 +110,12 @@ def main() -> None:
     # Inter-chase interval Gamma GLMMs: factor on the expected interval when the
     # loser chirped.
     for model, var in [
-        ("M1_causal", "loser_chirped_fixed_m3p13"),
-        ("M2_acausal", "loser_chirped_fixed_m3p13"),
-        ("M3_causal_adj_prev", "loser_chirped_fixed_m3p13"),
-        ("M4_causal_adj_full", "loser_chirped_fixed_m3p13"),
-        ("M5_duration_from_chirp", "loser_chirped_fixed_m3p13"),
-        ("M5b_duration_from_chirp_adj", "loser_chirped_fixed_m3p13"),
+        ("M1_causal", WINDOW_PREDICTOR),
+        ("M2_acausal", WINDOW_PREDICTOR),
+        ("M3_causal_adj_prev", WINDOW_PREDICTOR),
+        ("M4_causal_adj_full", WINDOW_PREDICTOR),
+        ("M5_duration_from_chirp", WINDOW_PREDICTOR),
+        ("M5b_duration_from_chirp_adj", WINDOW_PREDICTOR),
         ("Mtail", "loser_chirped_chase_tail"),
         ("Mpost_clipped", "loser_chirped_post_offset_clipped"),
         ("Mpost_unclipped", "loser_chirped_post_offset_unclipped"),
@@ -128,7 +134,7 @@ def main() -> None:
     crossed = GAMMA_DIR / "sensitivity_loserid_winnerid_recording__full__M4_causal_adj_full.nc"
     primary = GAMMA_DIR / "primary_recording__full__M4_causal_adj_full.nc"
     rows.append(summary("re.crossed_M4", "RE crossed M4: exp(beta_chirp)",
-                        np.exp(draws(crossed, "loser_chirped_fixed_m3p13")), "x"))
+                        np.exp(draws(crossed, WINDOW_PREDICTOR)), "x"))
     rows.append(summary("re.primary_M4_sigma.recording", "RE primary M4: sigma_recording",
                         draws(primary, "1|recording_sigma"), "log scale"))
     for g in ["recording", "loser_id", "winner_id"]:

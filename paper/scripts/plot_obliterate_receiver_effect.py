@@ -1,5 +1,7 @@
 # Ported from chirp_competition d040123 (src_paper/plot_obliterate_receiver_effect.py).
 # Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); the 'rows affected' percentage (hard-coded 6.1 %, from the v1 data) is computed from obs.csv and also goes to write_stats ("receiver_effect_figure").
+# The schematic's window geometry comes from offset_window.py (was drawn for -3, +13 s); the predictor is
+# loser_chirped_offset_window (was loser_chirped_fixed_m3p13).
 """
 Figure: receiver-effect decomposition (3 panels).
 
@@ -41,6 +43,7 @@ import pandas as pd
 from matplotlib.transforms import blended_transform_factory
 
 from manuscript_stats import write_stats
+from offset_window import offset_window
 from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
@@ -94,10 +97,11 @@ SUBSET = "full"
 # window on the hybrid axis. Set to the mode of the chase-duration
 # distribution in the dataset; recorded in the figure caption.
 MODE_CHASE_DURATION_S = 4.0
-# Length of the post-offset window in real seconds.
-POST_OFFSET_WINDOW_S = 13.0
-# Length of the chase-tail window in real seconds.
-CHASE_TAIL_WINDOW_S = 3.0
+# Lengths of the chase-tail and the post-offset window in real seconds: the
+# two parts of the offset window (offset_window.py) before and after the offset.
+LEFT_S, RIGHT_S = offset_window()
+CHASE_TAIL_WINDOW_S = -LEFT_S
+POST_OFFSET_WINDOW_S = RIGHT_S
 
 cmap1_ = sns.color_palette("crest_r", as_cmap=True)
 loser_color = cmap1_(0.5)
@@ -128,24 +132,24 @@ C_GRAY_FILL = "#F1EFE8"  # gray 50 (chase boxes)
 # ---------------------------------------------------------------------------
 # (model_name, predictor_column, group, display_label, dot/bar colour)
 FOREST_ROWS = [
-    ("M1_causal", "loser_chirped_fixed_m3p13", "primary", "unadjusted", C_NEUTRAL),
+    ("M1_causal", "loser_chirped_offset_window", "primary", "unadjusted", C_NEUTRAL),
     (
         "M2_acausal",
-        "loser_chirped_fixed_m3p13",
+        "loser_chirped_offset_window",
         "primary",
         "acausal (falsification)",
         C_NEUTRAL,
     ),
     (
         "M3_causal_adj_prev",
-        "loser_chirped_fixed_m3p13",
+        "loser_chirped_offset_window",
         "primary",
         "+ prev. ICI",
         C_POSITIVE,
     ),
     (
         "M4_causal_adj_full",
-        "loser_chirped_fixed_m3p13",
+        "loser_chirped_offset_window",
         "primary",
         "+ prev. ICI, + duration",
         C_POSITIVE,
@@ -435,8 +439,10 @@ def plot_hybrid_rate(
         ax.axvline(seam_on, c="k", lw=0.5, ls="--")
         ax.axvline(seam_off, c="k", lw=0.5, ls="--")
 
+    # Not called (the figure has no rate panel any more); the post-offset bar follows the window.
+    post_end = seam_off + POST_OFFSET_WINDOW_S / T_post_s * (x_end - seam_off)
     _rounded_rect(ax, (1.1, 2), (7.5, 8), C_TEAL_FILL, C_POSITIVE, zorder=-100)
-    _rounded_rect(ax, (2, 2.65), (7.5, 8), C_TEAL_FILL, C_POSITIVE, zorder=-100)
+    _rounded_rect(ax, (2, post_end), (7.5, 8), C_TEAL_FILL, C_POSITIVE, zorder=-100)
 
     if annotate_ticks:
         ax.set_xticks(
@@ -490,12 +496,16 @@ def draw_schematic(ax: plt.Axes) -> None:
     CHASE_NP1 = (18.0, 24.0)
     OFFSET = 10.0
     NEXT_ONSET = 18.0
-    OFFSET_PLUS_13 = 23.0
+    # The windows of chase n, clipped as in summarize_submissive_chirp_effect_on_dominant.
+    OFFSET_PLUS_RIGHT = OFFSET + POST_OFFSET_WINDOW_S
+    if OFFSET_PLUS_RIGHT <= NEXT_ONSET:
+        raise ValueError(f"the offset window ends {POST_OFFSET_WINDOW_S:g} s after the offset, before "
+                         "the next onset of the schematic: no contamination zone to draw")
 
-    TAIL_SPAN = (7.0, 10.0)
-    CLIP_SPAN = (10.0, 18.0)
-    UNCLIP_SHARED_SPAN = (10.0, 18.0)
-    UNCLIP_CONTAM_SPAN = (18.0, 23.0)
+    TAIL_SPAN = (max(OFFSET - CHASE_TAIL_WINDOW_S, CHASE_N[0]), OFFSET)
+    CLIP_SPAN = (OFFSET, NEXT_ONSET)
+    UNCLIP_SHARED_SPAN = (OFFSET, NEXT_ONSET)
+    UNCLIP_CONTAM_SPAN = (NEXT_ONSET, OFFSET_PLUS_RIGHT)
 
     # Timeline
     ax.plot([-0.5, 29.0], [TIMELINE_Y] * 2, color=C_STRUCTURE, lw=0.8, zorder=1)
@@ -578,7 +588,7 @@ def draw_schematic(ax: plt.Axes) -> None:
         (TAIL_SPAN[0], TAIL_Y[0]),
         (OFFSET, TAIL_Y[0]),
         (NEXT_ONSET, CLIP_Y[0]),
-        (OFFSET_PLUS_13, UNCLIP_Y[0]),
+        (OFFSET_PLUS_RIGHT, UNCLIP_Y[0]),
     ]:
         ax.plot(
             [x, x],
@@ -595,7 +605,7 @@ def draw_schematic(ax: plt.Axes) -> None:
     for x, label in [
         (OFFSET, "offset"),
         (NEXT_ONSET, "next onset"),
-        (OFFSET_PLUS_13, "previous\noffset + 13 s"),
+        (OFFSET_PLUS_RIGHT, f"previous\noffset + {POST_OFFSET_WINDOW_S:g} s"),
     ]:
         ax.plot(
             [x, x],

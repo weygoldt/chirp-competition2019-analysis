@@ -2,6 +2,8 @@
 # Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
 # start method for pymc on Python 3.14). Model, priors, sampler settings and seed (20250101) unchanged.
 # Events, observed fractions and posterior median/HDI also go to write_stats ("offset_logreg").
+# The window is the offset window of offset_window.py (was -3 to +13 s): columns *_chirps_offset_window
+# in chirp_event_correlations_offset_window (were *_chirps_fixed_m3p13 in chirp_event_correlations_m3p13).
 """
 Estimate whether loser/winner chirps occur in a fixed window around chasing
 offsets using a Bayesian Bernoulli intercept-only GLMM with a random
@@ -9,7 +11,8 @@ intercept on recording.
 
 The estimand is the population-level probability that an event has at least
 one chirp from the focal role (loser or winner) in the analysis window
-(`*_chirps_fixed_m3p13`, i.e. ~-3 to +13 s relative to chasing offset).
+(`*_chirps_offset_window`, the offset window of ``offset_window.py``
+around the chasing offset).
 """
 
 from pathlib import Path
@@ -62,7 +65,7 @@ def _print_summary(summary, title):
 
 
 def _load_data():
-    dataroot = PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
+    dataroot = PROCESSED / "chirp_event_correlations_offset_window" / "data" / "chasing"
     files = list(dataroot.glob("*obs*"))
     if len(files) != 1:
         raise ValueError(f"Expected exactly one file with 'obs' in name, got {files}")
@@ -71,9 +74,9 @@ def _load_data():
 
 def fit_for_mode(df, mode, savepath):
     if mode == "loser":
-        df = df.assign(chirped=df["n_loser_chirps_fixed_m3p13"] > 0)
+        df = df.assign(chirped=df["n_loser_chirps_offset_window"] > 0)
     elif mode == "winner":
-        df = df.assign(chirped=df["n_winner_chirps_fixed_m3p13"] > 0)
+        df = df.assign(chirped=df["n_winner_chirps_offset_window"] > 0)
     else:
         raise ValueError(f"mode must be 'loser' or 'winner', got {mode!r}")
 

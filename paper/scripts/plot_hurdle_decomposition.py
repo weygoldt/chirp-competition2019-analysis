@@ -1,9 +1,10 @@
 # Ported from chirp_competition d040123 (src_paper/plot_hurdle_decomposition.py).
 # Changes: inputs under $PAPER_OUT/data/processed, figure via paper_config.figure (pdf + svg as before);
-# the drawn medians and HDIs also go to write_stats ("hurdle_decomposition").
+# the drawn medians and HDIs also go to write_stats ("hurdle_decomposition"). Inputs renamed with the
+# window (offset_window.py): n_chirps_offset_window in chirp_event_correlations_offset_window (were m3p13).
 """
 Figure: hurdle-model decomposition of chirp activity vs shuffle null
-around chase offsets (m3p13 window).
+around chase offsets (the offset window of ``offset_window.py``).
 
 Three-column layout (eLife two-column width). Each column corresponds
 to one component of the hurdle decomposition:
@@ -25,11 +26,11 @@ only in the KDE fill colour. Reference line at multiplier = 1 on
 linear x-axis.
 
 Inputs:
-  data/processed/chirp_event_correlations/aggregated/chasing/
+  data/processed/chirp_event_correlations_offset_window/
       hurdle_shuffle_baseline/
-          n_chirps_fixed_m3p13_obs_with_shuffle_baselines.csv
-          n_chirps_fixed_m3p13_hurdle_presence_trace.nc
-          n_chirps_fixed_m3p13_hurdle_positive_trace.nc
+          n_chirps_offset_window_obs_with_shuffle_baselines.csv
+          n_chirps_offset_window_hurdle_presence_trace.nc
+          n_chirps_offset_window_hurdle_positive_trace.nc
 """
 
 from __future__ import annotations
@@ -60,8 +61,8 @@ set_light_style()
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-RESP = "n_chirps_fixed_m3p13"
-DATA_DIR = PROCESSED / "chirp_event_correlations_m3p13" / "hurdle_shuffle_baseline"
+RESP = "n_chirps_offset_window"
+DATA_DIR = PROCESSED / "chirp_event_correlations_offset_window" / "hurdle_shuffle_baseline"
 SCORED_CSV = DATA_DIR / f"{RESP}_obs_with_shuffle_baselines.csv"
 PRESENCE_TRACE = DATA_DIR / f"{RESP}_hurdle_presence_trace.nc"
 POSITIVE_TRACE = DATA_DIR / f"{RESP}_hurdle_positive_trace.nc"

@@ -8,17 +8,21 @@ was never committed (audit item O5 of the old repository's
 neither merges overlapping chases nor writes the ``*_20s_around_chasing_on``
 columns, so it is not that writer.
 
-The old file has the 1,958 rows and the 13 columns of the m3p13 observation
-file (``summarize_chirp_event_correlation_around_chasing.py``, same chase
-handling: chases and chirps before 3 h, overlapping chases merged) plus 12
-columns: chirps of the loser and of the winner in [x - 10, x] ("10s_before"),
-[x, x + 10] ("10s_after") and their sum ("20s_around") for x = chase onset
-and offset, counted with ``count_chirps_in_interval``. This script builds
-exactly that. On the v1 detections (``PAPER_DETECTIONS=rcnn``) it reproduces
-all 25 columns of the old file value for value (checked 2026-11-13 during
-the port; the 12 reconstructed columns by a read-only check, the 13 shared
-ones because they equal the old m3p13 file). Only the observed file is
-written; the regression reads no permutations.
+The old file has the 1,958 rows and the 13 columns of the offset-window
+observation file (``summarize_chirp_event_correlation_around_chasing.py``,
+same chase handling: chases and chirps before 3 h, overlapping chases merged)
+plus 12 columns: chirps of the loser and of the winner in [x - 10, x]
+("10s_before"), [x, x + 10] ("10s_after") and their sum ("20s_around") for
+x = chase onset and offset, counted with ``count_chirps_in_interval``. This
+script builds exactly that. On the v1 detections (``PAPER_DETECTIONS=rcnn``)
+it reproduces all 25 columns of the old file value for value (checked
+2026-11-13 during the port, when the window was -3 to 13 s; the 12
+reconstructed columns by a read-only check, the 13 shared ones because they
+equal the old m3p13 file). Only the observed file is written; the regression
+reads no permutations. The 10-s windows (``WINDOW_S``) are not the offset
+window (``offset_window.py``); the three offset-window columns are copied
+from the observation file, named ``*_offset_window`` (``*_fixed_m3p13`` and
+``fixed_m3p13_window_width`` in the old file).
 
 Run after ``summarize_chirp_event_correlation_around_chasing.py``.
 """
@@ -48,7 +52,7 @@ OLD_COLUMNS = [
     "n_loser_chirps_10s_before_chasing_off", "n_winner_chirps_10s_before_chasing_off",
     "n_loser_chirps_10s_after_chasing_off", "n_winner_chirps_10s_after_chasing_off",
     "n_loser_chirps_20s_around_chasing_off", "n_winner_chirps_20s_around_chasing_off",
-    "n_loser_chirps_fixed_m3p13", "n_winner_chirps_fixed_m3p13", "fixed_m3p13_window_width",
+    "n_loser_chirps_offset_window", "n_winner_chirps_offset_window", "offset_window_width",
 ]
 
 
@@ -83,16 +87,16 @@ def window_counts(source: str | None = None) -> pd.DataFrame:
 
 
 def main() -> None:
-    m3p13 = pd.read_csv(
-        PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
+    windowed = pd.read_csv(
+        PROCESSED / "chirp_event_correlations_offset_window" / "data" / "chasing"
         / "chirps_around_chasing_obs.csv"
     )
     extra = window_counts()
-    if len(extra) != len(m3p13) or not (extra["recording"].to_numpy() == m3p13["recording"].to_numpy()).all():
+    if len(extra) != len(windowed) or not (extra["recording"].to_numpy() == windowed["recording"].to_numpy()).all():
         raise RuntimeError(
-            f"chase rows do not line up with the m3p13 file ({len(extra)} vs {len(m3p13)})"
+            f"chase rows do not line up with the offset-window file ({len(extra)} vs {len(windowed)})"
         )
-    out = pd.concat([m3p13, extra.drop(columns="recording")], axis=1)[OLD_COLUMNS]
+    out = pd.concat([windowed, extra.drop(columns="recording")], axis=1)[OLD_COLUMNS]
     path = processed("chirp_event_correlations", "data", "chasing", "chirps_around_chasing_obs.csv")
     out.to_csv(path, index=False)
     print(f"{len(out)} chases -> {path}")

@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src_paper/plot_re_analysis.py).
 # Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); the design summary,
-# HDI overlaps and grouping levels of the readout also go to write_stats ("re_analysis").
+# HDI overlaps and grouping levels of the readout also go to write_stats ("re_analysis"). The predictor is
+# loser_chirped_offset_window (offset_window.py; was loser_chirped_fixed_m3p13).
 """
 Random-effects justification — figure + terminal readout.
 
@@ -83,7 +84,7 @@ OUT_FIG = figure(f"{filename}.pdf")
 # ---------------------------------------------------------------------------
 # Fixed-effect spec held constant across the comparison; only RE varies.
 MODEL = "M4_causal_adj_full"
-PREDICTOR = "loser_chirped_fixed_m3p13"
+PREDICTOR = "loser_chirped_offset_window"
 SUBSET = "full"
 
 

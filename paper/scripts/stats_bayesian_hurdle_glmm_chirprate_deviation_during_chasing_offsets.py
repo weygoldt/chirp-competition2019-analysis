@@ -1,13 +1,15 @@
 # Ported from chirp_competition d040123 (src_paper/stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets.py).
 # Changes: input/output under $PAPER_OUT/data/processed (imports paper_config, which also sets the fork
 # start method for pymc on Python 3.14). Models, priors, sampler settings and seed unchanged. The printed
-# digest also goes to write_stats ("hurdle", one entry per response variable).
+# digest also goes to write_stats ("hurdle", one entry per response variable). The window is the offset
+# window of offset_window.py (was -3, +13 s); its directory, response and stats key are named offset_window
+# (were chirp_event_correlations_m3p13 and n_chirps_fixed_m3p13).
 """
 Hurdle / two-part Bayesian GLMM for chirp activity around chase offsets,
 comparing observed activity against a shuffle-time null.
 
-For each chase event we count chirps in the fixed
-[chase_offset - 3, chase_offset + 13] s window (the m3p13 window),
+For each chase event we count chirps in the offset window
+[chase_offset + left, chase_offset + right] (``offset_window.py``),
 separately for the winner and the loser. The dataset is stacked so each
 chase contributes two rows -- one with the loser as focal, one with the
 winner as focal -- with a `status` column distinguishing them
@@ -44,12 +46,12 @@ chirping is elevated above what random placement would produce.
 
 Inputs (from `summarize_chirp_event_correlation_around_chasing.py`):
 
-  data/processed/chirp_event_correlations/data/chasing/
+  data/processed/chirp_event_correlations_offset_window/data/chasing/
       chirps_around_chasing_obs.csv
       chirps_around_chasing_perm_{0..299}.csv
 
 Outputs:
-  data/processed/chirp_event_correlations/hurdle_shuffle_baseline/
+  data/processed/chirp_event_correlations_offset_window/hurdle_shuffle_baseline/
       <resp>_obs_with_shuffle_baselines.csv
       <resp>_obs_vs_nullmean.png
       <resp>_p_null_pos_by_status.png
@@ -79,13 +81,13 @@ from stats_utils import parse_bambi_model_output
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-DATA_DIR = PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
+DATA_DIR = PROCESSED / "chirp_event_correlations_offset_window" / "data" / "chasing"
 OBS_FILE = DATA_DIR / "chirps_around_chasing_obs.csv"
-OUTDIR = PROCESSED / "chirp_event_correlations_m3p13" / "hurdle_shuffle_baseline"
+OUTDIR = PROCESSED / "chirp_event_correlations_offset_window" / "hurdle_shuffle_baseline"
 
-# Primary response: the m3p13 window. Listed as a list so other windows
+# Primary response: the offset window. Listed as a list so other windows
 # can be appended later (e.g. 20s symmetric) for sensitivity checks.
-RESPONSE_VARS = ["n_chirps_fixed_m3p13"]
+RESPONSE_VARS = ["n_chirps_offset_window"]
 
 MODEL_KWARGS = dict(dropna=True)
 

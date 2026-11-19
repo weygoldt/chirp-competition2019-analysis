@@ -77,6 +77,7 @@ chain_rates() {        # Fig. event_time_rates_winner_loser_chirp (+ inputs of t
   heavy warped 12G analyze_warped_chase_chirp_rates_trial.py
   step plot_event_time_rates_winner_loser_chirp.py
   step plot_event_time_rates_winner_loser_chirp_src_paper.py
+  step offset_window.py   # the window around chase offsets (from the primary run's loser peak)
 }
 
 chain_receiver() {     # needs chain_gamma and chain_rates
@@ -135,10 +136,18 @@ chain_hazard() {       # event-level hazard of chase offsets/onsets after loser 
   heavy hazard 24G hazard/chirp_chase_hazard.py
 }
 
+# Chains that count chirps in the window around chase offsets. They read it from
+# the primary run (offset_window.py, written by its chain rates), so in the
+# primary run they come after rates; before each of them the window is checked,
+# and a sensitivity run stops there if the primary's window is missing.
+WINDOW_CHAINS=" interchase coupling gamma receiver hurdle posteriors "
+check_window() { tagged check step offset_window.py --check; }
+
+# rates before the chains that use the offset window (see WINDOW_CHAINS).
 # v2figs last: its extraction knows only the runs in v2_fig_extract.RUNS (the
 # pipeline figures belong to the primary run), so on a sensitivity run such as
 # rtdetr_gapfill_t090 it stops the script after all analyses are done.
-ALL=(counts status agonistic interchase coupling gamma rates receiver hurdle echo descriptive allocation posteriors v2figs)
+ALL=(counts status agonistic rates interchase coupling gamma receiver hurdle echo descriptive allocation posteriors v2figs)
 chains=("$@")
 (( ${#chains[@]} )) || chains=("${ALL[@]}")
 for c in "${chains[@]}"; do
@@ -147,6 +156,7 @@ done
 for c in "${chains[@]}"; do
   check_disk
   echo "=== [$(date -Is)] chain $c"
+  if [[ $WINDOW_CHAINS == *" $c "* ]]; then check_window; fi
   "chain_$c"
 done
 echo "=== [$(date -Is)] done: figures in $PAPER_OUT/figures"

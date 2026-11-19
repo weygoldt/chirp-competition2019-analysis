@@ -21,6 +21,8 @@ def run(tmp_path, monkeypatch):
     monkeypatch.setattr(paper_config, "DETECTIONS", "testrun")
     monkeypatch.setattr(ms.sys, "argv", ["analysis.py"])
     monkeypatch.setattr(ms, "_git", lambda *args: "" if args[0] == "status" else "c0ffee")
+    for name in ms.TESTING_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)
     return out
 
 
@@ -116,3 +118,14 @@ def test_check_command_checks_every_file(run, tmp_path, monkeypatch, capsys):
     assert f"{good}: matches" in out
     assert f"{stale} does not match" in err
     assert "value a.x: 2 -> 1" in err
+
+
+def test_collect_refuses_stats_written_with_a_testing_override(run, monkeypatch):
+    monkeypatch.setenv("PAPER_OFFSET_WINDOW", "-3,13")
+    path = ms.write_stats("a", {"x": 1})
+    assert json.loads(path.read_text())["testing_overrides"] == {"PAPER_OFFSET_WINDOW": "-3,13"}
+    with pytest.raises(ValueError, match="testing overrides"):
+        ms.build("testrun")
+    monkeypatch.delenv("PAPER_OFFSET_WINDOW")
+    ms.write_stats("a", {"x": 1})  # rerun without it
+    assert ms.build("testrun")["values"] == {"a": {"x": 1}}

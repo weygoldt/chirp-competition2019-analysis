@@ -1,5 +1,6 @@
 # Ported from chirp_competition d040123 (src_paper/plot_chirp_coupling.py).
-# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure().
+# Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(). The window width comes
+# from offset_window.py (was the constant 16 s of the -3, +13 s window; columns were *_fixed_m3p13).
 """
 Figure: coupling of chirp rate to competition intensity.
 
@@ -15,10 +16,11 @@ Layout:
   Panel c — posterior median relative chirp rate over (prev ICI, D)
             from the model.
   Panel d — mean observed chirp rate per 2D bin, rescaled to chirps
-            per 16-s window for comparability with the model's window-
-            scale predictions. Each row contributes its per-second
-            rate (chirp_count / window_width), so clipped-window rows
-            aren't downweighted. Bins with no observations are masked.
+            per full offset window (its width, offset_window.py) for
+            comparability with the model's window-scale predictions.
+            Each row contributes its per-second rate (chirp_count /
+            window_width), so clipped-window rows aren't downweighted.
+            Bins with no observations are masked.
 
 Expects:
   data/processed/chirp_coupling/negbin/C2_prev_ICI_and_D.nc
@@ -39,6 +41,7 @@ import pandas as pd
 from matplotlib.transforms import blended_transform_factory
 from scipy.stats import gaussian_kde
 
+from offset_window import offset_window
 from paper_config import PROCESSED, figure
 from style import (
     letter_subplots,
@@ -68,8 +71,9 @@ formats = ["pdf", "png", "svg"]
 filename = Path(__file__).stem
 targetpath = figure(filename)
 
-# The fixed counting window is 16 s wide (-3, +13 s around chase offset).
-WINDOW_WIDTH_S = 16.0
+# The full width of the counting window (offset_window.py) around the chase offset.
+LEFT_S, RIGHT_S = offset_window()
+WINDOW_WIDTH_S = RIGHT_S - LEFT_S
 
 # Raw-heatmap binning (count of bins per axis; edges computed from data).
 RAW_N_BINS_PREV = 12
@@ -107,8 +111,8 @@ def load_observations(path: Path = OBS_DATA) -> pd.DataFrame:
     df = pd.read_csv(path)
     df = df.rename(
         columns={
-            "n_loser_chirps_fixed_m3p13": "chirp_count",
-            "fixed_window_duration": "window_width",
+            "n_loser_chirps_offset_window": "chirp_count",
+            "offset_window_duration": "window_width",
             "time_since_previous_chasing": "prev_ICI",
             "chasing_duration": "D",
         }

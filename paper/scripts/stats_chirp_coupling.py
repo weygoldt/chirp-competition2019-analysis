@@ -1,15 +1,18 @@
 # Ported from chirp_competition d040123 (src_paper/stats_chirp_coupling.py).
 # Changes: input/output under $PAPER_OUT/data/processed. Models, priors, sampler settings and seed unchanged.
 # The data anchors, divergences, LOO differences, Pareto-k counts and the full-width subset go to
-# write_stats ("coupling").
+# write_stats ("coupling"). The window is the offset window of offset_window.py (was -3, +13 s; its columns
+# were *_fixed_m3p13 and fixed_window_duration); the full-width subset is its width minus 0.1 s (was the
+# constant 15.9 s).
 """
 Coupling models — how do chirp rates track competition intensity?
 
 Builds a three-step Bayesian Negative Binomial GLMM hierarchy on chirp
-counts in the fixed [-3, +13] s window around each chase offset, using
-log-window-width as an exposure offset so the slope of each predictor
-is interpreted on the *rate* scale (chirps per unit time), not on raw
-counts.
+counts in the offset window around each chase offset
+(``offset_window.py``; clipped at the chase onset and the next chase),
+using log-window-width as an exposure offset so the slope of each
+predictor is interpreted on the *rate* scale (chirps per unit time),
+not on raw counts.
 
 C0 — intercept only.
     log(rate) = beta_0 + u_loser + v_winner
@@ -42,6 +45,7 @@ import numpy as np
 import pandas as pd
 
 from manuscript_stats import write_stats
+from offset_window import offset_window
 from paper_config import PROCESSED
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -58,6 +62,9 @@ OUT_DIR = PROCESSED / "chirp_coupling" / "negbin"
 TRACE_DIR = OUT_DIR
 OUT_CSV = OUT_DIR / "slope_summary.csv"
 LOO_MODELS = ("C0_intercept", "C1_prev_ICI", "C2_prev_ICI_and_D")
+# A window counts as full width when it is at most this much shorter than
+# the offset window (right - left).
+FULL_WIDTH_TOLERANCE_S = 0.1
 
 USE_CACHE = os.environ.get("USE_CACHE", "0") == "1"  # load cached .nc traces when available
 
@@ -90,8 +97,8 @@ def prepare_data(path: Path = IN_DATA) -> pd.DataFrame:
     # Rename so offset/predictor names are short and self-explanatory.
     df = df.rename(
         columns={
-            "n_loser_chirps_fixed_m3p13": "chirp_count",
-            "fixed_window_duration": "window_width",
+            "n_loser_chirps_offset_window": "chirp_count",
+            "offset_window_duration": "window_width",
             "time_since_previous_chasing": "prev_ICI",
             "chasing_duration": "D",
             "loser_id": "loser",
@@ -359,12 +366,19 @@ def zero_count_ppc(
 # ---------------------------------------------------------------------------
 # Sensitivity refit on full-width windows
 # ---------------------------------------------------------------------------
+def full_width(df: pd.DataFrame) -> pd.Series:
+    """Rows whose window is effectively full: the whole offset window, shortened
+    neither by a short chase nor by the next chase."""
+    left, right = offset_window()
+    return df["window_width"] >= (right - left) - FULL_WIDTH_TOLERANCE_S
+
+
 def refit_c2_full_width(
     df: pd.DataFrame,
     cache_dir: Path,
 ) -> pd.DataFrame:
-    """C2 restricted to rows where window_width is effectively full (16 s)."""
-    full = df[df["window_width"] >= 15.9].copy()
+    """C2 restricted to rows where window_width is effectively full."""
+    full = df[full_width(df)].copy()
     print(
         f"\n[sensitivity] C2 on full-width subset: "
         f"{len(full)}/{len(df)} rows ({len(full) / len(df):.1%})"
@@ -451,8 +465,8 @@ def main() -> None:
     # Sensitivity refit.
     sens = refit_c2_full_width(df, cache_dir=TRACE_DIR)
     all_summaries.append(sens)
-    full_width = (df["window_width"] >= 15.9).sum()  # the rule of refit_c2_full_width
-    stats["full_width_subset"] = {"n_rows": full_width, "fraction": full_width / len(df)}
+    n_full = full_width(df).sum()  # the rows of refit_c2_full_width
+    stats["full_width_subset"] = {"n_rows": n_full, "fraction": n_full / len(df)}
     write_stats("coupling", stats)
 
     # Persist the combined summary table.

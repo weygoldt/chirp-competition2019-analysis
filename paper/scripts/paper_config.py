@@ -26,6 +26,12 @@ variables override the defaults (the machine the results were made on):
     Figure directory (the old scripts' variable). Default
     ``$PAPER_OUT/figures``. Never the manuscript's ``figures/``: only
     ``paper/export_figures.sh`` copies the primary run's figures there.
+``PAPER_PRIMARY``
+    The primary run (the detections at the operating threshold), default
+    ``rtdetr_gapfill_t080``; its outputs are ``paper/output/<primary>``. Its
+    figures go into the manuscript (``export_figures.sh``), and the window
+    around chase offsets is derived from its event rates for every run
+    (``offset_window.py``).
 
 The scripts are run with the output root as working directory
 (``run_all.sh``), so any relative path the old code still uses lands there
@@ -63,6 +69,8 @@ OUT = _env("PAPER_OUT", PAPER / "output" / DETECTIONS)
 PROCESSED = OUT / "data" / "processed"
 RESULTS = OUT / "results"
 FIGURES = _env("PAPER_FIGURE_DIR", OUT / "figures")
+PRIMARY = os.environ.get("PAPER_PRIMARY", "rtdetr_gapfill_t080")
+PRIMARY_OUT = PAPER / "output" / PRIMARY
 
 # Seed for scripts that were unseeded in the old analysis (seeded ones keep theirs).
 SEED = 42

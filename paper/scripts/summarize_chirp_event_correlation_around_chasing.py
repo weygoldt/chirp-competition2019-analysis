@@ -3,24 +3,28 @@
 # output under $PAPER_OUT (it still clears its own output directory first). Seeds unchanged. The loading
 # of a trial's chases and chirps is factored out (trial_events; same order of random draws), so that
 # window_overlap can count how far the windows overlap; that and the chase counts go to write_stats
-# ("chase_windows").
+# ("chase_windows"). The window comes from offset_window.py (was the constant -3, +13 s, "m3p13"); its
+# columns, the output directory chirp_event_correlations_offset_window and the stats are named after it.
 """
-Build per-chase rows of chirp counts in the fixed [-3, +13] s window
-around each chase offset, for both winner and loser chirps. Used
-downstream by the hurdle-model permutation test that asks whether chirp
-rates in the m3p13 window exceed what would be expected if chirps were
-randomly distributed across the recording.
+Build per-chase rows of chirp counts in the offset window around each
+chase offset (``offset_window.py``: [offset + left, offset + right],
+left < 0 < right, from the loser chirp-rate peak of the primary run),
+for both winner and loser chirps. Used downstream by the hurdle-model
+permutation test that asks whether chirp rates in the offset window
+exceed what would be expected if chirps were randomly distributed across
+the recording.
 
 For every chase event we report chirp counts in:
 
   * during chase                  [onset, offset]
-  * m3p13 window around offset    [offset - 3, offset + 13]
+  * offset window                 [offset + left, offset + right]
 
-The m3p13 window is NOT clipped by adjacent chases here -- every row has
-the same 16 s exposure -- which is what lets the downstream hurdle-null
-test compare observed and shuffled chirp counts on equal footing. (The
-clipped variant lives in the receiver-effect / coupling pipeline, where
-exposure variability matters for a different scientific question.)
+The offset window is NOT clipped by adjacent chases here -- every row
+has the same exposure (right - left s) -- which is what lets the
+downstream hurdle-null test compare observed and shuffled chirp counts
+on equal footing. (The clipped variant lives in the receiver-effect /
+coupling pipeline, where exposure variability matters for a different
+scientific question.)
 
 The `randomize=True` branch replaces each fish's chirp times with
 uniform draws on [0, t_max], where `t_max` is the latest event time in
@@ -47,6 +51,7 @@ from rich.progress import track
 from analyze_event_time_rates_trial import load_and_convert_boris_events
 from chirps import load_chirps
 from manuscript_stats import write_stats
+from offset_window import offset_window
 from paper_config import DATA_ROOT, PROCESSED
 from summarize_submissive_chirp_effect_on_dominant import (
     BAD_RECORDINGS,  # noqa: F401  -- re-exported for visibility
@@ -64,12 +69,10 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 # ---------------------------------------------------------------------------
 DEFAULT_T_MAX_CAP = 3 * 60 * 60  # seconds; cap at the 3-h active phase
 
-# m3p13 window around the chase offset. Same definition as the
-# receiver-effect / coupling analyses, but here NOT clipped by adjacent
-# chases -- every row gets the same 16 s exposure.
-M3P13_PRE = 3.0
-M3P13_POST = 13.0
-M3P13_LABEL = "fixed_m3p13"
+# The offset window (offset_window.py) has the same definition as in the
+# receiver-effect / coupling analyses, but here it is NOT clipped by
+# adjacent chases -- every row gets the same exposure. Its columns:
+WINDOW_LABEL = "offset_window"
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +118,12 @@ def extract_data_for_trial(
     data_path: Path,
     randomize: bool,
     rng: np.random.Generator,
+    window: tuple[float, float],
     t_max_cap: float = DEFAULT_T_MAX_CAP,
 ) -> list[dict]:
-    """Return one dict per chase event in the trial."""
+    """Return one dict per chase event in the trial; `window` is the offset
+    window (left, right) in s relative to the chase offset."""
+    left, right = window
     chasing_onsets, chasing_offsets, loser_chirp_times, winner_chirp_times = trial_events(
         trial_row, data_path, t_max_cap
     )
@@ -154,17 +160,17 @@ def extract_data_for_trial(
         )
 
         # ------------------------------------------------------------------
-        # m3p13 window around offset: [offset - 3, offset + 13], unclipped.
+        # Offset window: [offset + left, offset + right], unclipped.
         # ------------------------------------------------------------------
-        m_lo = chase_offset - M3P13_PRE
-        m_hi = chase_offset + M3P13_POST
-        row[f"n_loser_chirps_{M3P13_LABEL}"] = count_chirps_in_interval(
+        m_lo = chase_offset + left
+        m_hi = chase_offset + right
+        row[f"n_loser_chirps_{WINDOW_LABEL}"] = count_chirps_in_interval(
             loser_chirp_times, m_lo, m_hi
         )
-        row[f"n_winner_chirps_{M3P13_LABEL}"] = count_chirps_in_interval(
+        row[f"n_winner_chirps_{WINDOW_LABEL}"] = count_chirps_in_interval(
             winner_chirp_times, m_lo, m_hi
         )
-        row[f"{M3P13_LABEL}_window_width"] = float(m_hi - m_lo)
+        row[f"{WINDOW_LABEL}_width"] = float(m_hi - m_lo)
 
         rows.append(row)
 
@@ -176,6 +182,7 @@ def extract_data_for_trial(
 # ---------------------------------------------------------------------------
 def get_data(
     data_path: Path,
+    window: tuple[float, float],
     randomize: bool = False,
     rng: np.random.Generator | None = None,
     t_max_cap: float = DEFAULT_T_MAX_CAP,
@@ -195,6 +202,7 @@ def get_data(
             data_path=data_path,
             randomize=randomize,
             rng=rng,
+            window=window,
             t_max_cap=t_max_cap,
         )
         all_rows.extend(chasing_rows)
@@ -202,12 +210,15 @@ def get_data(
     return pd.DataFrame(all_rows)
 
 
-def window_overlap(data_path: Path, t_max_cap: float = DEFAULT_T_MAX_CAP) -> dict:
-    """How far the m3p13 windows of the observed chases overlap (audit item O4
+def window_overlap(
+    data_path: Path, window: tuple[float, float], t_max_cap: float = DEFAULT_T_MAX_CAP
+) -> dict:
+    """How far the offset windows of the observed chases overlap (audit item O4
     of the old analysis): merged chases, consecutive offsets of a trial closer
     than the window width, and loser chirps that fall in more than one window."""
     summary_df = pd.read_csv(data_path / "trial_summary.csv", index_col=0)
-    width = M3P13_PRE + M3P13_POST
+    left, right = window
+    width = right - left
     n = dict(chases_before_merging=0, chases=0, offset_gaps=0, offset_gaps_below_width=0,
              loser_chirps=0, loser_chirps_in_a_window=0, loser_chirps_in_several_windows=0)
     for _, trial_row in summary_df.iterrows():
@@ -221,8 +232,8 @@ def window_overlap(data_path: Path, t_max_cap: float = DEFAULT_T_MAX_CAP) -> dic
         n["offset_gaps"] += len(gaps)
         n["offset_gaps_below_width"] += int((gaps < width).sum())
         # windows per chirp, with the bounds of count_chirps_in_interval
-        k = ((loser[:, None] >= offsets[None, :] - M3P13_PRE)
-             & (loser[:, None] <= offsets[None, :] + M3P13_POST)).sum(axis=1)
+        k = ((loser[:, None] >= offsets[None, :] + left)
+             & (loser[:, None] <= offsets[None, :] + right)).sum(axis=1)
         n["loser_chirps"] += len(loser)
         n["loser_chirps_in_a_window"] += int((k >= 1).sum())
         n["loser_chirps_in_several_windows"] += int((k >= 2).sum())
@@ -247,7 +258,9 @@ def main(
     """Generate `num_permutations` shuffled CSVs and one observed CSV."""
 
     filename = "chirps_around_chasing"
-    save_dir = PROCESSED / "chirp_event_correlations_m3p13" / "data" / "chasing"
+    save_dir = PROCESSED / "chirp_event_correlations_offset_window" / "data" / "chasing"
+    window = offset_window()
+    print(f"Offset window: {window[0]:+g} to {window[1]:+g} s around chase offsets")
 
     if save_dir.exists() and any(save_dir.glob("*.csv")):
         print(f"Removing existing CSVs under {save_dir}.")
@@ -260,17 +273,17 @@ def main(
         # Each permutation gets its own substream so seeds are reproducible
         # but permutations are independent.
         perm_rng = np.random.default_rng(base_rng.integers(0, 2**63 - 1))
-        perm_df = get_data(data_path, randomize=True, rng=perm_rng)
+        perm_df = get_data(data_path, window, randomize=True, rng=perm_rng)
         perm_df.to_csv(save_dir / f"{filename}_perm_{i}.csv", index=False)
 
     obs_rng = np.random.default_rng(base_rng.integers(0, 2**63 - 1))
-    final_df = get_data(data_path, randomize=False, rng=obs_rng)
+    final_df = get_data(data_path, window, randomize=False, rng=obs_rng)
     final_df.to_csv(save_dir / f"{filename}_obs.csv", index=False)
 
     print(f"\nWrote {num_permutations} permutations + 1 observed file to {save_dir}.")
     print(f"Observed file shape: {final_df.shape}")
 
-    overlap = window_overlap(data_path)
+    overlap = window_overlap(data_path, window)
     if overlap["chases"] != len(final_df):
         raise RuntimeError(f"{overlap['chases']} chases in the overlap count, {len(final_df)} rows")
     print(overlap)

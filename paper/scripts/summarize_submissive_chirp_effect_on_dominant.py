@@ -1,38 +1,42 @@
 # Ported from chirp_competition d040123 (src_paper/summarize_submissive_chirp_effect_on_dominant.py).
 # Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); data root default DATA_ROOT;
 # output under $PAPER_OUT (it still clears its own output directory first, as before).
+# The window around the chase offset comes from offset_window.py (was the constant -3, +13 s); its
+# columns are named offset_window_* / *_offset_window (were fixed_window_* / *_fixed_m3p13).
 """
 Build per-chase-event summary rows from BORIS annotations and RCNN chirp
 detections.
 
-For each chase event we count loser and winner chirps in a fixed
-[-3, +13] s window around the chase offset. The window is clipped to
-keep it inside the interval between the current chase's onset and the
-next chase's onset: the left clip to `chase_onset` excludes the
-previous inter-chase interval when the chase is very short (duration
-< 3 s); the right clip to `next_onset` excludes any part of the next
-chase. These two clips are deliberately asymmetric --- the left side
-can still extend into the current chase, but neither side ever
-overlaps a neighbouring chase event.
+For each chase event we count loser and winner chirps in the offset
+window [offset + left, offset + right] around the chase offset
+(``offset_window.py``: left < 0 < right, from the loser chirp-rate peak
+of the primary run). The window is clipped to keep it inside the
+interval between the current chase's onset and the next chase's onset:
+the left clip to `chase_onset` excludes the previous inter-chase
+interval when the chase is shorter than -left; the right clip to
+`next_onset` excludes any part of the next chase. These two clips are
+deliberately asymmetric --- the left side can still extend into the
+current chase, but neither side ever overlaps a neighbouring chase
+event.
 
-The fixed window is additionally decomposed into two halves at the
+The offset window is additionally decomposed into two halves at the
 chase offset, with a third post-offset variant that ignores the
 next-chase clip:
 
-  chase_tail                : [max(offset - 3, onset), offset]
+  chase_tail                : [max(offset + left, onset), offset]
                               Width depends on D only. Captures chirps
-                              during the last 3 s of the chase.
-  post_offset_clipped       : [offset, min(offset + 13, next_onset)]
+                              during the last -left s of the chase.
+  post_offset_clipped       : [offset, min(offset + right, next_onset)]
                               Width depends on next-ICI only. Captures
                               chirps after the chase, never overlaps
                               the next chase.
-  post_offset_unclipped     : [offset, offset + 13]
-                              Width always 13 s. Captures chirps after
-                              the chase; may overlap the next chase's
-                              pre-onset period in dense bouts. Paired
-                              with post_offset_clipped to bracket the
-                              window-length coupling in either
-                              direction.
+  post_offset_unclipped     : [offset, offset + right]
+                              Width always right s. Captures chirps
+                              after the chase; may overlap the next
+                              chase's pre-onset period in dense bouts.
+                              Paired with post_offset_clipped to
+                              bracket the window-length coupling in
+                              either direction.
 
 Also records `time_to_next_chasing`, `time_since_previous_chasing`, and
 `next_chasing_duration` as bout-structure covariates.
@@ -53,6 +57,7 @@ import typer
 
 from analyze_event_time_rates_trial import load_and_convert_boris_events
 from chirps import load_chirps
+from offset_window import offset_window
 from paper_config import DATA_ROOT, PROCESSED
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -67,10 +72,6 @@ BAD_RECORDINGS = [
     "2020-05-28-10_00",
     "2020-06-10-10_00",
 ]
-
-# Fixed [-3, +13] s window around the chase offset.
-FIXED_LEFT = 3.0
-FIXED_RIGHT = 13.0
 
 # Upper bound for randomization support and for chase/chirp filtering
 # when no shorter per-recording bound is available.
@@ -158,9 +159,12 @@ def extract_chasing_data_for_trial(
     data_path: Path,
     randomize: bool,
     rng: np.random.Generator,
+    window: tuple[float, float],
     t_max_cap: float = DEFAULT_T_MAX_CAP,
 ) -> tuple[list[dict], int, int]:
-    """Return (rows, n_chasing, n_contact) for one trial."""
+    """Return (rows, n_chasing, n_contact) for one trial; `window` is the
+    offset window (left, right) in s relative to the chase offset."""
+    left, right = window
     trial_folder = data_path / trial_row["recording"]
 
     contact_times, chasing_on_off_times, _, _ = load_and_convert_boris_events(
@@ -213,21 +217,21 @@ def extract_chasing_data_for_trial(
             chasing_onsets[i + 1] if (i + 1) < len(chasing_onsets) else np.inf
         )
 
-        # --- full fixed [-3, +13] window (asymmetric clip) -----------------
-        fixed_start = max(chase_offset - FIXED_LEFT, chase_onset)
-        fixed_end = min(chase_offset + FIXED_RIGHT, next_onset)
-        fixed_duration = max(fixed_end - fixed_start, 0.0)
+        # --- full offset window (asymmetric clip) ---------------------------
+        window_start = max(chase_offset + left, chase_onset)
+        window_end = min(chase_offset + right, next_onset)
+        window_duration = max(window_end - window_start, 0.0)
 
-        n_loser_fixed = count_chirps_in_interval(
-            loser_chirp_times, fixed_start, fixed_end
+        n_loser_window = count_chirps_in_interval(
+            loser_chirp_times, window_start, window_end
         )
-        n_winner_fixed = count_chirps_in_interval(
-            winner_chirp_times, fixed_start, fixed_end
+        n_winner_window = count_chirps_in_interval(
+            winner_chirp_times, window_start, window_end
         )
 
         # --- decomposition windows -----------------------------------------
-        # Chase-tail [max(offset - 3, onset), offset]: width depends on D.
-        tail_start = max(chase_offset - FIXED_LEFT, chase_onset)
+        # Chase-tail [max(offset + left, onset), offset]: width depends on D.
+        tail_start = max(chase_offset + left, chase_onset)
         tail_end = chase_offset
         tail_duration = max(tail_end - tail_start, 0.0)
         n_loser_tail = count_chirps_in_interval(
@@ -237,9 +241,9 @@ def extract_chasing_data_for_trial(
             winner_chirp_times, tail_start, tail_end
         )
 
-        # Post-offset clipped [offset, min(offset + 13, next_onset)]:
+        # Post-offset clipped [offset, min(offset + right, next_onset)]:
         # width depends on next-ICI; never overlaps the next chase.
-        post_clip_end = min(chase_offset + FIXED_RIGHT, next_onset)
+        post_clip_end = min(chase_offset + right, next_onset)
         post_clip_duration = max(post_clip_end - chase_offset, 0.0)
         n_loser_post_clip = count_chirps_in_interval(
             loser_chirp_times, chase_offset, post_clip_end
@@ -248,12 +252,12 @@ def extract_chasing_data_for_trial(
             winner_chirp_times, chase_offset, post_clip_end
         )
 
-        # Post-offset unclipped [offset, offset + 13]: fixed 13 s width,
+        # Post-offset unclipped [offset, offset + right]: fixed width,
         # may overlap the next chase's pre-onset period. Paired with the
         # clipped variant to bracket window-length coupling in the
         # opposite direction.
-        post_unclip_end = chase_offset + FIXED_RIGHT
-        post_unclip_duration = FIXED_RIGHT
+        post_unclip_end = chase_offset + right
+        post_unclip_duration = right
         n_loser_post_unclip = count_chirps_in_interval(
             loser_chirp_times, chase_offset, post_unclip_end
         )
@@ -284,20 +288,20 @@ def extract_chasing_data_for_trial(
                 "n_winner_chirps_in_chasing": n_winner_in,
                 "loser_chirped_in_chasing": n_loser_in > 0,
                 "winner_chirped_in_chasing": n_winner_in > 0,
-                # full fixed [-3, +13] window
-                "fixed_window_start": fixed_start,
-                "fixed_window_end": fixed_end,
-                "fixed_window_duration": fixed_duration,
-                "n_loser_chirps_fixed_m3p13": n_loser_fixed,
-                "n_winner_chirps_fixed_m3p13": n_winner_fixed,
-                "loser_chirp_rate_fixed_m3p13": (
-                    n_loser_fixed / fixed_duration if fixed_duration > 0 else np.nan
+                # full offset window
+                "offset_window_start": window_start,
+                "offset_window_end": window_end,
+                "offset_window_duration": window_duration,
+                "n_loser_chirps_offset_window": n_loser_window,
+                "n_winner_chirps_offset_window": n_winner_window,
+                "loser_chirp_rate_offset_window": (
+                    n_loser_window / window_duration if window_duration > 0 else np.nan
                 ),
-                "winner_chirp_rate_fixed_m3p13": (
-                    n_winner_fixed / fixed_duration if fixed_duration > 0 else np.nan
+                "winner_chirp_rate_offset_window": (
+                    n_winner_window / window_duration if window_duration > 0 else np.nan
                 ),
-                "loser_chirped_fixed_m3p13": n_loser_fixed > 0,
-                "winner_chirped_fixed_m3p13": n_winner_fixed > 0,
+                "loser_chirped_offset_window": n_loser_window > 0,
+                "winner_chirped_offset_window": n_winner_window > 0,
                 # chase-tail half (width depends on D only)
                 "chase_tail_duration": tail_duration,
                 "n_loser_chirps_chase_tail": n_loser_tail,
@@ -310,7 +314,7 @@ def extract_chasing_data_for_trial(
                 "n_winner_chirps_post_offset_clipped": n_winner_post_clip,
                 "loser_chirped_post_offset_clipped": n_loser_post_clip > 0,
                 "winner_chirped_post_offset_clipped": n_winner_post_clip > 0,
-                # post-offset, unclipped (fixed 13 s width)
+                # post-offset, unclipped (fixed width: right)
                 "post_offset_unclipped_duration": post_unclip_duration,
                 "n_loser_chirps_post_offset_unclipped": n_loser_post_unclip,
                 "n_winner_chirps_post_offset_unclipped": n_winner_post_unclip,
@@ -339,6 +343,7 @@ def extract_chasing_data_for_trial(
 # ---------------------------------------------------------------------------
 def get_data(
     data_path: Path,
+    window: tuple[float, float],
     randomize: bool = False,
     t_max_cap: float = DEFAULT_T_MAX_CAP,
     rng: np.random.Generator | None = None,
@@ -361,6 +366,7 @@ def get_data(
             data_path=data_path,
             randomize=randomize,
             rng=rng,
+            window=window,
             t_max_cap=t_max_cap,
         )
         all_rows.extend(rows)
@@ -389,6 +395,8 @@ def main(
 ) -> None:
     """Generate permutation baselines and one observed dataset."""
     filename = "chirp_effect_on_dominant"
+    window = offset_window()
+    print(f"Offset window: {window[0]:+g} to {window[1]:+g} s around chase offsets")
 
     if save_dir.exists() and any(save_dir.glob("*.csv")):
         print(f"Removing existing CSVs in {save_dir}.")
@@ -399,11 +407,11 @@ def main(
 
     for i in range(num_permutations):
         print(f"Permutation {i + 1}/{num_permutations}")
-        perm_df = get_data(data_path, randomize=True, rng=rng)
+        perm_df = get_data(data_path, window, randomize=True, rng=rng)
         perm_df.to_csv(save_dir / f"{filename}_perm_{i}.csv", index=False)
 
     print("Observed run")
-    final_df = get_data(data_path, randomize=False, rng=rng)
+    final_df = get_data(data_path, window, randomize=False, rng=rng)
     final_df.to_csv(save_dir / f"{filename}_obs.csv", index=False)
 
 

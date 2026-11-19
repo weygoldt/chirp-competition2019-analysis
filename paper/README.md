@@ -13,8 +13,10 @@ pipeline v2.
   minimum for current library versions). `git log -- paper/scripts/<name>`
   shows both; each ported file starts with a `# Ported from … / # Changes:`
   header. Models, priors, windows, kernels, trial selection, numbers of
-  permutations/resamples and MCMC settings are unchanged; the open items of
-  the old repository's `docs/known_issues.md` (O2–O15) are not fixed.
+  permutations/resamples and MCMC settings are unchanged (except the window
+  around chase offsets, which since 2026-11-19 is derived from the data:
+  below); the open items of the old repository's `docs/known_issues.md`
+  (O2–O15) are not fixed.
 - **Not changed:** the old repository and the manuscript's `figures/`
   (`paper_config.py` refuses to write there).
 - **Environment:** own uv project, Python 3.14 (`pyproject.toml`,
@@ -40,6 +42,8 @@ make paper-test                      # loader tests (from the repository root)
 | `PAPER_DETECTIONS` | `rtdetr` | which `chirp_{times,ids}_<x>.npy` the analysis reads (`rtdetr` = v2, `rcnn` = v1) |
 | `PAPER_OUT` | `paper/output/$PAPER_DETECTIONS` | intermediates (`data/processed/`), figures (`figures/`), logs (`logs/`), `report/` |
 | `CHIRP_ROOT_PY` | `<repo>/.venv/bin/python` | root environment (chirpdetector, gridtools) for `v2_fig_extract.py` |
+| `PAPER_PRIMARY` | `rtdetr_gapfill_t080` | the primary run: its figures go into the manuscript, its loser chirp-rate peak sets the window around chase offsets for every run |
+| `PAPER_OFFSET_WINDOW` | unset | **testing only**: e.g. `-3,13` replaces the window around chase offsets (s); stats written with it are refused by `collect` |
 
 `run.sh` runs a step in the paper environment with the output root as
 working directory and `MPLBACKEND=Agg` (the old scripts' `plt.show()` calls
@@ -63,11 +67,11 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:temporal_allocation_15_supp` (`plot_event_trial_progression_correlations_15_fish`) | allocation | `analyze_event_trial_progression_trial --annotated-only`, plot | `trial_event_progressions_annotated_subset/` |
 | `fig:chirp_status` (`plot_chirp_winner_loser_trial_summary`) | status | `make_trial_summary` (new), `tool_pivot_trial_summary_to_long_format`, `stats_bayesian_glmm_chirps_status_v3`, plot | `trial_summary.csv`, `trial_summary_long.csv`, `stats_bayesian_glmm_chirps_status_v3/` |
 | chirps within agonistic windows (no figure; `res:chirps_status`) | agonistic | `print_chirps_in_agonistic_windows` (full-trial and ±600 s shifts) | `chirps_in_agonistic_windows{,_maxshift_600s}.csv` |
-| `fig:event_correlations` (`plot_event_time_rates_winner_loser_chirp`) | rates | `analyze_event_time_rates_trial` (default and `--ag-events`), plot (`_src_paper` variant prints the extrema the text quotes) | `event_time_rates/*.json` |
+| `fig:event_correlations` (`plot_event_time_rates_winner_loser_chirp`) | rates | `analyze_event_time_rates_trial` (default and `--ag-events`), plot (`_src_paper` variant prints the extrema the text quotes), `offset_window` (the window around chase offsets, from the loser peak) | `event_time_rates/*.json`, `stats/offset_window.json` |
 | `fig:chirp_coupling` (`plot_chirp_coupling`) | interchase, coupling | `summarize_submissive_chirp_effect_on_dominant`, `stats_chirp_coupling`, plot | `chirp_effect_on_dominant_adaptive_window/data/`, `chirp_coupling/negbin/` |
 | `fig:winner_behavior_predicts_chirp` (`plot_obliterate_receiver_effect`) | interchase, gamma, rates, receiver | `stats_chirp_affects_chasing` (59 fits), `analyze_warped_chase_chirp_rates_trial`, plot | `…/gamma_glmm_binary/`, `event_time_rates/lchirps@{agon,agoff,warped_chase}.json` |
 | `fig:re_analysis` (`plot_re_analysis`) | gamma, receiver | plot | `…/gamma_glmm_binary/` |
-| `fig:hurdle_model` (`plot_hurdle_decomposition`) | hurdle | `summarize_chirp_event_correlation_around_chasing`, `stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets`, plot | `chirp_event_correlations_m3p13/` |
+| `fig:hurdle_model` (`plot_hurdle_decomposition`) | hurdle | `summarize_chirp_event_correlation_around_chasing`, `stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets`, plot | `chirp_event_correlations_offset_window/` |
 | `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
 | `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline` (root env), plot | `v2_figures/`, evaluation outputs under `$CHIRP_DATA` |
 | `fig:failure_modes` (`plot_v2_failure_modes`, Fig. S4; replaced `fig:performances_supp`) | v2figs | plot | `v2_figures/` |
@@ -91,6 +95,45 @@ raises `LedAlignmentError`. Before, a line through the first and the last LED
 shifted 2020-06-09 by 5-10 s and 2020-05-13 by 0-2.3 s in the first 3 h (all
 other trials by at most 24 ms). `plot_led_alignment.py` writes the diagnostic
 plots and a per-trial table to `paper/output/led_alignment/` (`README.txt` there).
+
+**The window around chase offsets.** Several analyses count chirps from
+shortly before to some seconds after each chase offset (the "offset window";
+in names `offset_window`). Until 2026-11-19 every script had the constants
+-3 and +13 s (`m3p13`, `FIXED_LEFT/RIGHT`), read off an earlier loser
+chirp-rate curve. Now the window is one parameter, derived by a rule
+(`scripts/offset_window.py`):
+
+- *Rule:* the stretch around chase offsets in which the losers' chirp rate is
+  above the null's 95 % band, i.e. the region of the strongest loser peak
+  around chase offsets (`event_rates.loser.chase_offset.peak.region_s`,
+  written by `plot_event_time_rates_winner_loser_chirp_src_paper`), both ends
+  rounded to the nearest whole second (half-way rounds outwards). The window
+  must contain the offset. The same rule on the older curve ([-3.1, +13.2] s)
+  gave the old -3 to 13 s; on the primary run of 2026-11-19 ([-5.3, +10.6] s)
+  it gives -5 to 11 s.
+- *Source:* derived once, from the primary run (`PAPER_PRIMARY`); the
+  sensitivity runs (0.5, 0.9) use the same window, so differences between
+  thresholds reflect the detections, not the windows. `offset_window.py`
+  (last step of chain `rates`) writes the namespace `offset_window` (window,
+  width, unrounded region, the rule's numbers): in the primary run from its
+  own event rates, in a sensitivity run as a copy of the primary's (it fails
+  if that is missing). Every analysis reads the window with
+  `offset_window.offset_window()`, which reads
+  `paper/output/$PAPER_PRIMARY/stats/offset_window.json` and raises if it is
+  missing or no longer matches the primary's event rates.
+- *Chains that depend on it* (`WINDOW_CHAINS` in `run_all.sh`, which checks
+  the window before each of them): `interchase` (obs.csv: counts in the
+  window, its chase-tail and post-offset parts), `coupling` (counts and
+  exposure, full-width subset), `gamma` (predictor `loser_chirped_offset_window`,
+  untruncated subset, decomposition), `receiver` (window schematic, forest,
+  RE figure), `hurdle` (counts in the unclipped window, the offset logistic
+  regressions; the before/after regression uses 10-s windows but its input
+  copies the window columns), `posteriors`. So in the primary run `rates`
+  comes first (as in `ALL`); after the window changes, rerun these chains in
+  every run.
+- *Testing only:* `PAPER_OFFSET_WINDOW=-3,13` replaces the window without
+  reading any file (to compare against the old outputs in a scratch
+  `PAPER_OUT`); `write_stats` marks such stats and `collect` refuses them.
 
 Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun), `REPORT_hazard_v2.md` (the event-level hazard analysis of loser chirps vs chasing, `scripts/hazard/`, v1 vs v2, and the BORIS/LED converter check; chain `hazard`, not in the default `run_all.sh`).
 
@@ -123,8 +166,9 @@ script owns each namespace:
 | `status_model`, `status_figure` | `stats_bayesian_glmm_chirps_status_v3`, `plot_chirp_winner_loser_trial_summary` | model size; per-trial medians |
 | `chirp_distributions` | `plot_chirp_distributions_manuscript` | the plotted decoder FWHMs, heights, undershoots; chirps outside the decoder's validated domain |
 | `event_rates` | `plot_event_time_rates_winner_loser_chirp_src_paper` | peaks and troughs of the event-triggered rates |
+| `offset_window` | `offset_window` | the window around chase offsets (the primary's, in every run), its width, the unrounded region, the rule |
 | `echo` | `stats_bayesian_logreg_echo_responses_new` | observed, chance and model echo fractions, diagnostics |
-| `chase_windows` | `summarize_chirp_event_correlation_around_chasing` | chases, merged chases, overlap of the -3..13 s windows |
+| `chase_windows` | `summarize_chirp_event_correlation_around_chasing` | chases, merged chases, overlap of the offset windows |
 | `offset_logreg`, `before_offset_logreg` | the two offset logistic regressions | events, observed fractions, model estimates |
 | `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers |
 | `coupling` | `stats_chirp_coupling` | data anchors, overdispersion, LOO, Pareto k |

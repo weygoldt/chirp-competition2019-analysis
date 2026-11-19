@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -34,6 +35,10 @@ DEFAULT_OUT = REPO / "manuscript" / "stats.json"
 
 # Keys become parts of the dotted paths of #stat("a.b.c"), so no dots.
 _KEY = re.compile(r"^[A-Za-z0-9_]+$")
+
+# Environment variables that are for testing only (offset_window.py): stats
+# written while one is set are marked, and collect refuses them.
+TESTING_OVERRIDES = ("PAPER_OFFSET_WINDOW",)
 
 
 # ------------------------------------------------------------------ writing
@@ -74,8 +79,9 @@ def write_stats(namespace: str, values: dict) -> Path:
     The file is ``$PAPER_OUT/stats/<namespace>.json``. It also records which
     script wrote it (``sys.argv[0]``), the detections of the run, the commit
     of ``paper/scripts`` and whether that directory had uncommitted changes
-    (``collect`` refuses such files). A namespace belongs to one script:
-    writing another script's namespace raises.
+    (``collect`` refuses such files), and any testing override that was set
+    (``TESTING_OVERRIDES``; ``collect`` refuses those files too). A namespace
+    belongs to one script: writing another script's namespace raises.
     """
     import paper_config  # the paper environment; only analysis scripts write
 
@@ -95,6 +101,9 @@ def write_stats(namespace: str, values: dict) -> Path:
         "code_modified": bool(_git("status", "--porcelain", "--", ".")),
         "values": _clean(values, namespace),
     }
+    overrides = {name: os.environ[name] for name in TESTING_OVERRIDES if name in os.environ}
+    if overrides:
+        record["testing_overrides"] = overrides
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, indent=1) + "\n")
     print(f"stats: {path}")
@@ -118,6 +127,9 @@ def build(run: str) -> dict:
         if record["code_modified"]:
             raise ValueError(f"{f}: written by uncommitted code in paper/scripts "
                              f"({record['script']}); commit and rerun it")
+        if record.get("testing_overrides"):
+            raise ValueError(f"{f}: written with testing overrides {record['testing_overrides']} "
+                             f"({record['script']}); rerun it without them")
         detections.add(record["detections"])
         inputs[f.relative_to(REPO).as_posix()] = {
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),

@@ -1,9 +1,12 @@
 # Ported from chirp_competition d040123 (src_paper/stats_chirp_affects_chasing.py).
 # Changes: input/output under $PAPER_OUT/data/processed. Models, priors, subsets, sampler settings and seed unchanged.
-# Observations and divergences per fit go to write_stats ("receiver_effect_fits").
+# Observations and divergences per fit go to write_stats ("receiver_effect_fits"). The window is the offset
+# window of offset_window.py (was the constant -3, +13 s): predictor loser_chirped_offset_window and column
+# offset_window_duration (were loser_chirped_fixed_m3p13 and fixed_window_duration).
 """
-Bayesian Gamma GLMMs: does loser chirp presence in the fixed [-3, +13] s
-window around a chasing offset change the dominant's chasing dynamics?
+Bayesian Gamma GLMMs: does loser chirp presence in the offset window
+[offset + left, offset + right] around a chasing offset
+(``offset_window.py``) change the dominant's chasing dynamics?
 
 Primary analysis (M1--M5b)
 --------------------------
@@ -20,11 +23,11 @@ Primary analysis (M1--M5b)
 
 Window decomposition (Mtail, Mpost_*, Mjoint_*)
 -----------------------------------------------
-Splits `loser_chirped_fixed_m3p13` into a chase-tail half
-([max(offset - 3, onset), offset]) and a post-offset half
-([offset, min(offset + 13, next_onset)] or, unclipped, [offset, offset + 13]).
+Splits `loser_chirped_offset_window` into a chase-tail half
+([max(offset + left, onset), offset]) and a post-offset half
+([offset, min(offset + right, next_onset)] or, unclipped, [offset, offset + right]).
 Diagnoses whether the M4 chirp slope is driven by:
-  - chirps during the last 3 s of the chase (chase_tail), or
+  - chirps during the last -left s of the chase (chase_tail), or
   - chirps after the chase (post_offset), or
   - a windowing-response coupling in which short next-ICIs mechanically
     shrink the post_offset window and produce an apparent positive
@@ -70,6 +73,7 @@ import numpy as np
 import pandas as pd
 
 from manuscript_stats import write_stats
+from offset_window import offset_window
 from paper_config import PROCESSED
 
 
@@ -82,7 +86,7 @@ DATA_PATH = (
 )
 OUT_DIR = PROCESSED / "chirp_effect_on_dominant_adaptive_window" / "gamma_glmm_binary"
 
-PRIMARY_PREDICTOR = "loser_chirped_fixed_m3p13"
+PRIMARY_PREDICTOR = "loser_chirped_offset_window"
 TAIL_PREDICTOR = "loser_chirped_chase_tail"
 POST_CLIPPED_PREDICTOR = "loser_chirped_post_offset_clipped"
 POST_UNCLIPPED_PREDICTOR = "loser_chirped_post_offset_unclipped"
@@ -91,10 +95,6 @@ PREV_COVARIATE = "log_time_since_previous_chasing"
 PREV_COVARIATE_C = PREV_COVARIATE + "_c"
 DUR_COVARIATE = "log_chasing_duration"
 DUR_COVARIATE_C = DUR_COVARIATE + "_c"
-
-FIXED_LEFT = 3.0
-FIXED_RIGHT = 13.0
-FULL_WINDOW_DURATION = FIXED_LEFT + FIXED_RIGHT
 
 ALL_RE_COLUMNS = ["loser_id", "winner_id", "recording"]
 
@@ -186,7 +186,8 @@ def primary_specs() -> list[dict]:
     ]
 
 
-def decomposition_specs() -> list[dict]:
+def decomposition_specs(window: tuple[float, float]) -> list[dict]:
+    _, right = window
     base_covs = [PREV_COVARIATE_C, DUR_COVARIATE_C]
     return [
         {
@@ -205,7 +206,7 @@ def decomposition_specs() -> list[dict]:
         },
         {
             "name": "Mpost_unclipped",
-            "role": "post-only (unclip: 13 s fixed)",
+            "role": f"post-only (unclip: {right:g} s fixed)",
             "response": "time_to_next_chasing",
             "predictors": [POST_UNCLIPPED_PREDICTOR],
             "covariates": base_covs,
@@ -230,7 +231,9 @@ def decomposition_specs() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Data preparation
 # ---------------------------------------------------------------------------
-def load_and_prepare(path: Path, specs: list[dict]) -> pd.DataFrame:
+def load_and_prepare(
+    path: Path, specs: list[dict], window: tuple[float, float]
+) -> pd.DataFrame:
     df = pd.read_csv(path)
 
     all_predictors = {p for s in specs for p in s["predictors"]}
@@ -240,7 +243,7 @@ def load_and_prepare(path: Path, specs: list[dict]) -> pd.DataFrame:
             "time_to_next_chasing",
             "time_since_previous_chasing",
             "chasing_duration",
-            "fixed_window_duration",
+            "offset_window_duration",
         ]
         + ALL_RE_COLUMNS
     )
@@ -264,7 +267,7 @@ def load_and_prepare(path: Path, specs: list[dict]) -> pd.DataFrame:
     for r in ALL_RE_COLUMNS:
         df[r] = df[r].astype("category")
 
-    _print_data_summary(df, all_predictors)
+    _print_data_summary(df, all_predictors, window)
 
     # df.groupby("loser_id")["recording"].nunique().value_counts().sort_index()
     # embed()
@@ -273,7 +276,11 @@ def load_and_prepare(path: Path, specs: list[dict]) -> pd.DataFrame:
     return df
 
 
-def _print_data_summary(df: pd.DataFrame, all_predictors: set[str]) -> None:
+def _print_data_summary(
+    df: pd.DataFrame, all_predictors: set[str], window: tuple[float, float]
+) -> None:
+    left, right = window
+    full_duration = right - left
     print("\n--- data summary ---")
     print(f"Total rows:       {len(df)}")
     print(f"Recordings:       {df['recording'].nunique()}")
@@ -285,11 +292,11 @@ def _print_data_summary(df: pd.DataFrame, all_predictors: set[str]) -> None:
         n1 = int((df[p] == 1).sum())
         print(f"  {p:<44}  n(=1) = {n1:>5d}  ({100 * n1 / len(df):>5.1f}%)")
 
-    fwd = df["fixed_window_duration"]
-    n_full = int((fwd >= FULL_WINDOW_DURATION - 1e-6).sum())
+    fwd = df["offset_window_duration"]
+    n_full = int((fwd >= full_duration - 1e-6).sum())
     print(
-        f"\nfixed_window_duration: full-duration rows "
-        f"(~{FULL_WINDOW_DURATION:.0f} s): "
+        f"\noffset_window_duration: full-duration rows "
+        f"(~{full_duration:.0f} s): "
         f"{n_full} of {len(df)} ({100 * n_full / len(df):.1f}%)"
     )
 
@@ -297,17 +304,18 @@ def _print_data_summary(df: pd.DataFrame, all_predictors: set[str]) -> None:
     print(
         f"\nChasing duration: median={cd_vals.median():.2f} s, "
         f"mean={cd_vals.mean():.2f} s, max={cd_vals.max():.2f} s; "
-        f"rows with D < {FIXED_LEFT:.0f} s: "
-        f"{int((cd_vals < FIXED_LEFT).sum())}"
+        f"rows with D < {-left:.0f} s: "
+        f"{int((cd_vals < -left).sum())}"
     )
 
 
 # ---------------------------------------------------------------------------
 # Row selection
 # ---------------------------------------------------------------------------
-def subset_masks(df: pd.DataFrame) -> dict[str, pd.Series]:
+def subset_masks(df: pd.DataFrame, window: tuple[float, float]) -> dict[str, pd.Series]:
+    left, right = window
     ones = pd.Series(True, index=df.index)
-    untruncated = df["fixed_window_duration"] >= FULL_WINDOW_DURATION - 1e-6
+    untruncated = df["offset_window_duration"] >= (right - left) - 1e-6
     matched = (
         df["time_to_next_chasing"].notna()
         & (df["time_to_next_chasing"] > 0)
@@ -651,8 +659,8 @@ def print_re_sensitivity_table(results: list[dict], subset: str) -> None:
     print("=" * 132)
 
 
-def print_decomposition_table(results: list[dict]) -> None:
-    decomp_names = {s["name"] for s in decomposition_specs()}
+def print_decomposition_table(results: list[dict], specs: list[dict]) -> None:
+    decomp_names = {s["name"] for s in specs}
     rows = [r for r in results if r["model"] in decomp_names]
     if not rows:
         return
@@ -795,12 +803,14 @@ def print_variance_table(variance_rows: list[dict]) -> None:
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    window = offset_window()
+    print(f"Offset window: {window[0]:+g} to {window[1]:+g} s around chase offsets")
     p_specs = primary_specs()
-    d_specs = decomposition_specs()
+    d_specs = decomposition_specs(window)
     all_specs = p_specs + d_specs
 
-    df = load_and_prepare(DATA_PATH, all_specs)
-    masks = subset_masks(df)
+    df = load_and_prepare(DATA_PATH, all_specs, window)
+    masks = subset_masks(df, window)
 
     # ----- cache survey ---------------------------------------------------
     planned: list[tuple[str, str, str]] = []
@@ -899,7 +909,7 @@ def main() -> None:
     print_primary_table(all_results)
     for subset in RE_SENSITIVITY_SUBSETS:
         print_re_sensitivity_table(all_results, subset=subset)
-    print_decomposition_table(all_results)
+    print_decomposition_table(all_results, d_specs)
     print_covariate_slopes(all_results)
     print_variance_table(all_variance)
     print_diagnostic_report(all_results)
