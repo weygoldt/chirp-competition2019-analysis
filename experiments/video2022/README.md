@@ -207,3 +207,28 @@ exports was most likely trained on `labels.v000.slp` (its "center" is exactly
 spine1), probably including the 45 frames of 2022-05-11 we use as test. Its
 scores on those frames are therefore optimistic. Your blind test frames
 (b2_v1) are the fair comparison.
+
+### Round 2 (2026-11-19)
+
+- **Data:** `pose7_r2`: mined frames with the round-1 model's spine2/3
+  (`b3_pseudo_inner.py`; 2,960 of 3,098 fish), old SLEAP labels, `b2_v1`, and
+  the 210 frames of round 1. One label per frame (the latest session wins).
+  Points inside the tube and the blocks are removed (`shelters.py`): your
+  round-1 labels mixed both ways, deleting such points at first and
+  estimating them later.
+- **Training:** fine-tuned from round 1, YOLO26l-pose at 1280 px, batch 4,
+  stopped at epoch 24 (your call). Model: `weights/pose7_r2_l.pt`.
+- **Test:** `b3_eval.py pose7_r2`, your 112 blind test frames (134 visible
+  fish) from the three held-out recordings:
+
+| | round 1 | round 2 | SLEAP (best of f / f-1) |
+|---|---|---|---|
+| fish found | 0.59 | 0.87 | 0.81 |
+| ... dark (105 fish) | | 0.87 | 0.76 |
+| ... light (29 fish) | | 0.90 | 0.97 |
+| false detections per frame | 0.07 | 0.00 | 0.33 |
+| median error snout / spine1 / tail (body lengths) | 0.026 / 0.029 / 0.022 | 0.023 / 0.021 / 0.019 | 0.016 / 0.031 / 0.018 |
+
+Round 2's other points: spine2 0.057, spine3 0.075, fins 0.08 body lengths
+(share within 0.1 body lengths: 0.73, 0.69, 0.59). The fins rest on only
+34 test labels.
