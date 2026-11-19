@@ -24,14 +24,24 @@ background, locations, examples, figures, report). In short:
 ### Frames and SLEAP's frame numbers
 
 `frames.py` reads frames by index, either sequentially (exact by
-construction) or by seeking (fast). `b2_frame_check.py` decoded whole videos
-and found seeking exact (12 of 12 frames identical per video).
+construction) or by seeking (fast). `b2_frame_check.py` decoded three whole
+videos (2022-05-10, 2022-06-20, 2022-07-06; output
+`/mnt/data1/chirp_v2/video2022/b2/frame_check/`) and found seeking exact
+(12 of 12 frames identical in each).
 
 SLEAP's frame numbers agree with `*converted.mp4` only to within one frame.
 For confident, fast-moving fish, the keypoints of SLEAP frame f are darkest
-(i.e. on the fish) in video frame f for 61 of 108 instances, and in f + 1
-for 37 (2022-05-10). This mix runs through the whole video with no drift; I
-did not find the cause. Consequences:
+(i.e. on the fish) in video frame f or in f + 1:
+
+| video | 0 | +1 | other offsets |
+|---|---|---|---|
+| 2022-05-10 | 61 | 37 | 10 |
+| 2022-06-20 | 76 | 38 | 30 |
+| 2022-07-06 | 13 | 11 | 2 |
+
+In 2022-05-10 the mix runs through the whole video with no drift. I did not
+find the cause; frames barely changing from one to the next occur, but in
+runs that look like still fish, not clear duplicates. Consequences:
 
 - **Mining** keeps only frames where both fish move at most 0.05 body
   lengths (~10 px) per frame. A one-frame offset then moves a mined label by
