@@ -46,6 +46,7 @@ def read_label(path: Path, w: int, h: int) -> list[dict]:
 
 
 def crops_figure(root: Path, manifest: pd.DataFrame, out: Path, n: int = 24) -> None:
+    """Random fish of the dataset with their stored labels."""
     import cv2
     import matplotlib
 
@@ -83,8 +84,8 @@ def crops_figure(root: Path, manifest: pd.DataFrame, out: Path, n: int = 24) -> 
         ax.set_title(f"{r.recording[5:10]} {r.phase} f{r.frame}", fontsize=7)
     for ax in axes.ravel()[len(rows):]:
         ax.axis("off")
-    fig.suptitle("Mined frames as the trainer reads them: box (green), head (red), centre (yellow), tail (blue)",
-                 fontsize=10)
+    fig.suptitle(f"{root.name}: frames as the trainer reads them; box (green), head (red), centre (yellow), "
+                 "tail (blue)", fontsize=10)
     fig.savefig(out, dpi=130)
     plt.close(fig)
 
@@ -102,16 +103,16 @@ def coverage_figure(root: Path, manifest: pd.DataFrame, out: Path) -> None:
     recs = sorted(set(counts.index) | set(b2_mine.SPLITS))
     counts = counts.reindex(recs, fill_value=0)
     left = np.zeros(len(recs))
-    for split, colour in (("train", "#2b8cbe"), ("val", "#fdae6b")):
+    for split, colour in (("train", "#2b8cbe"), ("val", "#fdae6b"), ("test", "#74c476")):
         if split in counts:
             axes[0].barh(range(len(recs)), counts[split], left=left, color=colour, label=split)
             left += counts[split].to_numpy()
     for i, r in enumerate(recs):
-        if b2_mine.split_of(r) == "test":
-            axes[0].text(1, i, "test: hand labels only", va="center", fontsize=7, color="#555")
+        if b2_mine.split_of(r) == "test" and counts.loc[r].sum() == 0:
+            axes[0].text(1, i, "test recording: not mined", va="center", fontsize=7, color="#555")
     axes[0].set_yticks(range(len(recs)), [r[:10] for r in recs], fontsize=7)
     axes[0].invert_yaxis()
-    axes[0].set_xlabel("mined frames")
+    axes[0].set_xlabel("frames")
     axes[0].legend(fontsize=8, frameon=False)
     axes[0].set_title("frames per recording", fontsize=10)
     first = manifest.iloc[0]
@@ -131,10 +132,11 @@ def coverage_figure(root: Path, manifest: pd.DataFrame, out: Path) -> None:
     axes[2].axvline(3.0, color="k", ls="--", lw=1)
     axes[2].text(3.02, axes[2].get_ylim()[1] * 0.9, "light on", fontsize=8)
     axes[2].set_xlabel("recording time (h)")
-    axes[2].set_ylabel("mined frames")
+    axes[2].set_ylabel("frames")
     axes[2].set_title("when the frames are", fontsize=10)
-    fig.suptitle("Mined training frames: spread over recordings and the arena, almost all from the dark phase",
-                 fontsize=11)
+    light = int((manifest["phase"] == "light").sum())
+    fig.suptitle(f"{root.name}: {len(manifest):,} frames from {manifest['recording'].nunique()} recordings, "
+                 f"{light} of them in the light phase", fontsize=11)
     fig.savefig(out, dpi=130)
     plt.close(fig)
 

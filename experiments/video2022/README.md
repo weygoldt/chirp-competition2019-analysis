@@ -83,6 +83,37 @@ The test recordings share their fish with other bouts of the same pairs, so
 the test measures new recordings and days, not new individuals. That is the
 use case: the model will run on these 19 recordings.
 
+### The 2022 SLEAP hand labels (`b2_convert_sleap_labels.py`, `sleap_slp.py`)
+
+`/mnt/data1/chirp_v2/video2022/datasets/sleap_v000/` is the YOLO version of
+`sleap_tracking/labels.v000.slp`: 100 hand-labelled frames from May 2022
+(project `/home/efish/leonie`) with an 8-node skeleton (snout, spine1-3, tail,
+left/right fin, LED_on). It has the same layout as `mined_v1`, plus
+`manifest.csv`, `summary.json` and the check figures.
+
+The 3-node project behind the exports (`competition.slp`) and its labels are
+not on this machine. I searched `/mnt/data1`, `/mnt/data2`, `/home/weygoldt`
+and `/home/efish`.
+
+- **Mapping:** snout -> head, spine1 -> centre, tail -> tail. spine1 lies 18 %
+  of the way from snout to tail (median of the 149 fully labelled fish),
+  exactly where the exports' "centre" lies.
+- **Cleaning:** only user instances are kept. 32 duplicate instances (a
+  second, near-identical instance on the same fish, shared body points within
+  20 px) were dropped, leaving exactly 2 fish in every frame (198 fish; 148
+  with a centre).
+- **Video frame:** the labels index the original videos. Each frame is the
+  one of f - 1, f, f + 1 in which the labelled body points are darkest: 0 in
+  57 frames, +1 in 25, -1 in 17. The -1 choices gain a median of 2 grey
+  levels (still fish), the +1 choices up to 37 (moving fish).
+- **Splits:** 54 train frames (2022-05-10, 2022-05-12) and 45 **test**
+  frames (2022-05-11, a held-out recording: never train on them; they are a
+  second, independent test set from another labeller). One frame of 2022-05-03
+  has no video on disk and was skipped. 11 frames are from the light phase.
+- **Harder than the mined frames:** crossing and touching fish, fish under
+  a block labelled by head and tail only, tails sticking out
+  (`check_crops.png`).
+
 ### The labelling session (`b2_session.py`, `pose_labeller/`)
 
 Session: `/mnt/data1/chirp_v2/video2022/labels/b2_v1/`. It holds
