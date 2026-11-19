@@ -217,3 +217,58 @@ separates the expert's chirps from not-chirps with AUC 0.64 (2019/2020) and
 
 Run them with the root environment, e.g.
 `/home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python experiments/data2022/a1_signal.py`.
+
+## Follow-up (2026-11-19 evening): the 2022 labelling session real_v2_2022
+
+Session: `experiments/real_labels_2022/`. Data and report:
+`/mnt/data1/chirp_v2/labels/real_v2_2022/` (`report/report.md`, `thresholds.png`).
+
+- Size: 360 candidates and 150 recall windows, about 22 min of item time.
+  Candidates were sampled in proportion to the detections within score bin x
+  fish x pair 3 / rest; windows uniformly over the dark phase.
+- Test-retest: kappa 0.89 (20 repeats).
+
+| 2022, kept, dark phase | >= 0.5 | >= 0.8 | >= 0.9 |
+|---|---|---|---|
+| agreement, all detections | 0.70 [0.67, 0.73] | 0.80 [0.77, 0.83] | 0.85 [0.79, 0.91] |
+| pair 3 (2022-06-20/22/24) | 0.94 | 0.98 | 1.00 |
+| the other 15 recordings | 0.30 | 0.39 [0.30, 0.48] | 0.61 [0.45, 0.75] |
+| loser, other recordings | 0.42 | 0.47 | 0.73 |
+| winner, other recordings | 0.13 | 0.19 | 0.36 |
+| share of the expert's window chirps found (24 marks) | 0.58 [0.37, 0.88] | 0.58 | 0.36 [0.13, 0.59] |
+
+Pair 3's loser carries most 2022 chirps, and its detections are chirps at any
+threshold. Outside pair 3 the fish chirp little: about 2 chirps per minute
+per recording from 5 window marks, against 7.6 in pair 3. There, winner
+detections at 0.5-0.9 are almost never chirps (0.006). At 0.9 the agreement
+outside pair 3 rises, but the detector keeps only about a third of the
+marked chirps (pair 3: 0.84 found at 0.8 vs 0.32 at 0.9).
+
+`a1_view_and_tracks.py` → `/mnt/data1/chirp_v2/data2022/a1/view_and_tracks/`
+(view SNR on 6 recordings per dataset; detection and track counts on all
+recordings):
+
+- **The all-electrode view costs 2022 more.**
+
+  | median | 2019/2020 | 2022 |
+  |---|---|---|
+  | fish SNR, summed over electrodes (what the labeller and the detector see) | 38.4 dB | 40.2 dB |
+  | fish SNR on its best electrode | 46.0 dB | 51.5 dB |
+  | lost by summing | 6.9 dB | 12.1 dB |
+  | strongest narrow lines (99th percentile over median) | 32.6 dB | 43.1 dB |
+
+- **Fish without a track:** detections >= 0.5 with no track within 20 Hz of
+  the predicted emitter are 6.0 % in 2022 vs 3.4 % in 2019/2020. Time with
+  only one live track: 1.5 % vs 0.1 % (median per recording).
+
+`a1_tracks_qc.py` → `/mnt/data1/chirp_v2/data2022/a1/tracks_qc/<rec>.png`
+draws wavetracker's spectrogram with the tracks and the untracked detections.
+Most untracked detections sit on an interference comb at multiples of about
+95.5 Hz (575, 670, 765, 860, 955, 1050, 1145, 1240 Hz in the fish range). It
+is in every 2022 recording at varying strength:
+
+- 2022-05-10 (41 % untracked): the 1145 Hz line is strong there, and sweeping
+  interference runs from about 1000 down to 700 Hz at 65-110 min.
+- 2022-05-11 (19 %) and 2022-06-27 (13 %): the 670 / 765 Hz lines.
+
+The two fish's tracks themselves follow the fish.
