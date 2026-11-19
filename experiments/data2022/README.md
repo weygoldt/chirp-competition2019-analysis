@@ -272,3 +272,28 @@ is in every 2022 recording at varying strength:
 - 2022-05-11 (19 %) and 2022-06-27 (13 %): the 670 / 765 Hz lines.
 
 The two fish's tracks themselves follow the fish.
+
+## Decision (author, 2026-11-19): 2022 uses threshold 0.8 with a per-fish correction
+
+`make_2022_chirps.py` → `/mnt/data1/chirp_v2/detections/competition2022_v2_t080_corrected/`
+(per recording `chirps_rtdetr_t080.parquet` and the legacy arrays
+`chirp_{times,ids,weights}_rtdetr_t080.npy`; run-level `trial_counts.csv`,
+`meta.json`, `README.md`).
+
+- **Selection:** kept detections with score >= 0.8, assigned to a track, as
+  in the 2019/2020 runs.
+- **Correction:** every detection carries `p_chirp`, the expert's agreement
+  in its stratum of real_v2_2022: group (pair 3 / rest) x fish (winner /
+  loser / other) x score bin (0.8-0.9 / 0.9-1), with its 95 % interval.
+  Expected chirps of a fish = the sum of its weights. In the dark phase,
+  summed over trials:
+
+| group | fish | detections | expected chirps (bounds) |
+|---|---|---|---|
+| pair 3 | loser | 4,132 | 4,125 (4,111-4,132) |
+| pair 3 | winner | 36 | 10 (0-18) |
+| rest | loser | 1,048 | 497 (269-728) |
+| rest | winner | 747 | 146 (51-245) |
+
+- The labels cover the dark phase; detections after it get the same weights
+  (`p_extrapolated`).
