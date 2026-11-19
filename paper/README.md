@@ -134,6 +134,14 @@ chirp-rate curve. Now the window is one parameter, derived by a rule
 - *Testing only:* `PAPER_OFFSET_WINDOW=-3,13` replaces the window without
   reading any file (to compare against the old outputs in a scratch
   `PAPER_OUT`); `write_stats` marks such stats and `collect` refuses them.
+  With it, the refactored scripts reproduced the old outputs value for value
+  (2026-11-19).
+- *Names* (were window-specific): columns `*_fixed_m3p13` → `*_offset_window`,
+  `fixed_window_{start,end,duration}` → `offset_window_*`,
+  `fixed_m3p13_window_width` → `offset_window_width`; Gamma predictor
+  `loser_chirped_offset_window`; directory `chirp_event_correlations_m3p13/` →
+  `chirp_event_correlations_offset_window/` (and the hurdle files in it);
+  stats `hurdle.n_chirps_fixed_m3p13.*` → `hurdle.n_chirps_offset_window.*`.
 
 Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun), `REPORT_hazard_v2.md` (the event-level hazard analysis of loser chirps vs chasing, `scripts/hazard/`, v1 vs v2, and the BORIS/LED converter check; chain `hazard`, not in the default `run_all.sh`).
 
