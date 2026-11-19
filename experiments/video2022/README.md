@@ -232,3 +232,34 @@ scores on those frames are therefore optimistic. Your blind test frames
 Round 2's other points: spine2 0.057, spine3 0.075, fins 0.08 body lengths
 (share within 0.1 body lengths: 0.73, 0.69, 0.59). The fins rest on only
 34 test labels.
+
+### Round 3: fish at the shelters (2026-11-19)
+
+- **Why:** on dark-phase frames with both fish, round 2 sometimes read one fish
+  crossing a block as two (5 of 36 close pairs in `review/pose7_r2_l`), and gave
+  fish peeking out of a shelter low confidence.
+- **Session** `labels/r3` (`b3_session_shelters.py`): 80 dark-phase frames with
+  a detection at a shelter. 39 with two overlapping detections there (author:
+  15 one fish, 24 two fish touching), 21 with a weak detection at a shelter,
+  20 blind test frames from the test recordings (drawn at random among frames
+  with a fish at a shelter, not by the model's doubt).
+- **Training:** `pose7_r3` (round 2 + r3, shelter points removed), fine-tuned
+  from round 2, 30 epochs (40 min). Model: `weights/pose7_r3_l.pt`.
+- **Test** (`b3_eval.py pose7_r3`, 177 blind frames, 249 fish):
+
+| | round 2 | round 3 |
+|---|---|---|
+| fish found | 0.859 | 0.859 |
+| false detections per frame | 0.006 | 0.006 |
+| median error snout / spine1 / tail (BL) | 0.024 / 0.029 / 0.021 | 0.017 / 0.030 / 0.017 |
+| r3 shelter test frames: fish found | 22 / 25 | 20 / 25 |
+
+- **Counts on 570 random dark frames** (30 per recording, no labels): neither
+  model has a frame with 3 or more confident fish. They disagree on 61
+  frames. Round 3 finds 24 fish that round 2 misses (at walls, crossing
+  blocks). Of the 29 frames where round 2 sees two fish and round 3 one, about
+  half are round 2 putting a second skeleton on the same fish, the rest are
+  fish peeking out of the tube or a block that round 3 leaves below 0.5. One
+  clear round-3 miss: two fish crossing in open water. Round 3 is used for the
+  full run (more precise snout / tail, fewer double detections; fish hidden
+  in a shelter do not chase).
