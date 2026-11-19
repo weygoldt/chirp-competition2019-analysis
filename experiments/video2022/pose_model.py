@@ -55,6 +55,40 @@ def to_fish(p: PredFish, min_kpt_conf: float = 0.5) -> pl.Fish:
     return pl.Fish({n: xy for n, xy in p.points.items() if p.kpt_conf[n] >= min_kpt_conf}, origin="model")
 
 
+# Points whose confidence carries no information yet: the mined frames label only snout,
+# spine1 and tail, and YOLO trains the confidence of an unlabelled point towards "not
+# visible", so spine2 / spine3 / the fins score ~0.01-0.03 whether visible or not (round 1,
+# 2026-11-19). Their positions are usable (median error 0.09-0.11 body lengths for spine2/3).
+INNER = ("spine2", "spine3")
+FINS = ("left_fin", "right_fin")
+
+
+def to_prefill(p: PredFish, min_kpt_conf: float = 0.5) -> pl.Fish:
+    """Pre-fill for the labeller: the confident points, spine2 / spine3 whenever spine1 and
+    tail are among them (between two visible points they are almost always visible), no fins."""
+    pts = {n: xy for n, xy in p.points.items() if p.kpt_conf[n] >= min_kpt_conf and n not in INNER + FINS}
+    if "spine1" in pts and "tail" in pts:
+        pts.update({n: p.points[n] for n in INNER})
+    return pl.Fish(pts, origin="model")
+
+
+def add_inner_points(fish: pl.Fish, preds: list[PredFish], max_px: float = 60.0) -> pl.Fish:
+    """Add the model's spine2 / spine3 to a labelled fish that lacks them, from the prediction
+    whose snout / spine1 / tail lie closest (mean distance < ``max_px``)."""
+    common = [n for n in ("snout", "spine1", "tail") if n in fish.points]
+    if not common or all(n in fish.points for n in INNER) or not preds:
+        return fish
+    d = [np.mean([np.hypot(fish.points[n][0] - q.points[n][0], fish.points[n][1] - q.points[n][1]) for n in common])
+         for q in preds]
+    best = int(np.argmin(d))
+    if d[best] >= max_px or not ("spine1" in fish.points and "tail" in fish.points):
+        return fish
+    pts = dict(fish.points)
+    for n in INNER:
+        pts.setdefault(n, preds[best].points[n])
+    return pl.Fish(pts, origin=fish.origin)
+
+
 def frame_uncertainty(fish: list[PredFish], confident: float = 0.5) -> dict[str, float]:
     """How doubtful a frame's prediction is.
 

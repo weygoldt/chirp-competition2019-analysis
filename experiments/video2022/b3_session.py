@@ -17,7 +17,10 @@ Items, in one fixed random order (``kind`` in ``truth.csv``):
   ``--per-recording`` per recording, >= 30 s apart, highest score first;
   pre-filled with the model.
 
-Model pre-fill: fish with box confidence >= 0.5, points with confidence >= 0.5.
+Model pre-fill (``pose_model.to_prefill``): fish with box confidence >= 0.5, points with
+confidence >= 0.5, spine2 / spine3 whenever spine1 and tail are shown, no fins; the
+author's earlier 3-point labels get the model's spine2 / spine3 added
+(``pose_model.add_inner_points``).
 
     .venv/bin/python experiments/video2022/b3_session.py r1 --model runs/<run>/weights/best.pt --with-test
 
@@ -72,7 +75,13 @@ def used_frames() -> set[tuple[str, int]]:
 
 
 def model_prefill(preds: list[pm.PredFish]) -> list[dict]:
-    return [pm.to_fish(p).to_json() for p in preds if p.box_conf >= PREFILL_BOX_CONF and pm.to_fish(p).n_points()]
+    """Model pre-fill (``pose_model.to_prefill``) of the fish with box confidence >= PREFILL_BOX_CONF."""
+    out = []
+    for p in preds:
+        f = pm.to_prefill(p)
+        if p.box_conf >= PREFILL_BOX_CONF and f.n_points():
+            out.append(f.to_json())
+    return out
 
 
 def main() -> None:
@@ -125,15 +134,15 @@ def main() -> None:
                     & ~pd.Series(list(zip(b2_truth["recording"], b2_truth["frame"], strict=True))).isin(used).to_numpy()]
     hard = hard.assign(done=hard["item_id"].isin(done)).sample(frac=1.0, random_state=SEED)
     hard = hard.sort_values("done", ascending=False, kind="stable").head(args.n_hard)
-    need = hard[~hard["done"]]
     imgs = {}
-    for name, g in need.groupby("recording"):
+    for name, g in hard.groupby("recording"):
         rec = next(x for x in list_recordings() if x.name == name)
         imgs.update({(name, f): im for f, im in fr.read_seek(rec.video, g["frame"])})
     keys = list(imgs)
     preds = dict(zip(keys, pm.predict(model, [imgs[k] for k in keys], imgsz=args.imgsz), strict=True))
     for r in hard.itertuples():
-        pre = ([f.to_json() for f in b2_labels[r.item_id].fish] if r.done else model_prefill(preds[(r.recording, r.frame)]))
+        p = preds[(r.recording, r.frame)]
+        pre = ([pm.add_inner_points(f, p).to_json() for f in b2_labels[r.item_id].fish] if r.done else model_prefill(p))
         add("hard", r.recording, r.frame, r.t_s, r.stratum, pre, image_from=B2 / "images" / f"{r.item_id}.jpg",
             source=f"b2_v1/{r.item_id}")
     print(f"test {sum(t['kind'] == 'test' for t in truth)}, hard {len(hard)} ({int(hard['done'].sum())} with b2_v1 labels)",
