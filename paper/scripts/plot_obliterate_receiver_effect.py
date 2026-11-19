@@ -492,16 +492,21 @@ def draw_schematic(ax: plt.Axes) -> None:
     CLIP_Y = (5.0, 5.55)
     UNCLIP_Y = (6.0, 6.55)
 
+    # Chase n ends at OFFSET; its offset window ends at OFFSET_PLUS_RIGHT, and the
+    # next chase (6 s long) starts CONTAM_S before that, so that the unclipped
+    # window overlaps it (the contamination zone). With the -3, +13 s window
+    # this is the original drawing (next chase 18-24 s).
     CHASE_N = (4.0, 10.0)
-    CHASE_NP1 = (18.0, 24.0)
     OFFSET = 10.0
-    NEXT_ONSET = 18.0
-    # The windows of chase n, clipped as in summarize_submissive_chirp_effect_on_dominant.
+    CONTAM_S = 5.0
     OFFSET_PLUS_RIGHT = OFFSET + POST_OFFSET_WINDOW_S
-    if OFFSET_PLUS_RIGHT <= NEXT_ONSET:
-        raise ValueError(f"the offset window ends {POST_OFFSET_WINDOW_S:g} s after the offset, before "
-                         "the next onset of the schematic: no contamination zone to draw")
+    NEXT_ONSET = OFFSET_PLUS_RIGHT - CONTAM_S
+    if NEXT_ONSET <= OFFSET:
+        raise ValueError(f"the offset window ends {POST_OFFSET_WINDOW_S:g} s after the offset, too "
+                         f"close to draw a next chase starting {CONTAM_S:g} s before its end")
+    CHASE_NP1 = (NEXT_ONSET, NEXT_ONSET + 6.0)
 
+    # The windows of chase n, clipped as in summarize_submissive_chirp_effect_on_dominant.
     TAIL_SPAN = (max(OFFSET - CHASE_TAIL_WINDOW_S, CHASE_N[0]), OFFSET)
     CLIP_SPAN = (OFFSET, NEXT_ONSET)
     UNCLIP_SHARED_SPAN = (OFFSET, NEXT_ONSET)
