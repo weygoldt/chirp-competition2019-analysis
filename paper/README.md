@@ -81,6 +81,17 @@ writes the chirp counts per trial and status, v1 against v2 (the run's
 `counts`) describes the dataset: trials per year and sex combination, the
 recordings' durations, the annotated trials and their chases and contacts.
 
+**Chases and contacts → recording time.** Every script that uses BORIS
+events reads them through `analyze_event_time_rates_trial.load_and_convert_boris_events`.
+Since 2026-11-19 it maps video frames to recording time with
+`led_alignment.fit_led_alignment` (the LED map of the hazard analysis, now
+shared): video and recording LED flashes are paired by the pattern of the
+10 s pauses, and the map is split where video was lost; an implausible map
+raises `LedAlignmentError`. Before, a line through the first and the last LED
+shifted 2020-06-09 by 5-10 s and 2020-05-13 by 0-2.3 s in the first 3 h (all
+other trials by at most 24 ms). `plot_led_alignment.py` writes the diagnostic
+plots and a per-trial table to `paper/output/led_alignment/` (`README.txt` there).
+
 Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun), `REPORT_hazard_v2.md` (the event-level hazard analysis of loser chirps vs chasing, `scripts/hazard/`, v1 vs v2, and the BORIS/LED converter check; chain `hazard`, not in the default `run_all.sh`).
 
 ## Figures into the manuscript
