@@ -297,3 +297,27 @@ The two fish's tracks themselves follow the fish.
 
 - The labels cover the dark phase; detections after it get the same weights
   (`p_extrapolated`).
+
+## Gap-filled 2022 tracks and summary plots (2026-11-19, author's request)
+
+- `gapfill_2022.py` runs `experiments/production/gapfill_reassign.py`
+  unchanged on `competition2022_v2_t001`, with the trial table taken from
+  `raw/meta.csv` → `/mnt/data1/chirp_v2/detections/competition2022_v2_t001_gapfill/`.
+  - Equivalence test: 19 of 19 recordings reproduced byte for byte with the
+    unpatched tracks.
+  - Gaps: 162 of 164 interior gaps of the 36 trial fish filled (1.07 h); 2
+    left (EODf jump > 15 Hz). 40 decisions changed at the operating threshold.
+  - The run's `README.md` repeats the 2019 script's line "without
+    2020-05-21-10_00, ..." (the 2019/2020 exclusions), which does not apply
+    to 2022.
+- The corrected 0.8 dataset now builds on it:
+  `competition2022_v2_gapfill_t080_corrected` (replaces the earlier
+  `competition2022_v2_t080_corrected`, built on the unfilled tracks).
+- **Decoder metrics** were already there: the production run decodes every
+  stored box (height, FWHM, 10 % width, undershoot, calibrated; 99.8 % of the
+  detections >= 0.8 have values, 96.8 % `params_ok`).
+- `summary_2022.py` → `/mnt/data1/chirp_v2/data2022/summary/`
+  (`counts_winner_loser.png`, `chirp_space.png`, `rate_over_time.png`,
+  `bouts.png`, `trials.csv`, `summary.json`). 2022 uses expected chirps
+  (sum of `p_chirp`); 2019/2020 uses the paper's primary run (the 33
+  analysed trials, detections >= 0.8).

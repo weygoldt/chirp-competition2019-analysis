@@ -2,7 +2,11 @@
 
 Selection, as in the 2019/2020 runs at 0.8: kept detections (not flagged by
 post-processing) with score >= 0.8, assigned (or re-attributed) to a track, from
-``competition2022_v2_t001``.
+the gap-filled 2022 run ``competition2022_v2_t001_gapfill`` (``gapfill_2022.py``;
+the trial fish's track gaps filled as for 2019/2020, author's request). The
+decoder's chirp parameters (``height_hz``, ``fwhm_s``, ``width10_s``,
+``undershoot_hz``, calibrated, with ``params_ok`` / ``params_flag``) are already in
+the table: the production pipeline decodes every stored box.
 
 Correction: every selected detection gets ``p_chirp``, the share of detections
 the expert judged chirps in its stratum of the 2022 labelling session
@@ -20,7 +24,7 @@ sum of ``p_chirp`` over its detections; its bounds are the sums of the bounds
 
     .venv/bin/python experiments/data2022/make_2022_chirps.py
 
-Output ``$CHIRP_DATA/detections/competition2022_v2_t080_corrected/``:
+Output ``$CHIRP_DATA/detections/competition2022_v2_gapfill_t080_corrected/``:
 
 - per recording: ``chirps_rtdetr_t080.parquet`` (the selected rows with
   ``status, group, p_chirp, p_chirp_low, p_chirp_high, p_extrapolated``) and the
@@ -46,9 +50,10 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from paths import DATA, REC_2022  # noqa: E402
 
-SRC = DATA / "detections" / "competition2022_v2_t001"
+SRC = DATA / "detections" / "competition2022_v2_t001_gapfill"
+TABLE = "chirps_rtdetr_gapfill.parquet"
 AGREEMENT = DATA / "labels" / "real_v2_2022" / "report" / "agreement.csv"
-OUT = DATA / "detections" / "competition2022_v2_t080_corrected"
+OUT = DATA / "detections" / "competition2022_v2_gapfill_t080_corrected"
 THRESHOLD = 0.8
 PAIR3 = {"2022-06-20-10_00", "2022-06-22-10_00", "2022-06-24-10_00"}
 DARK_S = 10_800.0
@@ -81,9 +86,9 @@ def main() -> None:
         raise SystemExit(f"expected 12 strata in {AGREEMENT}, found {len(st)}")
     meta = pd.read_csv(REC_2022 / "raw" / "meta.csv").rename(columns={"Unnamed: 0": "recording"}).set_index("recording")
     counts = []
-    for rd in sorted(SRC.glob("2022-*")):
+    for rd in sorted(p for p in SRC.glob("2022-*") if p.is_dir()):
         name = rd.name
-        d = pd.read_parquet(rd / "chirps_rtdetr.parquet")
+        d = pd.read_parquet(rd / TABLE)
         d = d[d["kept"] & (d["score"] >= THRESHOLD) & d["assign_status"].isin(["assigned", "reattributed"])].copy()
         fish = {}
         if name in meta.index:
