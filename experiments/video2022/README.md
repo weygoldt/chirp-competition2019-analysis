@@ -161,3 +161,45 @@ Tests: `test_pose_labels.py`, `test_labeller_server.py`, `test_labeller_page.py`
 (runs `pose_labeller/test_labeller.mjs` under node: clicks, skips, drags,
 deletes, undo and saves of the real page against a fake DOM), `test_frames.py`,
 `test_sleap_nix.py`.
+
+## B3: the 7-point pose model, trained in rounds (2026-11-19)
+
+**Skeleton (your decision):** the 2022 SLEAP hand-label skeleton, `snout, spine1,
+spine2, spine3, tail, left_fin, right_fin` (`pose_labels.SKELETON`). The flip map
+swaps the fins (a mirror image swaps the fish's left and right; Ultralytics
+applies it to horizontal and vertical flips). Older 3-point labels (mined
+frames, session b2_v1) are read as snout / spine1 / tail; their other points
+are "not labelled", which YOLO's keypoint loss ignores.
+
+**The loop:**
+
+1. `b3_dataset.py <name> mined_v1 sleap_v000 labels/<sessions>...` assembles a
+   YOLO dataset. Every source keeps its labels in `labels.jsonl` + `index.csv`;
+   images are symlinked; splits are by recording; blind test items go to test.
+2. `b3_train.py <name>` trains YOLO26 pose with flips, any rotation, mosaic and
+   brightness, and early stopping.
+3. `b3_eval.py <name> --model <best.pt>` scores the model and SLEAP on the
+   test frames: detection rate, false detections per frame, point error and
+   PCK@0.1 body lengths. SLEAP is scored at its frame f and at the better of
+   f / f - 1.
+4. `b3_session.py <round> --model <best.pt> [--with-test]` builds the next
+   correction session:
+   - the blind test frames, never pre-filled by a model;
+   - hard frames, pre-filled with your earlier labels or the model;
+   - the model's most doubtful frames (not exactly two confident fish,
+     ambiguous detections, weak points), pre-filled with the model.
+   `b3_session_sheet.py` draws a session's pre-fill.
+5. The labeller (`pose_labeller/`) takes the skeleton from the session's
+   `session.json`. A click far from the active fish starts a new one.
+
+Model (round 1, `runs/pose7_r1_yolo26x-pose_1280`): YOLO26x-pose, the
+largest current model, at 1280 px. With 16 GB only batch 2 fits (9.2 GB;
+AutoBatch's probe pushed the GPU past the watchdog's 15 GB and was stopped).
+Speed: about 2.4 min per epoch including validation, up to 100 epochs,
+patience 20.
+
+**Caveat for the comparison with SLEAP:** the 3-node SLEAP model behind the
+exports was most likely trained on `labels.v000.slp` (its "center" is exactly
+spine1), probably including the 45 frames of 2022-05-11 we use as test. Its
+scores on those frames are therefore optimistic. Your blind test frames
+(b2_v1) are the fair comparison.
