@@ -97,7 +97,7 @@ def predict_chunk(model, video: Path, frames: np.ndarray, times: np.ndarray, bat
         try:
             buf = []
             for f, img in read_range(video, frames):
-                buf.append((f, img))
+                buf.append((f, pm.prepare(img, imgsz)))
                 if len(buf) == batch:
                     q.put(buf)
                     buf = []
@@ -113,7 +113,8 @@ def predict_chunk(model, video: Path, frames: np.ndarray, times: np.ndarray, bat
     t_of = dict(zip(frames.tolist(), times.tolist(), strict=True))
     rows, n_frames = [], 0
     while (item := q.get()) is not None:
-        preds = pm.predict(model, [img for _, img in item], imgsz=imgsz, conf=conf, batch=len(item))
+        scale = item[0][1][1]
+        preds = pm.predict_prepared(model, [im for _, (im, _) in item], scale, imgsz=imgsz, conf=conf)
         for (f, _), p in zip(item, preds, strict=True):
             rows += rows_of(f, t_of[f], p)
         n_frames += len(item)
