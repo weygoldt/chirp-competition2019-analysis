@@ -1,19 +1,23 @@
-"""Does the paper's BORIS -> grid converter carry the LED misalignment that hz_data repairs?
+"""Did the paper's old BORIS -> grid converter carry the LED misalignment that hz_data repairs?
 
-New in the paper port (a check, not part of the hazard models). Every paper
-script that uses chases or contacts converts BORIS video times to grid time
-with ``analyze_event_time_rates_trial.load_and_convert_boris_events``: frame =
+New in the paper port (a check, not part of the hazard models). Until
+2026-11-19 every paper script that uses chases or contacts converted BORIS
+video times to grid time with
+``analyze_event_time_rates_trial.load_and_convert_boris_events`` as frame =
 round(t_video * FPS), then a line through the first and the last LED
 (``converte_video_frames_to_grid_idx``). ``hz_data.fit_led_alignment`` pairs
 video and grid LEDs by the gap fingerprint of the LED train and fits the map
 piecewise; in 2020-05-13 and 2020-06-09 the first/last-LED line is wrong (a
-grid LED is missing from the video, or the video starts LEDs late; see the
-hazard README, Data contradictions 4).
+grid LED is missing from the video at lost frames, or the video's LED list
+misses the first two flashes; see the hazard README, Data contradictions 4). Since 2026-11-19 the paper's loader
+uses the same map (``led_alignment.fit_led_alignment``); this script asserts
+that the loader and hz_data agree.
 
 For every chase onset, chase offset and contact of every trial with BORIS
 and LED files, this converts the same video time with both maps and reports
-the difference (paper minus hazard data layer, s). The LED residual of each
-map (median distance of the mapped video LEDs to the nearest grid LED) shows
+the difference (old paper converter minus hazard data layer, s; the columns
+keep the names ``t_paper_s``/``diff_s``). The LED residual of each map
+(median distance of the mapped video LEDs to the nearest grid LED) shows
 which map is right. Chases are paired as the paper's ``load_boris`` pairs them.
 
 Outputs in ``$PAPER_OUT/data/processed/chirp_chase_hazard/led_check/``:
@@ -36,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # paper/scripts
 import hz_data  # noqa: E402
 from analyze_event_time_rates_trial import (  # noqa: E402
     bad_recordings,
+    converte_video_frames_to_grid_idx,
     load_and_convert_boris_events,
     load_boris,
 )
@@ -47,18 +52,28 @@ SR = 20_000  # grid sampling rate (Hz), as the paper scripts pass it
 WINDOW_S = 3 * 3600.0  # the hazard analysis window (first 3 h)
 
 
+def old_paper_times(video_t: np.ndarray, fps: float, led_frames: np.ndarray,
+                    led_idx: np.ndarray) -> np.ndarray:
+    """Grid times (s) of the paper's converter until 2026-11-19 (first/last-LED line)."""
+    frames = np.array(np.round(video_t * fps), dtype=int)
+    return converte_video_frames_to_grid_idx(frames, led_frames, led_idx) / SR
+
+
 def trial_events(rec_dir: Path, rec: str, cfg: Config) -> tuple[pd.DataFrame, dict]:
     """Both conversions of every BORIS event of one trial, and the LED residuals."""
     contact_t, ag_on_off_t, led_idx, led_frames = load_and_convert_boris_events(rec_dir, rec, SR)
     _, _, t_ag_on_off, t_contact, fps = load_boris(rec_dir, rec)
     align = hz_data.fit_led_alignment(led_frames, led_idx, SR, cfg)
     t_ag_on_off = np.asarray(t_ag_on_off, float).reshape(-1, 2)
-    paper_on_off = np.asarray(ag_on_off_t, float).reshape(-1, 2)
+    loader_on_off = np.asarray(ag_on_off_t, float).reshape(-1, 2)
     parts = []
-    for event, video, paper in (("onset", t_ag_on_off[:, 0], paper_on_off[:, 0]),
-                                ("offset", t_ag_on_off[:, 1], paper_on_off[:, 1]),
-                                ("contact", np.asarray(t_contact, float), np.asarray(contact_t))):
+    for event, video, loader in (("onset", t_ag_on_off[:, 0], loader_on_off[:, 0]),
+                                 ("offset", t_ag_on_off[:, 1], loader_on_off[:, 1]),
+                                 ("contact", np.asarray(t_contact, float), np.asarray(contact_t))):
         hazard = align.to_grid(np.round(video * fps))
+        # the paper's loader and the hazard data layer use the same map
+        np.testing.assert_array_equal(loader, hazard, err_msg=f"{rec} {event}")
+        paper = old_paper_times(video, fps, led_frames, led_idx)
         parts.append(pd.DataFrame(dict(recording=rec, event=event, t_video_s=video,
                                        t_paper_s=paper, t_hazard_s=hazard,
                                        diff_s=paper - hazard)))

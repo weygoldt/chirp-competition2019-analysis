@@ -214,7 +214,9 @@ modes along that ridge).
    chase onsets/offsets and contacts converted to grid time with the LED sync
    pulses (logic of `load_boris`, `converte_video_frames_to_grid_idx`,
    `load_and_convert_boris_events` in `src/analyze_event_time_rates_trial.py`,
-   plus an anchor check, see Data contradictions 4). Every contradiction or
+   plus an anchor check, see Data contradictions 4; the map,
+   `fit_led_alignment`, lives in `paper/scripts/led_alignment.py` since
+   2026-11-19 and the paper's BORIS loader uses it too). Every contradiction or
    repair goes to `validation/flags.csv`.
 2. **Descriptives** (`hz_desc.py`). Chase offsets/onsets aligned to
    subordinate chirps, subordinate chirps aligned to chase offsets/onsets, the
@@ -783,15 +785,19 @@ can still change with another set of seeds.
 3. **File names.** The time axis is `times.npy`, not `time.npy`.
 4. **LED misalignment in 2020-05-13 and 2020-06-09 under the reference
    converter**, which pairs the first and last LEDs of video and grid. In
-   2020-06-09 the video starts two grid LEDs late (first video LED = grid LED
-   3). In 2020-05-13 the first and last LEDs are the same pulse, but one grid
+   2020-06-09 the video's LED list starts at grid LED 3 (the flag text says "the
+   video starts two grid LEDs late"): the first two flashes are in the video, but
+   the LED was moved by ~30 pixels before its third flash and the LED detector
+   only watched the later spot (`paper/output/led_alignment/03_*.png`). In
+   2020-05-13 the first and last LEDs are the same pulse, but one grid
    LED is missing from the video mid-recording, at a video frame gap (the
    per-frame wall clock in `2020-05-13_0_times.dat` jumps 4.87 s at frame
    458,116, ~4.9 h). Event times shift by up to 2.3 s and 9.9 s inside the
    window. The data layer pairs LEDs by their gap fingerprint and fits the map
    piecewise (median residual ~10 ms in all 20 group-5/6 trials). **Earlier
    analyses that used the reference converter carry this error for these two
-   trials.** These two dyads hold about half of the offsets preceded by a sub
+   trials** (the paper's loader used it until 2026-11-19; since then it uses the
+   same map, `paper/scripts/led_alignment.py`). These two dyads hold about half of the offsets preceded by a sub
    chirp (see the `drop_led_corrected` sensitivity and the "Support" line in
    `summary.txt`).
 5. **Unpaired chase onset** in 2020-05-13 (1686.2 s): dropped, 1686.2-1745.4 s

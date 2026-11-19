@@ -2,7 +2,9 @@
 # Changes: chirps via chirps.load_chirps (PAPER_DETECTIONS); output under $PAPER_OUT;
 # data root defaults to paper_config.DATA_ROOT; np.random.seed(SEED) at the start of main
 # (unseeded before); --ag-events selects the BORIS-trial configuration with the six
-# behaviour centrings (the old repo produced those JSONs by editing the module).
+# behaviour centrings (the old repo produced those JSONs by editing the module);
+# load_and_convert_boris_events maps video to grid time with led_alignment.fit_led_alignment
+# instead of the first/last-LED line (2026-11-19: 2020-05-13, 2020-06-09 were shifted by seconds).
 """
 Analyze the chirp (or other event) rate around agonistic time points.
 Assumes a single trial is a statistically independent unit.
@@ -24,6 +26,7 @@ from IPython import embed
 
 from logger import get_logger
 from chirps import load_chirps
+from led_alignment import check_led_alignment, fit_led_alignment
 from paper_config import DATA_ROOT, SEED, processed_dir
 
 logger = get_logger(__name__)
@@ -132,6 +135,13 @@ def load_boris(trial_path, recording):
 
 
 def converte_video_frames_to_grid_idx(event_frames, led_frames, led_idx):
+    """The old converter: a line through the first and the last LED (grid sample index).
+
+    Not used by any analysis since 2026-11-19: it is wrong where the video
+    misses LEDs at an end or lost frames in between (2020-06-09, 2020-05-13;
+    see led_alignment.py). Kept so that hazard/hz_led_check.py and
+    plot_led_alignment.py can show what the old times were.
+    """
     event_idx_grid = (event_frames - led_frames[0]) / (
         led_frames[-1] - led_frames[0]
     ) * (led_idx[-1] - led_idx[0]) + led_idx[0]
@@ -139,7 +149,18 @@ def converte_video_frames_to_grid_idx(event_frames, led_frames, led_idx):
 
 
 def load_and_convert_boris_events(trial_path, recording, sr):
-    """Load and convert BORIS events to grid recording time."""
+    """Load BORIS events and convert them to grid recording time (s).
+
+    Video frame = round(t_video * FPS); frame -> grid time with the LED map of
+    ``led_alignment.fit_led_alignment``, which pairs video and grid LEDs by the
+    gap pattern of the LED train and splits the map where video frames were
+    lost (until 2026-11-19: a line through the first and the last LED,
+    ``converte_video_frames_to_grid_idx``). Raises ``LedAlignmentError`` if the
+    map does not fit the LEDs (``led_alignment.check_led_alignment``).
+
+    Returns contact times (n,), chase onset/offset times (m, 2), the grid LED
+    sample indices and the video LED frames.
+    """
     # idx in grid-recording
     led_idx = (
         pd.read_csv(os.path.join(trial_path, "led_idxs.csv"), header=None)
@@ -157,13 +178,17 @@ def load_and_convert_boris_events(trial_path, recording, sr):
     contact_frame = np.array(np.round(t_contact * video_FPS), dtype=int)
     ag_on_off_frame = np.array(np.round(t_ag_on_off * video_FPS), dtype=int)
 
-    # led_t_GRID = led_idx / sr
-    contact_t_GRID = (
-        converte_video_frames_to_grid_idx(contact_frame, led_frames, led_idx) / sr
-    )
-    ag_on_off_t_GRID = (
-        converte_video_frames_to_grid_idx(ag_on_off_frame, led_frames, led_idx) / sr
-    )
+    align = fit_led_alignment(led_frames, led_idx, sr)
+    check_led_alignment(align, recording)
+    if align.method != "robust":  # more than a refit of the first/last-LED line
+        logger.info(
+            f"{recording}: LED map {align.method} (LEDs paired by their gap pattern; "
+            f"{len(align.seg_slope)} segment(s)); LED residual median "
+            f"{align.resid_med * 1e3:.0f} ms, first/last-LED line {align.ref_resid_med * 1e3:.0f} ms"
+        )
+
+    contact_t_GRID = align.to_grid(contact_frame)
+    ag_on_off_t_GRID = align.to_grid(ag_on_off_frame)
 
     return contact_t_GRID, ag_on_off_t_GRID, led_idx, led_frames
 

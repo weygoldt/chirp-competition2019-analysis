@@ -15,6 +15,13 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # paper/scripts
 import paper_config  # noqa: E402
+from led_alignment import (  # noqa: E402
+    INLIER_TOL_S,
+    MATCH_TOL_S,
+    MAX_ANCHOR_SHIFT,
+    MAX_RESID_MED_S,
+    STEP_TOL_S,
+)
 
 DEFAULT_DATA_ROOT = paper_config.DATA_ROOT
 DEFAULT_OUT_DIR = paper_config.PROCESSED / "chirp_chase_hazard"
@@ -67,15 +74,16 @@ class Config:
     sr: float = 20_000.0  # grid sampling rate, Hz (fishgrid.cfg AISampleRate)
     # rtdetr*: chirps_<det>.parquet (rows with keep); else chirp_times/ids_<det>.npy
     chirp_detector: str = paper_config.DETECTIONS
-    # BORIS video-time -> grid-time mapping: "robust" (anchor search + least
-    # squares on nearest-LED inliers) or "reference" (first/last LED as in
-    # src/analyze_event_time_rates_trial.py).
+    # BORIS video-time -> grid-time mapping (led_alignment.fit_led_alignment):
+    # "robust" (anchor search + least squares on nearest-LED inliers) or
+    # "reference" (first/last LED as in src/analyze_event_time_rates_trial.py).
+    # The tolerances default to led_alignment's, which the paper loader uses.
     led_alignment: str = "robust"
-    led_match_tol: float = 1.0  # s, max |residual| to pair a video LED with a grid LED
-    led_inlier_tol: float = 0.1  # s, max |residual| for a pair to enter the fit
-    led_step_tol: float = 0.1  # s, residual step that splits the map (frame drop)
-    led_max_anchor_shift: int = 3  # LEDs dropped at either end in anchor search
-    led_bad_resid: float = 0.05  # s, median residual above which a mapping is flagged
+    led_match_tol: float = MATCH_TOL_S  # s (1.0), max |residual| to pair a video LED with a grid LED
+    led_inlier_tol: float = INLIER_TOL_S  # s (0.1), max |residual| for a pair to enter the fit
+    led_step_tol: float = STEP_TOL_S  # s (0.1), residual step that splits the map (frame drop)
+    led_max_anchor_shift: int = MAX_ANCHOR_SHIFT  # (3) LEDs dropped at either end in anchor search
+    led_bad_resid: float = MAX_RESID_MED_S  # s (0.05), median residual above which a mapping is flagged
     # Same-sender detections closer than this are merged (first kept, flagged).
     chirp_dedup_window: float = 0.05  # s
     # Dom/sub chirps closer than this are flagged as possible double assignment.
