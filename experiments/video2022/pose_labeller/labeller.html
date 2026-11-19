@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <title>Fish keypoints</title>
 <style>
-  :root { --bg: #161616; --fg: #e8e8e8; --dim: #9a9a9a; --head: #ff4d4d; --center: #ffd24d; --tail: #4dc3ff; }
+  :root { --bg: #161616; --fg: #e8e8e8; --dim: #9a9a9a; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
   #bar { position: fixed; top: 0; left: 0; right: 0; height: 30px; display: flex; gap: 18px; align-items: center;
          padding: 0 12px; background: #222; border-bottom: 1px solid #333; z-index: 2; }
   #bar b { color: #fff; }
   #msg { color: #ffb347; }
   #cv { position: fixed; top: 31px; left: 0; cursor: crosshair; }
-  #help { position: fixed; right: 12px; top: 42px; width: 360px; background: rgba(20,20,20,0.92); border: 1px solid #444;
+  #help { position: fixed; right: 12px; top: 42px; width: 380px; background: rgba(20,20,20,0.92); border: 1px solid #444;
           padding: 10px 14px; z-index: 3; }
   #help h3 { margin: 4px 0 6px; font-size: 14px; }
   #help td { padding: 1px 8px 1px 0; vertical-align: top; }
   #help td:first-child { color: #fff; white-space: nowrap; font-family: monospace; }
-  .k { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+  .k { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 3px 0 6px; }
 </style>
 </head>
 <body>
@@ -27,15 +27,15 @@
 <canvas id="cv"></canvas>
 <div id="help">
   <h3>Label every visible fish</h3>
-  <p style="margin:0 0 8px">Per fish click <span class="k" style="background:var(--head)"></span>head (snout tip),
-  <span class="k" style="background:var(--center)"></span>"centre" (just behind the head, at the pectoral
-  fins, about 1/5 of the way from snout to tail: where SLEAP puts it; not the middle of the body),
-  <span class="k" style="background:var(--tail)"></span>tail (tip). A partly hidden fish: label only the visible part
-  (skip a hidden point with <b>s</b>). A fish you cannot see at all: no label. Points shown when the frame opens are
-  SLEAP's; correct, delete or keep them.</p>
+  <p style="margin:0 0 6px">Per fish, click the points in this order:<br><span id="nodes"></span></p>
+  <p id="note" style="margin:0 0 6px;color:#ccc"></p>
+  <p style="margin:0 0 8px">A partly hidden fish: label only the visible points (skip a hidden one with <b>s</b>).
+  A fish you cannot see at all: no label. Points shown when the frame opens are suggestions; correct, delete or keep them.</p>
   <table>
     <tr><td>click</td><td>place the next point of the active fish (a new fish if none is active)</td></tr>
-    <tr><td>n</td><td>start a new fish (next click = head)</td></tr>
+    <tr><td>click a point</td><td>make its fish active: further clicks fill its missing points</td></tr>
+    <tr><td>click far away</td><td>(more than ~1 body length from the active fish) starts a new fish</td></tr>
+    <tr><td>n</td><td>start a new fish</td></tr>
     <tr><td>s</td><td>skip the next point (not visible)</td></tr>
     <tr><td>drag point</td><td>move it</td></tr>
     <tr><td>right click</td><td>delete the point under the mouse</td></tr>
@@ -54,10 +54,8 @@
 </div>
 <script>
 "use strict";
-const NODES = ["head", "center", "tail"];
-const COLORS = {head: "#ff4d4d", center: "#ffd24d", tail: "#4dc3ff"};
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
-let S = null;               // session: items, labels
+let S = null, NODES = [], EDGES = [], COLORS = {};
 let k = 0;                  // current item index
 let img = null, fish = [], active = -1, history = [];
 let view = {s: 1, x: 0, y: 0}, contrast = false, t0 = performance.now(), dirty = false;
@@ -66,20 +64,29 @@ let drag = null;            // {kind: "point"|"pan", f, n, sx, sy, moved}
 function msg(t) { document.getElementById("msg").textContent = t || ""; }
 function item() { return S.items[k]; }
 function status(id) { const l = S.labels[id]; return l ? l.status : ""; }
+function emptyFish(origin) { return {pts: Object.fromEntries(NODES.map(n => [n, null])), origin, _skipped: []}; }
+function fromJson(f, origin) {  // {points: {...}, origin} -> internal fish
+  const g = emptyFish(origin || f.origin || "new");
+  for (const n of NODES) if (f.points && f.points[n]) g.pts[n] = [f.points[n][0], f.points[n][1]];
+  return g;
+}
 
 async function load() {
   const r = await fetch("/api/session"); S = await r.json();
+  NODES = S.skeleton.nodes; EDGES = S.skeleton.edges || NODES.slice(1).map((n, i) => [NODES[i], n]);
+  COLORS = S.skeleton.colors || {};
+  document.getElementById("nodes").innerHTML = NODES.map(n => `<span class="k" style="background:${COLORS[n]}"></span>${n}`).join(" ");
+  document.getElementById("note").textContent = S.skeleton.note || "";
   k = firstOpen(); open(k);
 }
 function firstOpen() {
   const i = S.items.findIndex(it => !["done", "unusable"].includes(status(it.item_id)));
   return i < 0 ? S.items.length - 1 : i;
 }
-function clone(x) { return JSON.parse(JSON.stringify(x)); }
 function open(i) {
   k = Math.max(0, Math.min(S.items.length - 1, i));
   const it = item(), lab = S.labels[it.item_id];
-  fish = lab ? clone(lab.fish) : clone(it.prefill || []).map(f => ({...f, origin: "prefill"}));
+  fish = lab ? lab.fish.map(f => fromJson(f)) : (it.prefill || []).map(f => fromJson(f, "prefill"));
   active = -1; history = []; dirty = false; t0 = performance.now();
   img = new Image(); img.onload = () => { fit(); draw(); }; img.src = "/" + it.image;
   bar();
@@ -88,15 +95,14 @@ function bar() {
   const it = item(), done = S.items.filter(x => ["done", "unusable"].includes(status(x.item_id))).length;
   document.getElementById("pos").innerHTML = `frame <b>${k + 1}</b> / ${S.items.length} &nbsp; finished ${done}`;
   const st = status(it.item_id);
-  document.getElementById("state").textContent = st ? `[${st}]` : (it.prefill && it.prefill.length ? "[SLEAP points shown]" : "[no points shown]");
+  document.getElementById("state").textContent = st ? `[${st}]` : (it.prefill && it.prefill.length ? "[suggested points shown]" : "[no points shown]");
   const f = fish[active];
   document.getElementById("next").textContent = active < 0 ? "click = new fish" :
       `fish ${active + 1}: next ${nextNode(f) || "(complete)"}`;
 }
 function nextNode(f) {
-  if (!f) return "head";
-  let i = 0; while (i < 3 && (f[NODES[i]] != null || (f._skipped || []).includes(NODES[i]))) i++;
-  return NODES[i];
+  if (!f) return NODES[0];
+  return NODES.find(n => f.pts[n] == null && !f._skipped.includes(n));
 }
 
 // --- view
@@ -116,18 +122,21 @@ function draw() {
   ctx.setTransform(view.s, 0, 0, view.s, view.x, view.y); ctx.drawImage(img, 0, 0);
   ctx.filter = "none"; ctx.setTransform(1, 0, 0, 1, 0, 0);
   fish.forEach((f, i) => {
-    const pts = NODES.filter(n => f[n] != null).map(n => toScr(f[n]));
     ctx.strokeStyle = i === active ? "#ffffff" : "rgba(255,255,255,0.55)"; ctx.lineWidth = i === active ? 2 : 1.2;
-    ctx.beginPath(); pts.forEach((p, j) => j ? ctx.lineTo(...p) : ctx.moveTo(...p)); ctx.stroke();
-    NODES.forEach(n => {
-      if (f[n] == null) return;
-      const [x, y] = toScr(f[n]);
-      ctx.fillStyle = COLORS[n]; ctx.beginPath(); ctx.arc(x, y, i === active ? 5 : 4, 0, 2 * Math.PI); ctx.fill();
+    for (const [a, b] of EDGES) {
+      if (f.pts[a] == null || f.pts[b] == null) continue;
+      ctx.beginPath(); ctx.moveTo(...toScr(f.pts[a])); ctx.lineTo(...toScr(f.pts[b])); ctx.stroke();
+    }
+    let first = null;
+    for (const n of NODES) {
+      if (f.pts[n] == null) continue;
+      const [x, y] = toScr(f.pts[n]); if (!first) first = [x, y];
+      ctx.fillStyle = COLORS[n] || "#fff"; ctx.beginPath(); ctx.arc(x, y, i === active ? 5 : 4, 0, 2 * Math.PI); ctx.fill();
       ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke();
-    });
-    if (pts.length) {
+    }
+    if (first) {
       ctx.fillStyle = "#fff"; ctx.font = "12px system-ui";
-      ctx.fillText(String(i + 1) + (f.origin === "prefill" ? " (SLEAP)" : ""), pts[0][0] + 7, pts[0][1] - 7);
+      ctx.fillText(String(i + 1) + (f.origin === "prefill" ? " (suggested)" : ""), first[0] + 7, first[1] - 7);
     }
   });
   bar();
@@ -137,20 +146,25 @@ function draw() {
 function push() { history.push(JSON.stringify({fish, active})); if (history.length > 200) history.shift(); }
 function changed(i) { dirty = true; if (fish[i] && fish[i].origin === "prefill") fish[i].origin = "prefill_edited"; }
 function hit(e) {
-  const [mx, my] = [e.clientX - cv.getBoundingClientRect().left, e.clientY - cv.getBoundingClientRect().top];
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
   let best = null, bd = 9;
   fish.forEach((f, i) => NODES.forEach(n => {
-    if (f[n] == null) return; const [x, y] = toScr(f[n]); const d = Math.hypot(x - mx, y - my);
+    if (f.pts[n] == null) return; const [x, y] = toScr(f.pts[n]); const d = Math.hypot(x - mx, y - my);
     if (d < bd) { bd = d; best = {f: i, n}; }
   }));
   return best;
 }
+const NEW_FISH_PX = 250;  // a click this far (image px, ~1.2 body lengths) from every point of the active fish starts a new fish
+function farFrom(f, p) {
+  const pts = NODES.filter(n => f.pts[n] != null).map(n => f.pts[n]);
+  return pts.length > 0 && pts.every(q => Math.hypot(q[0] - p[0], q[1] - p[1]) > NEW_FISH_PX);
+}
 function place(p) {
-  if (active < 0 || !nextNode(fish[active])) { push(); fish.push({head: null, center: null, tail: null, origin: "new"}); active = fish.length - 1; }
-  else push();
-  const f = fish[active];
-  const n = nextNode(f); if (!n) return;
-  f[n] = [p[0], p[1]]; changed(active);
+  push();
+  if (active < 0 || !nextNode(fish[active]) || farFrom(fish[active], p)) { fish.push(emptyFish("new")); active = fish.length - 1; }
+  const f = fish[active], n = nextNode(f);
+  if (!n) return;
+  f.pts[n] = [p[0], p[1]]; changed(active);
   if (!nextNode(f)) active = -1;
 }
 cv.addEventListener("mousedown", e => {
@@ -161,7 +175,7 @@ cv.addEventListener("mousedown", e => {
 });
 addEventListener("mousemove", e => {
   if (!drag) return;
-  if (drag.kind === "point") { fish[drag.f][drag.n] = toImg(e); drag.moved = true; changed(drag.f); active = drag.f; }
+  if (drag.kind === "point") { fish[drag.f].pts[drag.n] = toImg(e); drag.moved = true; changed(drag.f); active = drag.f; }
   else { const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy; if (Math.hypot(dx, dy) > 4) drag.moved = true;
          if (drag.moved) { view.x = drag.vx + dx; view.y = drag.vy + dy; } }
   draw();
@@ -175,8 +189,8 @@ addEventListener("mouseup", e => {
 });
 cv.addEventListener("contextmenu", e => {
   e.preventDefault(); const h = hit(e); if (!h) return;
-  push(); fish[h.f][h.n] = null; changed(h.f);
-  if (NODES.every(n => fish[h.f][n] == null)) { fish.splice(h.f, 1); active = -1; }
+  push(); fish[h.f].pts[h.n] = null; changed(h.f);
+  if (NODES.every(n => fish[h.f].pts[n] == null)) { fish.splice(h.f, 1); active = -1; }
   draw();
 });
 cv.addEventListener("wheel", e => {
@@ -187,7 +201,8 @@ cv.addEventListener("wheel", e => {
 
 // --- saving
 function payload(st) {
-  const clean = fish.filter(f => NODES.some(n => f[n] != null)).map(f => ({head: f.head, center: f.center, tail: f.tail, origin: f.origin || "new"}));
+  const clean = fish.filter(f => NODES.some(n => f.pts[n] != null)).map(f => ({
+    points: Object.fromEntries(NODES.filter(n => f.pts[n] != null).map(n => [n, f.pts[n]])), origin: f.origin || "new"}));
   return {item_id: item().item_id, status: st, fish: clean, elapsed_s: (performance.now() - t0) / 1000};
 }
 async function save(st) {
@@ -207,9 +222,9 @@ addEventListener("keydown", async e => {
   if (key === "Tab") { e.preventDefault(); if (fish.length) active = (active + 1) % fish.length; }
   else if (key === "n") { active = -1; }
   else if (key === "s") {
-    if (active < 0 || !nextNode(fish[active])) { push(); fish.push({head: null, center: null, tail: null, origin: "new"}); active = fish.length - 1; }
+    if (active < 0 || !nextNode(fish[active])) { push(); fish.push(emptyFish("new")); active = fish.length - 1; }
     const f = fish[active], n = nextNode(f);
-    if (n) (f._skipped = f._skipped || []).push(n);
+    if (n) f._skipped.push(n);
     if (!nextNode(f)) active = -1;
   }
   else if (key === "d" || key === "Backspace") { if (active >= 0) { push(); fish.splice(active, 1); active = -1; dirty = true; } }

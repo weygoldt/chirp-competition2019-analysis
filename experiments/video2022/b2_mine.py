@@ -53,7 +53,8 @@ from paths import DATA  # noqa: E402
 from recordings2022 import list_recordings  # noqa: E402
 
 OUT = DATA / "video2022" / "datasets" / "mined_v1"
-NODES = pl.NODES
+NODES = ("head", "center", "tail")  # the SLEAP exports' nodes (= snout, spine1, tail of pose_labels.SKELETON)
+SKELETON_3 = ("snout", "spine1", "tail")  # mined_v1 is written with these three keypoints
 # test: hand-labelled evaluation only (one recording from each of pairs 1, 6 and 4: early / middle / late);
 # val: mined, for model selection (pairs 5 and 3, recordings with many minable frames); everything else: train
 SPLITS = {
@@ -143,7 +144,7 @@ def spread(f: pd.DataFrame, n: int, min_gap_s: float, rng: np.random.Generator) 
 
 def frame_fish(inst: pd.DataFrame, frame: int) -> list[pl.Fish]:
     rows = inst[inst["frame"] == frame]
-    return [pl.Fish(**{n: (float(r[f"{n}_x"]), float(r[f"{n}_y"])) for n in NODES}, origin="sleap")
+    return [pl.Fish({pl.LEGACY_3[n]: (float(r[f"{n}_x"]), float(r[f"{n}_y"])) for n in NODES}, origin="sleap")
             for _, r in rows.iterrows()]
 
 
@@ -158,7 +159,7 @@ def write(name: str, chosen: pd.DataFrame, inst: pd.DataFrame, bl: float, out: P
         stem = f"{name}_{frame:06d}"
         h, w = img.shape
         cv2.imwrite(str(out / "images" / split / f"{stem}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-        lines = pl.yolo_lines(frame_fish(inst, frame), w, h, PAD_BL * bl)
+        lines = pl.yolo_lines(frame_fish(inst, frame), w, h, PAD_BL * bl, SKELETON_3)
         (out / "labels" / split / f"{stem}.txt").write_text("\n".join(lines) + "\n")
 
 
@@ -194,7 +195,8 @@ def main() -> None:
                          zip(manifest["split"], manifest["recording"], manifest["frame"], strict=True)]
     manifest.to_csv(args.out / "manifest.csv", index=False)
     pd.DataFrame(summary).to_csv(args.out / "summary.csv", index=False)
-    (args.out / "dataset.yaml").write_text(pl.dataset_yaml(args.out, {"train": "images/train", "val": "images/val"}))
+    (args.out / "dataset.yaml").write_text(
+        pl.dataset_yaml(args.out, {"train": "images/train", "val": "images/val"}, SKELETON_3, [0, 1, 2]))
     print(pd.DataFrame(summary).to_string(index=False))
     print(manifest.groupby(["split", "phase"]).size())
 

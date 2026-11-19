@@ -69,7 +69,7 @@ def test_save_appends_and_validates(running) -> None:  # noqa: ANN001
     assert code == 200 and r["ok"]
     labels = pl.load_labels(root / "labels.jsonl")
     assert labels["a"].labeller == "tester"
-    assert labels["a"].fish[0].tail == (30.0, 31.0)
+    assert labels["a"].fish[0].points["tail"] == (30.0, 31.0)
     assert post(url + "/api/label", {"item_id": "zzz", "status": "done"})[0] == 400
     assert post(url + "/api/label", {"item_id": "a", "status": "perhaps"})[0] == 400
     state = json.loads(get(url + "/api/session")[1])

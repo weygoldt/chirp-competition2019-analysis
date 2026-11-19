@@ -30,7 +30,20 @@ import pose_labels as pl  # noqa: E402
 HTML = Path(__file__).resolve().parent / "labeller.html"
 
 
+LEGACY_SKELETON = {"nodes": ["snout", "spine1", "tail"], "edges": [["snout", "spine1"], ["spine1", "tail"]],
+                   "note": "centre = spine1: just behind the head, at the pectoral fins"}
+DEFAULT_COLORS = {"snout": "#ff4d4d", "spine1": "#ffd24d", "spine2": "#c7e9b4", "spine3": "#7fcdbb",
+                  "tail": "#4dc3ff", "left_fin": "#f781bf", "right_fin": "#a65628"}
+
+
 class Session:
+    """A labelling session directory.
+
+    ``session.json`` (optional) names the skeleton: ``nodes`` (click order),
+    ``edges`` (lines drawn), ``colors`` and a ``note`` for the help panel.
+    Without it the session is a 3-point one (snout, spine1, tail), as b2_v1.
+    """
+
     def __init__(self, root: Path, labeller: str) -> None:
         self.root = Path(root)
         self.items = json.loads((self.root / "items.json").read_text())
@@ -38,11 +51,19 @@ class Session:
         self.labels_path = self.root / "labels.jsonl"
         self.labeller = labeller
         self.lock = threading.Lock()
+        cfg = self.root / "session.json"
+        self.skeleton = json.loads(cfg.read_text()) if cfg.exists() else dict(LEGACY_SKELETON)
+        self.skeleton.setdefault("colors", {n: DEFAULT_COLORS.get(n, "#ffffff") for n in self.skeleton["nodes"]})
+        unknown = set(self.skeleton["nodes"]) - set(pl.SKELETON)
+        if unknown:
+            raise ValueError(f"{cfg}: unknown nodes {sorted(unknown)}")
 
     def state(self) -> dict:
         labels = {k: v.to_json() for k, v in pl.load_labels(self.labels_path).items()}
-        public = [{k: it[k] for k in ("item_id", "image", "width", "height", "prefill")} for it in self.items]
-        return {"items": public, "labels": labels, "labeller": self.labeller}
+        public = [{"item_id": it["item_id"], "image": it["image"], "width": it["width"], "height": it["height"],
+                   "prefill": [pl.Fish.from_dict(f).to_json() for f in it.get("prefill", [])]}
+                  for it in self.items]
+        return {"items": public, "labels": labels, "labeller": self.labeller, "skeleton": self.skeleton}
 
     def save(self, payload: dict) -> dict:
         if payload.get("item_id") not in self.ids:
