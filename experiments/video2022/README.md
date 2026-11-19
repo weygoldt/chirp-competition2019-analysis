@@ -192,11 +192,15 @@ are "not labelled", which YOLO's keypoint loss ignores.
 5. The labeller (`pose_labeller/`) takes the skeleton from the session's
    `session.json`. A click far from the active fish starts a new one.
 
-Model (round 1, `runs/pose7_r1_yolo26x-pose_1280`): YOLO26x-pose, the
-largest current model, at 1280 px. With 16 GB only batch 2 fits (9.2 GB;
-AutoBatch's probe pushed the GPU past the watchdog's 15 GB and was stopped).
-Speed: about 2.4 min per epoch including validation, up to 100 epochs,
-patience 20.
+Model (round 1, `runs/pose7_r1_yolo26l-pose_1280`): YOLO26l-pose at 1280 px,
+batch 4 (11 GB), about 77 s per epoch including validation, up to 100 epochs,
+patience 20. The first attempt used the x model (`runs/pose7_r1_yolo26x-pose_1280`,
+stopped after 6 epochs and kept on disk). At 1280 px with 16 GB only batch 2
+fits for x (9.2 GB). AutoBatch's probe pushed the GPU past the watchdog's
+15 GB and was stopped, and at batch 2 an epoch takes about 2.6 min. The
+switch to l was your call: with ~1,400 training frames capacity is not the
+limit. Batch 4 gives steadier normalisation statistics. Inference over all
+videos (~7 M frames) is faster.
 
 **Caveat for the comparison with SLEAP:** the 3-node SLEAP model behind the
 exports was most likely trained on `labels.v000.slp` (its "center" is exactly
