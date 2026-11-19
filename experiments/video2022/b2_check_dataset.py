@@ -24,21 +24,25 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import b2_mine  # noqa: E402
+import pose_labels as pl  # noqa: E402
 
-COLORS = {"head": "#ff4d4d", "center": "#ffd24d", "tail": "#4dc3ff"}
+COLORS = {"snout": "#ff4d4d", "spine1": "#ffd24d", "spine2": "#c7e9b4", "spine3": "#7fcdbb", "tail": "#4dc3ff",
+          "left_fin": "#f781bf", "right_fin": "#a65628"}
 CROP = 400
 SEED = 7
 
 
 def read_label(path: Path, w: int, h: int) -> list[dict]:
+    """Fish of a YOLO label file: box and points (3-point files: snout, spine1, tail; 7-point: the skeleton)."""
     fish = []
     for line in path.read_text().split("\n"):
         if not line.strip():
             continue
         v = [float(x) for x in line.split()]
+        names = pl.SKELETON if (len(v) - 5) // 3 == len(pl.SKELETON) else ("snout", "spine1", "tail")
         cx, cy, bw, bh = v[1] * w, v[2] * h, v[3] * w, v[4] * h
-        kp = {}
-        for j, n in enumerate(("head", "center", "tail")):
+        kp = {n: None for n in pl.SKELETON}
+        for j, n in enumerate(names):
             x, y, vis = v[5 + 3 * j: 8 + 3 * j]
             kp[n] = (x * w, y * h) if vis > 0 else None
         fish.append({"box": (cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2), **kp})
@@ -72,8 +76,9 @@ def crops_figure(root: Path, manifest: pd.DataFrame, out: Path, n: int = 24) -> 
         for g in fish:
             gx0, gy0, gx1, gy1 = g["box"]
             ax.add_patch(Rectangle((gx0, gy0), gx1 - gx0, gy1 - gy0, fill=False, ec="#7fff7f", lw=0.8))
-            pts = [g[n] for n in ("head", "center", "tail") if g[n] is not None]
-            ax.plot([p[0] for p in pts], [p[1] for p in pts], color="white", lw=0.6)
+            for p, q in pl.EDGES:
+                if g[p] is not None and g[q] is not None:
+                    ax.plot([g[p][0], g[q][0]], [g[p][1], g[q][1]], color="white", lw=0.6)
             for n, c in COLORS.items():
                 if g[n] is not None:
                     ax.plot(*g[n], "o", ms=3.5, color=c, mec="k", mew=0.4)
@@ -84,8 +89,8 @@ def crops_figure(root: Path, manifest: pd.DataFrame, out: Path, n: int = 24) -> 
         ax.set_title(f"{r.recording[5:10]} {r.phase} f{r.frame}", fontsize=7)
     for ax in axes.ravel()[len(rows):]:
         ax.axis("off")
-    fig.suptitle(f"{root.name}: frames as the trainer reads them; box (green), head (red), centre (yellow), "
-                 "tail (blue)", fontsize=10)
+    fig.suptitle(f"{root.name}: frames as the trainer reads them; box (green); snout red, spine1 yellow, "
+                 "spine2/3 green, tail blue, fins pink/brown", fontsize=10)
     fig.savefig(out, dpi=130)
     plt.close(fig)
 
@@ -122,9 +127,9 @@ def coverage_figure(root: Path, manifest: pd.DataFrame, out: Path) -> None:
     for r in manifest.itertuples():
         lab = Path(str(root / r.image).replace("/images/", "/labels/")).with_suffix(".txt")
         for f in read_label(lab, img.shape[1], img.shape[0]):
-            if f["center"] is not None:
-                xs.append(f["center"][0])
-                ys.append(f["center"][1])
+            if f["spine1"] is not None:
+                xs.append(f["spine1"][0])
+                ys.append(f["spine1"][1])
     axes[1].plot(xs, ys, ".", ms=1.5, color="#e6550d", alpha=0.5)
     axes[1].set_axis_off()
     axes[1].set_title(f"centre of every labelled fish ({len(xs):,})", fontsize=10)

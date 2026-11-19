@@ -18,6 +18,13 @@ that a session's blind test items always go to ``test``. Images are linked
 (symlinks; nothing is copied), labels written with ``pose_labels.yolo_lines``
 (box = labelled points padded by 0.1 body lengths of the recording).
 
+- A frame (recording, video frame) in several sources is used once, with the
+  labels of the source listed **last** (later sessions re-label earlier frames,
+  e.g. r1 adds the 7 points to b2_v1's 3).
+- ``--mask-shelters``: points inside the tube or a block are removed
+  (``shelters.remove_occluded``; labelling rule "visible parts only"), counted in
+  ``summary.csv``.
+
     .venv/bin/python experiments/video2022/b3_dataset.py pose7_r1 mined_v1 sleap_v000 labels/b2_v1
 
 Output: ``$CHIRP_DATA/video2022/datasets/<name>/`` with ``images/``, ``labels/``,
@@ -38,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import b1_assess_sleap as b1  # noqa: E402
 import b2_mine  # noqa: E402
 import pose_labels as pl  # noqa: E402
+import shelters  # noqa: E402
 from paths import DATA  # noqa: E402
 
 ROOT = DATA / "video2022"
@@ -91,37 +99,40 @@ def resolve(spec: str) -> Path:
     return path
 
 
-def assemble(name: str, sources: list[str]) -> pd.DataFrame:
+def assemble(name: str, sources: list[str], mask_shelters: bool = False) -> pd.DataFrame:
     out = DATASETS / name
     if out.exists():
         raise SystemExit(f"{out} exists; choose a new name (datasets are not overwritten)")
     bl = pd.read_csv(b1.TABLES / "recordings.csv").set_index("recording")["body_length_px"]
-    rows = []
+    # the last source that labels a frame wins
+    chosen: dict[tuple[str, int], tuple[Path, pd.Series, pl.FrameLabel]] = {}
     for spec in sources:
         src = resolve(spec)
         labels = pl.load_labels(src / "labels.jsonl")
-        idx = pd.read_csv(src / "index.csv")
-        tag = src.name
-        for r in idx.itertuples():
+        for r in pd.read_csv(src / "index.csv").itertuples():
             lab = labels.get(r.item_id)
-            if lab is None or lab.status != "done":
-                continue
-            stem = f"{tag}__{r.item_id}"
-            img = out / "images" / r.split / f"{stem}.jpg"
-            txt = out / "labels" / r.split / f"{stem}.txt"
-            img.parent.mkdir(parents=True, exist_ok=True)
-            txt.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink((src / r.image).resolve(), img)
-            lines = pl.yolo_lines(lab.fish, W, H, b2_mine.PAD_BL * float(bl[r.recording]))
-            txt.write_text("\n".join(lines) + ("\n" if lines else ""))
-            n_pts = [f.n_points() for f in lab.fish]
-            rows.append({"source": tag, "item_id": r.item_id, "split": r.split, "recording": r.recording,
-                         "frame": r.frame, "phase": r.phase, "t_s": r.t_s, "n_fish": len(lab.fish),
-                         "n_points": sum(n_pts), "image": f"images/{r.split}/{stem}.jpg"})
+            if lab is not None and lab.status == "done":
+                chosen[(r.recording, int(r.frame))] = (src, r, lab)
+    rows = []
+    for (rec_name, _frame), (src, r, lab) in chosen.items():
+        fish, n_removed = (shelters.remove_occluded(lab.fish, rec_name) if mask_shelters else (lab.fish, 0))
+        stem = f"{src.name}__{r.item_id}"
+        img = out / "images" / r.split / f"{stem}.jpg"
+        txt = out / "labels" / r.split / f"{stem}.txt"
+        img.parent.mkdir(parents=True, exist_ok=True)
+        txt.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink((src / r.image).resolve(), img)
+        lines = pl.yolo_lines(fish, W, H, b2_mine.PAD_BL * float(bl[r.recording]))
+        txt.write_text("\n".join(lines) + ("\n" if lines else ""))
+        rows.append({"source": src.name, "item_id": r.item_id, "split": r.split, "recording": r.recording,
+                     "frame": r.frame, "phase": r.phase, "t_s": r.t_s, "n_fish": len(fish),
+                     "n_points": sum(f.n_points() for f in fish), "n_occluded_removed": n_removed,
+                     "image": f"images/{r.split}/{stem}.jpg"})
     man = pd.DataFrame(rows)
     man.to_csv(out / "manifest.csv", index=False)
     summary = man.groupby(["split", "source"]).agg(frames=("item_id", "size"), fish=("n_fish", "sum"),
-                                                   points=("n_points", "sum")).reset_index()
+                                                   points=("n_points", "sum"),
+                                                   occluded_removed=("n_occluded_removed", "sum")).reset_index()
     summary.to_csv(out / "summary.csv", index=False)
     splits = {s: f"images/{s}" for s in ("train", "val", "test") if (out / "images" / s).exists()}
     (out / "dataset.yaml").write_text(pl.dataset_yaml(out, splits))
@@ -131,9 +142,10 @@ def assemble(name: str, sources: list[str]) -> pd.DataFrame:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("name", help="dataset name, e.g. pose7_r1")
-    ap.add_argument("sources", nargs="+", help="mined_v1, sleap_v000, labels/<session> ...")
+    ap.add_argument("sources", nargs="+", help="mined_v1, sleap_v000, labels/<session> ... (later ones win)")
+    ap.add_argument("--mask-shelters", action="store_true", help="remove points inside the tube or a block")
     args = ap.parse_args()
-    print(assemble(args.name, args.sources).to_string(index=False))
+    print(assemble(args.name, args.sources, args.mask_shelters).to_string(index=False))
 
 
 if __name__ == "__main__":
