@@ -379,3 +379,18 @@ old (grey) vs new (red) timeline (`c2_render_chases.py poses_r3_sep --match pose
   within ~5 s. With the old detector the rate is already raised before its
   (late) onsets and stays raised after its (early) offsets. Less confident
   chases (p < 0.9) show no peak at the offset.
+
+### Locked (2026-11-20, author)
+
+`chases/model/model_v2` is the 2022 chase detection for all further analyses
+(`LOCKED.md` there: model, inputs, scores, sha256; git tag `chase-model-v2`;
+`c9_chase_model_apply.py` refuses to overwrite it).
+
+**2019 vs 2022** (`c12_chirps_2019_vs_2022.py`; 2019 read from the paper's
+primary run, hand-annotated chases, baseline = jittered times; 2022 relative to
+random moments in the same trial): the same pattern. Loser chirps drop just
+before the onset (2019 0.58x in the last 2 s; 2022 isolated chases 0.75x),
+rise after it (2019 1.33x, 2022 1.53x in the first 2 s), peak at the offset
+(2019 ~3.2x, 2022 ~2.9x, both ~0.3-0.5 s before it) and decay over the next
+5-10 s. All 2022 chases give a blunter curve (chases come in bouts); the
+isolated ones are selected from quiet periods, which deepens the dips.
