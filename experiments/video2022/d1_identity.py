@@ -96,7 +96,6 @@ def stage_calibrate(names: list[str] | None) -> None:
     """Fit the field model per recording: on each half (cross-fitting) and on all windows."""
     out = RES / "models"
     out.mkdir(parents=True, exist_ok=True)
-    rows = []
     for rec in recordings(names):
         if not (OUT / "amplitudes" / f"{rec.name}.npz").exists():
             print(f"{rec.name}: no amplitudes", flush=True)
@@ -113,23 +112,28 @@ def stage_calibrate(names: list[str] | None) -> None:
                 continue
             m, _ = idn.fit_field(cal["vw"][sel], cal["vl"][sel], cal["pa"][sel], cal["pb"][sel])
             res[name] = m.to_dict()
-        # held-out check: each half scored with the model of the other half
-        for h in (0, 1):
-            sel = half == h
-            other = res[f"half{1 - h}"]
-            if other is None or sel.sum() == 0:
-                continue
-            ca, cb = idn.joint_cos2(idn.FieldModel.from_dict(other), cal["vw"][sel], cal["vl"][sel],
-                                    cal["pa"][sel], cal["pb"][sel])
-            best, worse = np.maximum(ca, cb), np.minimum(ca, cb)
-            rows.append({"recording": rec.name, "half": h, "n": int(sel.sum()),
-                         "explained_best": float(np.median(best)), "explained_other": float(np.median(worse)),
-                         "decisive": float(np.mean(best - worse > 0.3)), "weak": float(np.mean(best - worse < 0.1))})
         (out / f"{rec.name}.json").write_text(json.dumps(res, indent=1))
         print(f"{rec.name}: {res['n_windows']} calibration windows, {time.time() - tic:.0f} s", flush=True)
-    if rows:
-        pd.DataFrame(rows).to_csv(out / "heldout_fit.csv", index=False)
-        print(pd.DataFrame(rows).to_string())
+
+
+def heldout_fit(rec: str) -> list[dict]:
+    """Far-apart windows of each half scored with the model fitted on the other half."""
+    models = load_models(rec)
+    cal = calibration_windows(load_tracks(rec), load_patterns(rec), body_length(rec))
+    half = parity(cal["t"])
+    rows = []
+    for h in (0, 1):
+        sel = half == h
+        other = models[f"half{1 - h}"]
+        if other is None or sel.sum() == 0:
+            continue
+        ca, cb = idn.joint_cos2(idn.FieldModel.from_dict(other), cal["vw"][sel], cal["vl"][sel],
+                                cal["pa"][sel], cal["pb"][sel])
+        best, worse = np.maximum(ca, cb), np.minimum(ca, cb)
+        rows.append({"recording": rec, "half": h, "windows": int(sel.sum()),
+                     "explained_better": float(np.median(best)), "explained_swapped": float(np.median(worse)),
+                     "decisive": float(np.mean(best - worse > 0.3)), "weak": float(np.mean(best - worse < 0.1))})
+    return rows
 
 
 def stage_amplitudes(names: list[str] | None, force: bool) -> None:
@@ -141,7 +145,11 @@ def stage_amplitudes(names: list[str] | None, force: bool) -> None:
         if dst.exists() and not force:
             print(f"{rec.name}: exists", flush=True)
             continue
-        refs = ea.fish_references(GAPFILL / rec.name / "tracks_gapfill.npz")
+        src = GAPFILL / rec.name / "tracks_gapfill.npz"
+        if not src.exists():  # the control 2022-07-07 has no trial fish (not in meta.csv)
+            print(f"{rec.name}: no gap-filled trial tracks, skipped", flush=True)
+            continue
+        refs = ea.fish_references(src)
         t_end = min(LIGHT_ON_S, rec.recording_duration_s())
         tic = time.time()
         res = ea.recording_amplitudes(rec.raw / "traces-grid1.raw", refs, t_end, p=p)
@@ -353,6 +361,23 @@ def stage_assign(names: list[str] | None, p_min: float, eps_episode: float) -> N
                                     correct_of_known=("correct", "sum"), n_known=("known", "sum")).reset_index()
     mk_tab["accuracy_known"] = mk_tab["correct_of_known"] / mk_tab["n_known"]
     mk_tab.to_csv(vdir / "masked_by_distance.csv", index=False)
+    # independent assignment: every track judged on its own pose only (no joint evidence); how often do
+    # two fish in view end up with the same identity?
+    solo = {r: o.assign(delta=o["delta_solo"]) for r, o in obs.items()}
+    beta_solo, _ = window_validation(solo)
+    cs = []
+    for r in recs:
+        os_ = idn.label_segments(idn.track_posterior(solo[r], beta_solo, eps_episode, EPS_CALM), p_min)
+        cs.append(window_clashes(os_).assign(recording=r))
+    cs = pd.concat(cs, ignore_index=True)
+    cs["dist"] = dist_label(cs["dist_bl"].to_numpy())
+    cs_tab = cs.groupby("dist").agg(frames=("clash", "size"), both_known=("both_known", "sum"),
+                                    clash=("clash", "sum")).reset_index()
+    cs_tab["clash_rate_of_known"] = cs_tab["clash"] / cs_tab["both_known"]
+    cs_tab.to_csv(vdir / "clashes_by_distance_independent.csv", index=False)
+    summary["beta_per_s_independent"] = beta_solo
+    summary["two_in_view_clash_rate_independent"] = float(cs.loc[cs["both_known"], "clash"].mean())
+    print(cs_tab.to_string())
     track_ids = seg.groupby(["recording", "track"])["track_identity"].first()
     summary.update({
         "tracks": int(len(track_ids)), "tracks_with_switch": int((track_ids == "switch").sum()),
@@ -369,9 +394,153 @@ def stage_assign(names: list[str] | None, p_min: float, eps_episode: float) -> N
     print(mk_tab.to_string())
 
 
+PAIR_BINS = np.array([0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0])
+
+
+def stage_pairing(names: list[str] | None, per_bin: int = 300, seed: int = 0) -> None:
+    """Pairing test (``identity.pairing_test``): per-window evidence at every distance between the fish,
+    from windows in which each fish's identity is known (reference runs, fish >= FAR_BL apart)."""
+    rng = np.random.default_rng(seed)
+    parts = []
+    for rec in [r.name for r in recordings(names) if (RES / r.name / "observations.parquet").exists()]:
+        o = with_runs(load_obs(rec), EPS_EPISODE)
+        truth = idn.run_truth(o, FAR_BL)
+        far = o[o["run"].isin(truth.index) & (o["dist_bl"] >= FAR_BL)].copy()
+        far["who"] = np.where(truth.reindex(far["run"]).to_numpy() > 0, "winner", "loser")
+        pat = load_patterns(rec)
+        tr = load_tracks(rec).set_index(["frame", "track"])
+        models = load_models(rec)
+        bl = body_length(rec)
+        for h in (0, 1):
+            m = models[f"half{1 - h}"]
+            if m is None:
+                continue
+            f = far[parity(far["t_s"].to_numpy()) == h]
+            w, lo = f[f["who"] == "winner"], f[f["who"] == "loser"]
+            if len(w) < 50 or len(lo) < 50:
+                continue
+            pw = idn.poses(tr.loc[list(zip(w["frame"], w["track"], strict=True))].reset_index())
+            pl = idn.poses(tr.loc[list(zip(lo["frame"], lo["track"], strict=True))].reset_index())
+            res = idn.pairing_test(idn.FieldModel.from_dict(m), pat["winner"][w["k"].to_numpy()], pw,
+                                   pat["loser"][lo["k"].to_numpy()], pl, bl, PAIR_BINS, per_bin, rng)
+            parts.append(res.assign(recording=rec, half=h))
+        print(rec, "done", flush=True)
+    out = pd.concat(parts, ignore_index=True)
+    out = out[np.isfinite(out["delta"])]
+    out.to_csv(RES / "validation" / "pairing_test.csv", index=False)
+    lab = pd.cut(out["dist_bl"], PAIR_BINS, right=False)
+    tab = out.groupby([lab, "tandem"], observed=True)["correct"].agg(["size", "mean"]).unstack()
+    print(tab.to_string())
+    cl = pd.cut(out["contact_bl"], [0, 0.1, 0.2, 0.3, 0.5, 1.0, 3.0], right=False)
+    print(out.groupby(cl, observed=True)["correct"].agg(["size", "mean"]).to_string())
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """95 % Wilson interval of a proportion k / n."""
+    if n == 0:
+        return float("nan"), float("nan")
+    p = k / n
+    den = 1 + z ** 2 / n
+    mid = (p + z ** 2 / (2 * n)) / den
+    half = z * np.sqrt(p * (1 - p) / n + z ** 2 / (4 * n ** 2)) / den
+    return float(mid - half), float(mid + half)
+
+
+def event_identities(ev: pd.DataFrame, o: pd.DataFrame, p_min: float) -> pd.DataFrame:
+    """Leader / follower identity of each chase event from the labelled windows of their tracks during it.
+
+    ``p_leader_winner``: mean posterior P(winner) of the leader's windows in the event; likewise for
+    the follower. The two fish are different, so the event's evidence is
+    ``p_event = (p_leader_winner + 1 - p_follower_winner) / 2`` = P(the winner leads, i.e. the loser chases).
+    """
+    rows = []
+    for _, e in ev.iterrows():
+        r = {}
+        for role in ("leader", "follower"):
+            w = o[(o["track"] == e[role]) & (o["t_s"] >= e["t_start"] - 0.04) & (o["t_s"] <= e["t_end"] + 0.04)]
+            r[f"p_{role}_winner"] = float(w["p_winner"].mean()) if len(w) else np.nan
+            r[f"n_{role}_windows"] = len(w)
+        p_lead = r["p_leader_winner"]
+        p_fol = r["p_follower_winner"]
+        r["p_winner_leads"] = np.nanmean([p_lead, 1 - p_fol]) if np.isfinite([p_lead, p_fol]).any() else np.nan
+        for role, p in (("leader", p_lead), ("follower", p_fol)):
+            r[f"{role}_identity"] = ("winner" if p >= p_min else "loser" if p <= 1 - p_min else "unknown") \
+                if np.isfinite(p) else "unknown"
+        pe = r["p_winner_leads"]
+        r["chaser"] = ("loser" if pe >= p_min else "winner" if pe <= 1 - p_min else "unknown") \
+            if np.isfinite(pe) else "unknown"
+        r["chaser_confidence"] = max(pe, 1 - pe) if np.isfinite(pe) else np.nan
+        r["leader_follower_clash"] = (r["leader_identity"] == r["follower_identity"]) & (r["leader_identity"] != "unknown")
+        rows.append(r)
+    return pd.concat([ev.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
+
+
+def event_checks(ev: pd.DataFrame, rec: str, beta: float, eps_episode: float) -> pd.DataFrame:
+    """Two checks per event that do not use the event's own label.
+
+    - inside vs outside: the evidence inside the event alone (``S_inside``, seconds of evidence that
+      the leader is the winner: the leader's joint ``delta`` summed over the event) against the identity
+      the method gives the leader when the evidence inside all events is removed (``p_outside``: the
+      HMM posterior carried in from before and after the event).
+    - body size: median skeleton length (px) of leader and follower during the event.
+    """
+    import chases as ch
+
+    o = with_runs(load_obs(rec), eps_episode)
+    inside = np.zeros(len(o), bool)
+    tk, t = o["track"].to_numpy(), o["t_s"].to_numpy()
+    for _, e in ev.iterrows():
+        inside |= np.isin(tk, [e["leader"], e["follower"]]) & (t >= e["t_start"] - 0.04) & (t <= e["t_end"] + 0.04)
+    o = o.assign(delta_all=o["delta"], delta=np.where(inside, 0.0, o["delta"]))
+    m = idn.track_posterior(o, beta, eps_episode, EPS_CALM)
+    m["p_winner"] = 1 / (1 + np.exp(-m["logodds"]))
+    tr = load_tracks(rec)
+    tr = tr.assign(skeleton_px=ch.skeleton_length(tr))
+    rows = []
+    for _, e in ev.iterrows():
+        r = {}
+        for role in ("leader", "follower"):
+            sel = (m["track"] == e[role]) & (m["t_s"] >= e["t_start"] - 0.04) & (m["t_s"] <= e["t_end"] + 0.04)
+            r[f"S_inside_{role}"] = float(np.nansum(m.loc[sel, "delta_all"]) * 0.08)
+            r[f"p_outside_{role}"] = float(m.loc[sel, "p_winner"].mean()) if sel.any() else np.nan
+            s = tr[(tr["track"] == e[role]) & (tr["t_s"] >= e["t_start"]) & (tr["t_s"] <= e["t_end"])]
+            r[f"skeleton_px_{role}"] = float(s["skeleton_px"].median()) if len(s) else np.nan
+        rows.append(r)
+    return pd.DataFrame(rows, index=ev.index)
+
+
+def stage_events(p_min: float) -> None:
+    ev = pd.read_csv(CHASES / "events.csv")
+    m = meta()
+    summary = json.loads((RES / "validation" / "summary.json").read_text())
+    parts = []
+    for rec, g in ev.groupby("recording"):
+        f = RES / rec / "observations_labelled.parquet"
+        if not f.exists():
+            print(f"{rec}: not labelled", flush=True)
+            continue
+        e = event_identities(g, pd.read_parquet(f), p_min)
+        checks = event_checks(g, rec, summary["beta_per_s"], summary["eps_episode"])
+        parts.append(pd.concat([e, checks.reset_index(drop=True)], axis=1))
+    out = pd.concat(parts, ignore_index=True)
+    out["pairing"] = out["recording"].map(m["Pairing"]).fillna("control")
+    out.to_csv(RES / "events_identity.csv", index=False)
+    rows = []
+    for rec, g in out.groupby("recording"):
+        k = int((g["chaser"] == "winner").sum())
+        n = int((g["chaser"] != "unknown").sum())
+        lo, hi = wilson(k, n)
+        rows.append({"recording": rec, "pairing": g["pairing"].iloc[0], "events": len(g), "identified": n,
+                     "winner_chases": k, "loser_chases": n - k, "share_winner_chases": k / n if n else np.nan,
+                     "ci_low": lo, "ci_high": hi, "leader_follower_clash": int(g["leader_follower_clash"].sum())})
+    per = pd.DataFrame(rows)
+    per.to_csv(RES / "chases_by_trial.csv", index=False)
+    print(per.to_string())
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("stage", choices=["amplitudes", "calibrate", "evidence", "assign"])
+    ap.add_argument("stage", choices=["amplitudes", "calibrate", "evidence", "assign", "events", "pairing"])
     ap.add_argument("--recordings", nargs="*")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--p-min", type=float, default=P_MIN)
@@ -385,6 +554,10 @@ def main() -> None:
         stage_evidence(args.recordings)
     elif args.stage == "assign":
         stage_assign(args.recordings, args.p_min, args.eps_episode)
+    elif args.stage == "events":
+        stage_events(args.p_min)
+    elif args.stage == "pairing":
+        stage_pairing(args.recordings)
 
 
 if __name__ == "__main__":

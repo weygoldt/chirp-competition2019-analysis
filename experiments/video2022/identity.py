@@ -433,6 +433,55 @@ def chop(blocks: pd.DataFrame, truth: pd.Series, lengths: np.ndarray, rng: np.ra
     return pd.DataFrame(rows)
 
 
+def pairing_test(model: FieldModel, vw: np.ndarray, pw: np.ndarray, vl: np.ndarray, pl: np.ndarray, bl: float,
+                 bins_bl: np.ndarray, per_bin: int, rng: np.random.Generator) -> pd.DataFrame:
+    """Joint evidence for two fish at a chosen distance, built from moments when they were far apart.
+
+    The two fish's patterns are measured separately (each at its own EOD frequency), so the winner's
+    pattern at one moment (``vw``, pose ``pw``) and the loser's at another (``vl``, ``pl``) together are
+    what the electrodes would record with the fish at these two poses at once. For winner/loser
+    windows whose spine1 positions lie at a distance within each bin of ``bins_bl``, the joint
+    ``delta`` is computed as in :func:`observations`; > 0 is right. Returns one row per synthetic pair
+    with the spine1 distance, the closest distance between the two skeletons (``contact_bl``) and
+    whether the follower-like fish is behind the other (``tandem``: heads within 45 deg and one
+    behind the other).
+    """
+    from scipy.spatial import cKDTree
+
+    tree = cKDTree(pl[:, 1])
+    rows = []
+    order = rng.permutation(len(pw))
+    want = {i: per_bin for i in range(len(bins_bl) - 1)}
+    for i in order:
+        if not any(want.values()):
+            break
+        cand = tree.query_ball_point(pw[i, 1], bins_bl[-1] * bl)
+        if not cand:
+            continue
+        cand = np.asarray(cand)
+        d = np.hypot(*(pl[cand, 1] - pw[i, 1]).T) / bl
+        b = np.digitize(d, bins_bl) - 1
+        for k in range(len(bins_bl) - 1):
+            if want[k] and (b == k).any():
+                j = cand[rng.choice(np.flatnonzero(b == k))]
+                rows.append((i, j, k))
+                want[k] -= 1
+    if not rows:
+        return pd.DataFrame()
+    i, j, k = map(np.asarray, zip(*rows, strict=True))
+    ma, mb = model.pattern(pw[i]), model.pattern(pl[j])
+    delta = (cos2(vw[i], ma) + cos2(vl[j], mb) - cos2(vw[i], mb) - cos2(vl[j], ma)) / 2
+    contact = np.linalg.norm(pw[i][:, :, None] - pl[j][:, None, :], axis=-1).min(axis=(1, 2)) / bl
+    ua = pw[i, 0] - pw[i, -1]
+    ub = pl[j, 0] - pl[j, -1]
+    cosh = np.sum(ua * ub, 1) / (np.linalg.norm(ua, axis=1) * np.linalg.norm(ub, axis=1))
+    ab = pl[j, 1] - pw[i, 1]
+    along = np.sum(ab * ua, 1) / np.linalg.norm(ua, axis=1) / np.linalg.norm(ab, axis=1).clip(1e-9)
+    tandem = (cosh > np.cos(np.pi / 4)) & (np.abs(along) > np.cos(np.pi / 4))
+    return pd.DataFrame({"bin": k, "dist_bl": np.hypot(*ab.T) / bl, "contact_bl": contact, "tandem": tandem,
+                         "delta": delta, "correct": delta > 0})
+
+
 ARC_FRACTIONS = np.array([0.0, 0.183, 0.412, 0.656, 1.0])  # median position of the body points (2022-06-20)
 
 

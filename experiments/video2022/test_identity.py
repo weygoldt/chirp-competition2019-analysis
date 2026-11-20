@@ -126,6 +126,30 @@ def test_localize_finds_a_fish():
     assert np.all(score > 0.99)
 
 
+def test_pairing_test_is_right_for_noise_free_patterns_and_fills_the_bins():
+    rng = np.random.default_rng(6)
+    pw, pl = random_poses(600, rng), random_poses(600, rng)
+    bins = np.array([0.0, 0.5, 1.0, 2.0])
+    res = idn.pairing_test(TRUE, TRUE.pattern(pw), pw, -TRUE.pattern(pl), pl, 200.0, bins, 20, rng)
+    assert res.groupby("bin").size().tolist() == [20, 20, 20]
+    assert res["correct"].all()
+    assert np.all((res["dist_bl"] >= 0) & (res["dist_bl"] < 2.0))
+
+
+def test_event_identities_and_wilson():
+    import d1_identity as d1
+
+    o = pd.DataFrame({"track": [1, 1, 2, 2, 3, 3, 4, 4], "t_s": [0.0, 0.08] * 4,
+                      "p_winner": [0.02, 0.04, 0.99, 0.97, 0.99, 0.98, 0.95, 0.99]})
+    ev = pd.DataFrame({"leader": [1, 3], "follower": [2, 4], "t_start": [0.0, 0.0], "t_end": [0.08, 0.08]})
+    out = d1.event_identities(ev, o, 0.9)
+    assert out["chaser"].tolist() == ["winner", "unknown"]  # second event: both called winner
+    assert out["leader_follower_clash"].tolist() == [False, True]
+    lo, hi = d1.wilson(10, 10)
+    assert hi == 1.0 or abs(hi - 1.0) < 1e-12
+    assert 0.65 < lo < 0.75
+
+
 def test_fit_beta_recovers_the_calibration():
     rng = np.random.default_rng(5)
     S = rng.uniform(-2, 2, 20000)
