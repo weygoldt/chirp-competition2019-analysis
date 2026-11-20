@@ -27,9 +27,11 @@ Evidence per window (``delta``, between -1 and 1; > 0 means "this track is the w
   ``(cos2(v_w, m_a) + cos2(v_l, m_b) - cos2(v_w, m_b) - cos2(v_l, m_a)) / 2``;
   ``delta`` of b is minus that of a.
 
-Per track the evidence is summed over 1-s blocks (the mean ``delta`` of each block), and the
-sum ``S`` is turned into a probability by a calibration (``logit p = beta * |S|``) measured on
-held-out evidence (see ``d1_identity.py``).
+Per track, a two-state hidden Markov chain over its windows (:func:`track_posterior`) adds the
+evidence up (``beta`` log-odds per second of evidence, calibrated as ``logit p = beta * |S|`` on pieces
+of tracks with a known identity, :func:`fit_beta`) and lets the identity change only where the
+tracker may have swapped the fish (contacts, gaps). Validation helpers: :func:`run_truth`,
+:func:`chop`, :func:`pairing_test`; electric-only localisation: :func:`localize`.
 """
 
 from __future__ import annotations
@@ -120,6 +122,7 @@ class FitParams:
     prior_weight: float = 0.1
     max_samples: int = 3000
     iterations: int = 3
+    max_nfev: int = 300  # cap per least-squares fit (a flat optimum can otherwise crawl for an hour)
 
 
 def _pack(m: FieldModel) -> np.ndarray:
@@ -144,8 +147,7 @@ def joint_cos2(model: FieldModel, vw: np.ndarray, vl: np.ndarray, pa: np.ndarray
 
 
 def fit_field(vw: np.ndarray, vl: np.ndarray, pa: np.ndarray, pb: np.ndarray, init: FieldModel | None = None,
-              p: FitParams = FitParams(), fixed_channels: np.ndarray | None = None
-              ) -> tuple[FieldModel, np.ndarray]:
+              p: FitParams | None = None) -> tuple[FieldModel, np.ndarray]:
     """Fit the field model on windows with two visible, well separated fish (hard EM).
 
     ``vw``, ``vl``: (n, 11) signed patterns of winner and loser; ``pa``, ``pb``: (n, 5, 2) poses of
@@ -153,11 +155,11 @@ def fit_field(vw: np.ndarray, vl: np.ndarray, pa: np.ndarray, pb: np.ndarray, in
     the better of the two hypotheses, then refits. Returns the model and the final assignment
     (True = a is the winner).
     """
+    p = p or FitParams()
     model = init or FieldModel()
     x = _pack(model)
     x_img = ELECTRODES_IMAGE.ravel()
     sub = np.arange(len(vw))[:: max(1, len(vw) // p.max_samples)]
-    hyp = np.ones(len(vw), bool)
     for _ in range(p.iterations):
         ca, cb = joint_cos2(_unpack(x), vw[sub], vl[sub], pa[sub], pb[sub])
         h = ca >= cb
@@ -173,7 +175,8 @@ def fit_field(vw: np.ndarray, vl: np.ndarray, pa: np.ndarray, pb: np.ndarray, in
         scale = np.r_[np.full(22, 50.0), np.ones(N_CH), 200, 200, 20, 0.1]
         lb = np.r_[np.full(22, -np.inf), np.full(N_CH, -15), -np.inf, -np.inf, 1.0, 0.05]
         ub = np.r_[np.full(22, np.inf), np.full(N_CH, 15), np.inf, np.inf, 1000.0, 0.95]
-        x = least_squares(resid, np.clip(x, lb + 1e-9, ub - 1e-9), x_scale=scale, bounds=(lb, ub)).x
+        x = least_squares(resid, np.clip(x, lb + 1e-9, ub - 1e-9), x_scale=scale, bounds=(lb, ub),
+                          max_nfev=p.max_nfev).x
     model = _unpack(x)
     model = replace(model, gain=model.gain / model.gain.max())
     ca, cb = joint_cos2(model, vw, vl, pa, pb)
@@ -363,14 +366,6 @@ def fit_beta(S: np.ndarray, correct: np.ndarray) -> float:
     return float(minimize_scalar(nll, bounds=(1e-3, 100.0), method="bounded").x)
 
 
-def assign(scores: pd.DataFrame, beta: float, p_min: float) -> pd.DataFrame:
-    """Identity per track from its evidence sum: winner if S > 0, loser if S < 0, unknown if the
-    calibrated probability is below ``p_min``."""
-    p = probability(scores["S"].to_numpy(), beta)
-    ident = np.where(scores["S"] > 0, "winner", "loser")
-    ident = np.where(p >= p_min, ident, "unknown")
-    return scores.assign(p=p, identity=ident)
-
 
 # ----------------------------------------------------------------------------- validation
 def is_far(blocks: pd.DataFrame, far_bl: float) -> np.ndarray:
@@ -397,17 +392,17 @@ def run_truth(obs: pd.DataFrame, far_bl: float = 3.0, min_blocks: int = 3, min_a
     one and agree (the tracker did not swap the fish there, or swapped them twice).
     """
     b = block_evidence(obs, by="run")
-    calm = obs.groupby("run")["risky"].first() == False  # noqa: E712
+    calm = ~obs.groupby("run")["risky"].first().astype(bool)
     truth = far_truth(b[b["run"].map(calm)], far_bl, min_blocks, min_agree, by="run")
     info = obs.groupby("run").agg(track=("track", "first"), risky=("risky", "first"))
     extra = {}
-    for tk, g in info.groupby("track"):
+    for _, g in info.groupby("track"):
         ids = g.index.to_numpy()
         for j in range(1, len(ids) - 1):
-            r = ids[j]
-            if g["risky"].iloc[j] and ids[j - 1] in truth.index and ids[j + 1] in truth.index:
-                if truth[ids[j - 1]] == truth[ids[j + 1]]:
-                    extra[r] = truth[ids[j - 1]]
+            before, after = ids[j - 1], ids[j + 1]
+            if (g["risky"].iloc[j] and before in truth.index and after in truth.index
+                    and truth[before] == truth[after]):
+                extra[ids[j]] = truth[before]
     return pd.concat([truth, pd.Series(extra, dtype=int)]).sort_index()
 
 
@@ -523,10 +518,3 @@ def localize(model: FieldModel, v: np.ndarray, length: float, arena: tuple[float
         best[idx] = cand[j]
         score[idx] = c2[np.arange(len(j)), j]
     return best, score
-
-
-def overlap_pairs(obs: pd.DataFrame) -> pd.DataFrame:
-    """Pairs of tracks seen in the same frame, with the number of shared frames."""
-    two = obs[obs["other"] >= 0]
-    pairs = two[two["track"] < two["other"]].groupby(["track", "other"]).size()
-    return pairs.rename("shared_frames").reset_index()

@@ -57,7 +57,7 @@ def read_traces(path: Path, t0: float, t1: float, n_ch: int = N_CH, fs: float = 
     """Samples [t0, t1) s of a fishgrid ``traces-grid1.raw`` (float32, channels interleaved) as float64."""
     mm = np.memmap(path, dtype=np.float32, mode="r")
     n_total = mm.size // n_ch
-    i0, i1 = max(0, int(round(t0 * fs))), min(n_total, int(round(t1 * fs)))
+    i0, i1 = max(0, round(t0 * fs)), min(n_total, round(t1 * fs))
     return np.asarray(mm[i0 * n_ch:i1 * n_ch], dtype=np.float64).reshape(-1, n_ch)
 
 
@@ -68,7 +68,7 @@ def baseband(x: np.ndarray, t0: float, t_ref: np.ndarray, f_ref: np.ndarray, fs:
     Returns the baseband (m, n_ch) complex at ``fs_base`` and its sample times. A component at
     ``f_ref + d`` ends up at frequency ``d``.
     """
-    down = int(round(fs / fs_base))
+    down = round(fs / fs_base)
     if down % 10:
         raise ValueError("fs / fs_base must be a multiple of 10")
     n = (len(x) // down) * down
@@ -90,7 +90,7 @@ def window_amplitudes(z: np.ndarray, tb: np.ndarray, centers: np.ndarray,
     offset ``df`` (Hz) of the peak within +-``band_hz``.
     """
     fsb = 1.0 / np.median(np.diff(tb))
-    win = int(round(p.win_s * fsb))
+    win = round(p.win_s * fsb)
     w = np.hanning(win + 2)[1:-1]
     offs = np.arange(-p.band_hz, p.band_hz + p.df_hz / 2, p.df_hz)
     tw = (np.arange(win) - (win - 1) / 2) / fsb

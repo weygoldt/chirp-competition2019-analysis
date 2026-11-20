@@ -3,9 +3,16 @@
 Stages, in this order (outputs under ``$CHIRP_DATA/video2022/identity/``)::
 
     PY=/home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python
-    $PY experiments/video2022/d1_identity.py amplitudes   # amplitudes/<rec>.npz from the raw traces (~3 min each)
+    $PY experiments/video2022/d1_identity.py amplitudes   # amplitudes/<rec>.npz from the raw traces (~2.5 min each)
+    $PY experiments/video2022/d1_identity.py calibrate    # poses_r3/models/<rec>.json: field model per recording
+    $PY experiments/video2022/d1_identity.py evidence     # poses_r3/<rec>/observations.parquet (cross-fitted)
+    $PY experiments/video2022/d1_identity.py assign       # validation/, <rec>/track_identity.csv (HMM labels)
+    $PY experiments/video2022/d1_identity.py pairing      # validation/pairing_test.csv
+    $PY experiments/video2022/d1_identity.py events       # events_identity.csv, chases_by_trial.csv
+    $PY experiments/video2022/d2_identity_figures.py      # figures/, README.md
 
-See ``identity/poses_r3/README.md`` (written by the ``report`` stage) for the method and results.
+``amplitudes`` and ``calibrate`` are long: run them detached (``systemd-run --user`` + ``scripts/guarded``).
+See ``identity/poses_r3/README.md`` (written by ``d2_identity_figures.py report``) for method and results.
 """
 
 from __future__ import annotations
@@ -22,11 +29,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-import pandas as pd  # noqa: E402
-
 import b1_assess_sleap as b1  # noqa: E402
 import eod_amplitudes as ea  # noqa: E402
 import identity as idn  # noqa: E402
+import pandas as pd  # noqa: E402
 from paths import DATA, REC_2022  # noqa: E402
 from recordings2022 import LIGHT_ON_S, list_recordings  # noqa: E402
 
@@ -104,7 +110,7 @@ def stage_calibrate(names: list[str] | None) -> None:
         pat = load_patterns(rec.name)
         cal = calibration_windows(load_tracks(rec.name), pat, bl)
         half = parity(cal["t"])
-        res = {"recording": rec.name, "n_windows": int(len(cal["k"]))}
+        res = {"recording": rec.name, "n_windows": len(cal["k"])}
         tic = time.time()
         for name, sel in [("half0", half == 0), ("half1", half == 1), ("all", np.ones(len(half), bool))]:
             if sel.sum() < 200:
@@ -165,6 +171,35 @@ def load_models(rec: str) -> dict:
     return json.loads((RES / "models" / f"{rec}.json").read_text())
 
 
+def fallback_model(rec: str) -> tuple[dict, str]:
+    """For a recording with too few calibration windows: the model of the other bout of the same pair with
+    the most calibration windows (same tank, same electrodes; gains may differ)."""
+    pair = meta()["Pairing"].get(rec, "")[:1]
+    best = None
+    for f in sorted((RES / "models").glob("*.json")):
+        r = json.loads(f.read_text())
+        if r["recording"] == rec or r["all"] is None:
+            continue
+        key = (meta()["Pairing"].get(r["recording"], "")[:1] == pair, r["n_windows"])
+        if best is None or key > best[0]:
+            best = (key, r)
+    if best is None:
+        raise RuntimeError(f"{rec}: no field model to fall back on")
+    return best[1]["all"], f"fallback:{best[1]['recording']}"
+
+
+def model_for(rec: str, h: int, models: dict | None = None) -> tuple[idn.FieldModel, str]:
+    """The field model that scores windows of parity ``h``: fitted on the other parity, else on all
+    windows, else borrowed from another bout of the pair (:func:`fallback_model`)."""
+    models = models or load_models(rec)
+    if models.get(f"half{1 - h}") is not None:
+        return idn.FieldModel.from_dict(models[f"half{1 - h}"]), f"half{1 - h}"
+    if models.get("all") is not None:
+        return idn.FieldModel.from_dict(models["all"]), "all"
+    m, src = fallback_model(rec)
+    return idn.FieldModel.from_dict(m), src
+
+
 def stage_evidence(names: list[str] | None) -> None:
     """Per recording: every video detection with its electrode evidence (cross-fitted models)."""
     for rec in recordings(names):
@@ -180,9 +215,9 @@ def stage_evidence(names: list[str] | None) -> None:
         par = parity(tr["t_s"].to_numpy())
         parts = []
         for h in (0, 1):
-            m = models[f"half{1 - h}"] or models["all"]
-            o = idn.observations(tr[par == h], pat["t"], pat["winner"], pat["loser"], idn.FieldModel.from_dict(m), bl)
-            parts.append(o.assign(model=f"half{1 - h}" if models[f"half{1 - h}"] else "all"))
+            m, src = model_for(rec.name, h, models)
+            o = idn.observations(tr[par == h], pat["t"], pat["winner"], pat["loser"], m, bl)
+            parts.append(o.assign(model=src))
         obs = pd.concat(parts, ignore_index=True).sort_values(["frame", "track"], ignore_index=True)
         obs["delta_solo"] = obs["cw"] - obs["cl"]
         (RES / rec.name).mkdir(parents=True, exist_ok=True)
@@ -338,7 +373,7 @@ def stage_assign(names: list[str] | None, p_min: float, eps_episode: float) -> N
     masked = masked_validation(obs, val["truth"], beta, eps_episode, p_min)
     masked.to_parquet(vdir / "masked.parquet", index=False)
     summary = {"beta_per_s": beta, "p_min": p_min, "eps_episode": eps_episode, "eps_calm": EPS_CALM,
-               "far_bl": FAR_BL, "reference_runs": int(len(val["truth"])), "pieces": int(len(val["pieces"]))}
+               "far_bl": FAR_BL, "reference_runs": len(val["truth"]), "pieces": len(val["pieces"])}
     segs, clashes = [], []
     for r in recs:
         o = idn.label_segments(idn.track_posterior(obs[r], beta, eps_episode, EPS_CALM), p_min)
@@ -380,8 +415,8 @@ def stage_assign(names: list[str] | None, p_min: float, eps_episode: float) -> N
     print(cs_tab.to_string())
     track_ids = seg.groupby(["recording", "track"])["track_identity"].first()
     summary.update({
-        "tracks": int(len(track_ids)), "tracks_with_switch": int((track_ids == "switch").sum()),
-        "segments": int(len(seg)), "segments_known": int((seg["identity"] != "unknown").sum()),
+        "tracks": len(track_ids), "tracks_with_switch": int((track_ids == "switch").sum()),
+        "segments": len(seg), "segments_known": int((seg["identity"] != "unknown").sum()),
         "frames_known_share": float(seg.loc[seg["identity"] != "unknown", "n_frames"].sum() / seg["n_frames"].sum()),
         "two_in_view_clash_rate": float(cl.loc[cl["both_known"], "clash"].mean()),
         "masked_known_share": float(mk["known"].mean()),
@@ -482,7 +517,8 @@ def event_checks(ev: pd.DataFrame, rec: str, beta: float, eps_episode: float) ->
       the leader is the winner: the leader's joint ``delta`` summed over the event) against the identity
       the method gives the leader when the evidence inside all events is removed (``p_outside``: the
       HMM posterior carried in from before and after the event).
-    - body size: median skeleton length (px) of leader and follower during the event.
+    - body size: median skeleton length (px) of leader and follower during the event, over frames in
+      which the fish is straight (snout-tail chord >= 0.95 of the skeleton; a bent fish looks shorter).
     """
     import chases as ch
 
@@ -495,7 +531,9 @@ def event_checks(ev: pd.DataFrame, rec: str, beta: float, eps_episode: float) ->
     m = idn.track_posterior(o, beta, eps_episode, EPS_CALM)
     m["p_winner"] = 1 / (1 + np.exp(-m["logodds"]))
     tr = load_tracks(rec)
+    P = idn.poses(tr)
     tr = tr.assign(skeleton_px=ch.skeleton_length(tr))
+    tr = tr[np.hypot(*(P[:, -1] - P[:, 0]).T) >= 0.95 * tr["skeleton_px"]]
     rows = []
     for _, e in ev.iterrows():
         r = {}

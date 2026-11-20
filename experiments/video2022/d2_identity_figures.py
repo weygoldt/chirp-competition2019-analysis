@@ -97,7 +97,7 @@ def fig_electrodes() -> None:
     ax.set_xlim(0, 1.15)
     ax.invert_yaxis()
     ax.set_xlabel("share of the measured pattern explained\n(median, fish >= 3 BL apart, held-out half)")
-    ax.legend(loc="lower left", fontsize=7, frameon=False)
+    ax.legend(loc="center left", fontsize=7, frameon=False)
     ax.set_title("Fitted field explains the patterns\n(right: share of windows decided by > 0.3)", fontsize=9)
     fig.suptitle("The 11 electrodes sit around the tank, not on a line: 8 on the walls, 3 at the shelter", fontsize=11)
     fig.savefig(FIG / "electrodes.png", dpi=110)
@@ -285,7 +285,7 @@ def fig_frames(n_frames: int = 8, seed: int = 1) -> None:
         t = float(d["t_s"].iloc[0])
         k = idn.match_windows(np.array([t]), pat["t"])[0]
         models = d1.load_models(rec)
-        mdl = idn.FieldModel.from_dict(models[f"half{1 - d1.parity(np.array([t]))[0]}"] or models["all"])
+        mdl = d1.model_for(rec, int(d1.parity(np.array([t]))[0]), models)[0]
         pts = [idn.poses(d).reshape(-1, 2)]
         for p, (_, row) in zip(idn.poses(d), d.iterrows(), strict=True):
             lb = lab["label"].get(row["track"], "unknown")
@@ -296,7 +296,7 @@ def fig_frames(n_frames: int = 8, seed: int = 1) -> None:
         for role in ("winner", "loser"):
             v = pat[role][k:k + 1]
             if np.isfinite(v).all():
-                c, s = idn.localize(mdl, v, d1.body_length(rec), ARENA)
+                c, _s = idn.localize(mdl, v, d1.body_length(rec), ARENA)
                 ax.plot(*c[0], "+", c=COLOR[role], ms=20, mew=2.5)
                 pts.append(c)
         pts = np.concatenate(pts)
@@ -337,13 +337,13 @@ def localization_error(max_windows: int = 400, seed: int = 0) -> pd.DataFrame:
                 ss = s[d1.parity(s["t_s"].to_numpy()) == h]
                 if not len(ss):
                     continue
-                mdl = idn.FieldModel.from_dict(models[f"half{1 - h}"] or models["all"])
+                mdl = d1.model_for(rec, h, models)[0]
                 for lab in ("winner", "loser"):
                     x = ss[ss["label"] == lab]
                     if not len(x):
                         continue
                     v = pat[lab][x["k"].to_numpy()]
-                    c, sc = idn.localize(mdl, v, bl, ARENA)
+                    c, _sc = idn.localize(mdl, v, bl, ARENA)
                     pose = idn.poses(tr.loc[list(zip(x["frame"], x["track"], strict=True))].reset_index())
                     true_c = idn.body_point(pose, mdl.center)
                     err = np.hypot(*(c - true_c).T) / bl
@@ -471,6 +471,20 @@ def recording_table() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def disc_gain(elec: pd.DataFrame) -> float:
+    g = elec[elec["channel"].isin(["4", "5"]) & (elec["gain_db"] > -40)]
+    return float(g["gain_db"].median())
+
+
+def wall_gain(elec: pd.DataFrame) -> float:
+    g = elec[elec["channel"].isin([str(c) for c in (0, 1, 2, 3, 6, 7, 8, 9)]) & (elec["gain_db"] > -40)]
+    return float(g["gain_db"].median())
+
+
+def n_big_longer_txt(big: pd.DataFrame) -> str:
+    return f"{int((big['ratio_video'] > 1).sum())} of the {len(big)}"
+
+
 def stage_report() -> None:
     s = json.loads((VAL / "summary.json").read_text())
     rt = recording_table()
@@ -504,6 +518,17 @@ def stage_report() -> None:
     lq = loc.groupby("kind")["err_bl"].quantile([0.5, 0.9]).unstack().reset_index()
     lq.columns = ["frames", "median error (BL)", "90th percentile (BL)"]
     switch_tracks = int(rt["tracks_with_switch"].sum())
+    big = sz[sz["ratio_measured"] >= 1.04]
+    p1 = sz[sz["pairing"].str.startswith("1")]
+    p2 = sz[sz["pairing"].str.startswith("2")]
+    cs2 = cs[cs["pairing"].str.startswith("2")]
+    csb = cs[(cs["ratio_measured"] >= 1.04) & (cs["events"] >= 10)]
+    pc = pd.read_csv(VAL / "pieces.csv")
+    hi_p, lo_p = pc[pc["p_heldout"] >= 0.9], pc[pc["p_heldout"] < 0.9]
+    ch_shift = shift.assign(channel=shift["channel"].astype(int)).groupby("channel")["shift"].median()
+    worst = int(ch_shift.idxmax())
+    praw = pd.read_csv(VAL / "pairing_test.csv")
+    touch = praw[praw["contact_bl"] < 0.1]
     lines = f"""# Winner / loser identity of the 2022 video tracks, from the electrodes
 
 Made by `experiments/video2022/d1_identity.py` (stages `amplitudes`, `calibrate`, `evidence`, `assign`,
@@ -527,15 +552,20 @@ electrode traces and the gap-filled wavetracker tracks of the two trial fish
   {pct(pt_all.iloc[0]['one behind the other'])}). Tracks pool many windows, so labels are more reliable than
   single windows; when each track is judged on its own, two fish in view get the same identity in
   {pct(s['two_in_view_clash_rate_independent'], 2)} of frames (below 0.5 BL: {pct(ci.iloc[0]['clash_rate_of_known'])}).
-- **Independent check, body size.** In every trial the frames labelled "winner" show the longer fish, and the
-  winner / loser length ratio in the video follows the ratio measured by hand (`figures/size_check.png`).
+- **Independent check, body size.** In {n_big_longer_txt(big)} trials in which the winner was measured
+  >= 4 % longer by hand (pairs 3-6), the frames labelled "winner" show the longer fish, with a winner / loser
+  length ratio close to the measured one; in pair 2 (equal size) the ratio is
+  {p2['ratio_video'].min():.2f}-{p2['ratio_video'].max():.2f} (`figures/size_check.png`).
 - **The tracker swaps the fish when they touch.** The electrodes show a change of identity inside
   {switch_tracks} of {int(rt['tracks'].sum())} tracks; these tracks are cut into segments (one identity each).
 - **Who chases whom.** In {k} of {n} identified chase events ({pct(k / n)}) the winner is the follower (the
   chaser); {int(per['events'].sum()) - n} of {int(per['events'].sum())} events stay unknown. Two checks that do
   not use the chase's own label: the evidence inside each chase agrees with the identity carried in from before
   and after it in {int(agree.sum())} of {len(e)} events; and, from the video alone, the follower is the longer
-  fish in most chases of the trials in which the winner is clearly the larger fish.
+  fish in {int(csb['follower_longer'].sum())} of {int(csb['events'].sum())} chases of the trials in which the
+  winner was measured >= 4 % longer, but only in {int(cs2['follower_longer'].sum())} of {int(cs2['events'].sum())}
+  in pair 2 (equal size; there the labelled winner is not the longer fish), so this is not an effect of the
+  chasing posture.
 
 ## Where the electrodes are, and how we know
 
@@ -551,9 +581,10 @@ electrode traces and the gap-filled wavetracker tracks of the two trial fish
   channel had the strongest EOD (wavetracker `sign_v`) cluster at one of these electrodes. The field model
   below was then fitted with the electrode positions free (pulled towards the video positions with an sd of
   60 px); per recording, `electrodes_fitted.csv`. The fitted positions stay close to the holders (median
-  shift {shift['shift'].median():.0f} px, 90th percentile {shift['shift'].quantile(0.9):.0f} px; the left-wall
-  electrode 3 sits furthest from its holder). The discs (4, 5) have ~20 dB less gain than the wall
-  electrodes in every recording.
+  shift {shift['shift'].median():.0f} px, 90th percentile {shift['shift'].quantile(0.9):.0f} px, i.e. about
+  {shift['shift'].median() / 20:.0f} cm; furthest: electrode {worst}, median {ch_shift.max():.0f} px). The discs
+  (4, 5) have a median gain of {disc_gain(elec):.0f} dB relative to the strongest channel, the wall
+  electrodes {wall_gain(elec):.0f} dB.
 - **Reference**: fitted at x = {ref['x_fit'].median():.0f}, y = {ref['y_fit'].median():.0f} px (median over
   recordings), i.e. outside the view below the bottom-left corner.
 - **Dead channels** (gain < -40 dB): see the table at the end.
@@ -616,11 +647,15 @@ each track with the evidence of its own pose only; method = joint evidence (what
 **Whole method with the far evidence removed**: rerun with the evidence of every frame with the fish
 >= 3 BL apart in the reference stretches set to zero, the frames of these stretches are labelled in
 {pct(s['masked_known_share'])} and right in {pct(s['masked_accuracy_known'], 2)} of the labelled. These
-stretches contain no contacts by construction, so this is the reliability away from contacts.
+stretches contain no contacts by construction, so this is the reliability away from contacts. By distance:
+
+{md_table(mkd[['dist', 'frames', 'known', 'accuracy_known']], '.4f')}
 
 **Calibration** (`figures/evidence_by_distance.png` right): pieces of reference stretches with the length of
-real tracks; beta fitted on half of the recordings and applied to the other half. Stated probabilities match
-the observed share right above 0.9 and are conservative below.
+real tracks; beta fitted on half of the recordings and applied to the other half. Pieces with a stated
+probability >= 0.9 were right in {pct(hi_p['correct'].mean())} (mean stated {pct(hi_p['p_heldout'].mean())},
+n = {len(hi_p)}); below 0.9 in {pct(lo_p['correct'].mean())} (mean stated {pct(lo_p['p_heldout'].mean())},
+n = {len(lo_p)}): the stated probability is conservative where it is low.
 
 **Body size (independent of the electrodes)** (`figures/size_check.png`): median skeleton length of straight
 fish (frames with both fish in view >= 1.5 BL apart), by label:
@@ -628,7 +663,7 @@ fish (frames with both fish in view >= 1.5 BL apart), by label:
 {md_table(sz[['recording', 'pairing', 'winner_px', 'loser_px', 'ratio_video', 'winner_cm', 'loser_cm', 'ratio_measured']], '.2f')}
 
 In pair 1 both fish were measured at 10 cm, but the winner weighed 3.1 g and the loser 1.0 g
-(`weight_size.ods`); the video shows the winner {pct(sz.loc[sz['pairing'].str.startswith('1'), 'ratio_video'].mean() - 1, 0)} longer.
+(`weight_size.ods`); the video shows the winner {pct(p1['ratio_video'].mean() - 1, 0)} longer.
 
 **Electric-only position** (`figures/example_frames.png`; `validation/localization_error.csv`): placing a fish
 by its pattern alone (grid search, no video) puts its EOD centre a median 0.5 BL from where the video fish
@@ -654,9 +689,10 @@ which is much more selective.
 
 ## Limits
 
-- **Contacts.** When the fish touch, single windows are right only ~80-90 % of the time and the tracker often
-  swaps the fish; identities through a contact rest on the evidence before and after it. Chases are mostly
-  contact (the follower's snout at the leader's tail).
+- **Contacts.** With the skeletons within 0.1 BL of each other, single windows are right in
+  {pct(touch['correct'].mean())} of the pairing test, and the tracker swaps the fish at contacts; identities
+  through a contact rest mostly on the evidence before and after it. Chases are mostly contact (the follower's
+  snout at the leader's tail).
 - **Reference identities** come from the same electrodes (far-apart frames); the body-size checks are the only
   fully independent ones, and they only show the direction, not an error rate.
 - **The pairing test** uses well-detected poses; in real close encounters the pose model errs more often.

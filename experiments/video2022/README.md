@@ -290,3 +290,27 @@ Round 2's other points: spine2 0.057, spine3 0.075, fins 0.08 body lengths
   any loser chirps.
 - **Videos** (`c2_render_chases.py`): 20 random events, at most 2 per
   recording, in `chases/poses_r3/videos/`.
+
+## D1: winner / loser identity of the video tracks, from the electrodes (2026-11-20, branch `link2022`)
+
+Results, numbers and limits: `/mnt/data1/chirp_v2/video2022/identity/poses_r3/README.md` (written by
+`d2_identity_figures.py report`). Code:
+
+- `eod_amplitudes.py`: each trial fish's complex amplitude on the 11 electrodes every 0.08 s (0.16-s
+  windows), by mixing the raw traces down at the fish's own EODf (gap-filled wavetracker track); the
+  signed field pattern of a window (`signed_pattern`).
+- `identity.py`: electrode positions seen in the video (`ELECTRODES_IMAGE`: the 11 electrodes are 3 + 3
+  on the top / bottom walls, 1 on each side wall, 1 at the tube, 2 on the discs; **not** a line), the
+  field model (point dipole on the body axis, 2-D field, reference electrode, per-channel gains;
+  `FieldModel`, `fit_field`), per-detection evidence (`observations`), the per-track hidden Markov
+  chain that lets the identity change only where the tracker may have swapped the fish
+  (`track_posterior`, `label_segments`), validation helpers (`run_truth`, `chop`, `fit_beta`,
+  `pairing_test`) and electric-only localisation (`localize`).
+- `d1_identity.py` stages: `amplitudes` (raw traces, ~2.5 min per recording, detached),
+  `calibrate` (field model per recording, on each 10-min-block parity and on all), `evidence`
+  (cross-fitted), `assign` (calibration, validation, HMM labels, `track_identity.csv`),
+  `pairing` (pairing test), `events` (`events_identity.csv`, `chases_by_trial.csv`).
+- `d2_identity_figures.py`: `electrodes`, `evidence`, `size`, `frames`, `chases`, `localize`, `report`.
+- Tests: `test_identity.py`.
+
+Order: `amplitudes` -> `calibrate` -> `evidence` -> `assign` -> `pairing` -> `events` -> figures and report.

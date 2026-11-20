@@ -25,7 +25,7 @@ def two_fish_traces(dur=4.0, f1=650.3, f2=702.9, seed=0):
 
 
 def test_demodulation_recovers_signed_pattern_and_amplitude():
-    t, x, p1, p2 = two_fish_traces()
+    _t, x, p1, p2 = two_fish_traces()
     centers = np.arange(0.5, 3.5, 0.08)
     for f, p in [(650.3, p1), (702.9, p2)]:
         # reference frequency off by 1.5 Hz: the +-4 Hz search must find the true peak
@@ -41,10 +41,12 @@ def test_demodulation_recovers_signed_pattern_and_amplitude():
 
 
 def test_windows_outside_the_data_are_nan():
-    t, x, p1, _ = two_fish_traces(dur=1.0)
+    _t, x, _p1, _ = two_fish_traces(dur=1.0)
     z, tb = ea.baseband(x, 10.0, np.array([0.0, 20.0]), np.array([650.3, 650.3]))
     A, _ = ea.window_amplitudes(z, tb, np.array([10.02, 10.5, 10.99]))
-    assert np.isnan(A[0]).all() and np.isfinite(A[1]).all() and np.isnan(A[2]).all()
+    assert np.isnan(A[0]).all()
+    assert np.isfinite(A[1]).all()
+    assert np.isnan(A[2]).all()
 
 
 def test_near_track():
@@ -114,8 +116,11 @@ def test_observations_joint_evidence_points_to_the_right_fish():
     assert len(obs) == 2 * n
     w = obs[obs["track"] == 0].sort_values("frame")
     lo = obs[obs["track"] == 1].sort_values("frame")
-    assert np.all(w["delta"].to_numpy() > 0) and np.allclose(w["delta"].to_numpy(), -lo["delta"].to_numpy())
-    assert np.all(w["other"] == 1) and np.all(np.isfinite(w["dist_bl"])) and np.all(np.isfinite(w["contact_bl"]))
+    assert np.all(w["delta"].to_numpy() > 0)
+    assert np.allclose(w["delta"].to_numpy(), -lo["delta"].to_numpy())
+    assert np.all(w["other"] == 1)
+    assert np.all(np.isfinite(w["dist_bl"]))
+    assert np.all(np.isfinite(w["contact_bl"]))
 
 
 def test_localize_finds_a_fish():
@@ -172,7 +177,8 @@ def test_hmm_follows_a_switch_at_a_risky_moment():
     eps = np.full(40, 1e-6)
     eps[20] = 0.1
     lo = idn.hmm_logodds(e, eps)
-    assert np.all(lo[:20] > 3) and np.all(lo[20:] < -3)
+    assert np.all(lo[:20] > 3)
+    assert np.all(lo[20:] < -3)
 
 
 def test_risky_and_switch_probability():
@@ -199,7 +205,7 @@ def test_run_truth_bridges_a_contact_only_if_both_sides_agree():
         t = 0.0
         for part, d, n in (("a", 1.0, 60), ("c", 0.0, 10), ("b", after, 60)):
             for _ in range(n):
-                rows.append({"track": tk, "frame": int(round(t * 12.5)), "t_s": t,
+                rows.append({"track": tk, "frame": round(t * 12.5), "t_s": t,
                              "delta": 0.0 if part == "c" else 0.8 * d, "dist_bl": 0.5 if part == "c" else 5.0,
                              "n_vis": 2, "contact_bl": 0.1 if part == "c" else np.nan})
                 t += 0.08
