@@ -97,7 +97,7 @@ def fig_electrodes() -> None:
     ax.set_xlim(0, 1.15)
     ax.invert_yaxis()
     ax.set_xlabel("share of the measured pattern explained\n(median, fish >= 3 BL apart, held-out half)")
-    ax.legend(loc="center left", fontsize=7, frameon=False)
+    ax.legend(loc="center", fontsize=7, frameon=False)
     ax.set_title("Fitted field explains the patterns\n(right: share of windows decided by > 0.3)", fontsize=9)
     fig.suptitle("The 11 electrodes sit around the tank, not on a line: 8 on the walls, 3 at the shelter", fontsize=11)
     fig.savefig(FIG / "electrodes.png", dpi=110)
@@ -183,12 +183,15 @@ def fig_evidence() -> None:
         g = pcb.groupby("b", observed=True).agg(p=(col, "mean"), acc=("correct", "mean"), n=("correct", "size"))
         ax.plot(g["p"], g["acc"], mk_ + "-", c="k", label=lab)
         for _, r in g.iterrows():
-            ax.text(r["p"], r["acc"] - 0.025, f"{int(r['n'])}", fontsize=6, ha="center")
+            if r["p"] < 0.99:
+                ax.text(r["p"], r["acc"] - 0.025, f"{int(r['n'])}", fontsize=6, ha="center")
+        n_top = int(g.loc[g["p"] >= 0.99, "n"].sum())
     ax.plot([0.5, 1], [0.5, 1], c="0.6", lw=0.8)
     ax.set_xlabel("stated probability of being right")
     ax.set_ylabel("observed share right")
     ax.legend(loc="lower right", fontsize=7, frameon=False)
-    ax.set_title("Calibration of the stated confidence", fontsize=9)
+    ax.set_title(f"Calibration of the stated confidence\n(numbers: pieces per bin; {n_top} pieces above 0.99)",
+                 fontsize=9)
     fig.suptitle("The electrodes tell the two fish apart in most single windows even when they are close;"
                  " errors grow below one body length", fontsize=10)
     fig.savefig(FIG / "evidence_by_distance.png", dpi=110)
@@ -244,6 +247,8 @@ def fig_size() -> None:
     ax.plot(lim, lim, c="0.6", lw=0.8)
     ax.axhline(1, c="0.8", lw=0.8)
     ax.axvline(1, c="0.8", lw=0.8)
+    ax.text(0.935, 1.1, "pair 1: same length by hand,\nbut the winner weighed 3.1 g,\nthe loser 1.0 g", fontsize=7,
+            color="0.3")
     ax.set_xlim(lim)
     ax.set_xlabel("winner / loser body length, measured by hand (meta2.csv)")
     ax.set_ylabel("winner / loser skeleton length in the video\n(frames labelled by the electrodes)")
@@ -377,6 +382,14 @@ def chase_size_table() -> pd.DataFrame:
     return t
 
 
+def inside_outside(ev: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Events with a confident identity from outside the chase (P >= 0.9 or <= 0.1) and evidence inside it;
+    and whether the inside evidence points the same way."""
+    conf = (ev["p_outside_leader"] >= 0.9) | (ev["p_outside_leader"] <= 0.1)
+    e = ev[conf & (ev["S_inside_leader"] != 0)]
+    return e, (e["S_inside_leader"] > 0) == (e["p_outside_leader"] > 0.5)
+
+
 def fig_chases() -> None:
     plt = plt_()
     per = pd.read_csv(d1.RES / "chases_by_trial.csv").sort_values("recording")
@@ -399,9 +412,7 @@ def fig_chases() -> None:
     ax.set_xlabel("share of identified chases in which the winner chases (95 % CI)")
     ax.set_title("Electrodes: who chases whom\n(right: winner chases / identified / all events)", fontsize=9)
     ax = axs[1]
-    conf = (ev["p_outside_leader"] >= 0.9) | (ev["p_outside_leader"] <= 0.1)
-    e = ev[conf]
-    agree = (e["S_inside_leader"] > 0) == (e["p_outside_leader"] > 0.5)
+    e, agree = inside_outside(ev)
     ax.scatter(e["S_inside_leader"], e["p_outside_leader"], s=8, c=np.where(agree, "k", "tab:red"))
     ax.axvline(0, c="0.8", lw=0.8)
     ax.axhline(0.5, c="0.8", lw=0.8)
@@ -421,8 +432,8 @@ def fig_chases() -> None:
     ax.set_ylim(0, 1.05)
     ax.set_xlabel("winner / loser body length, measured by hand")
     ax.set_ylabel("share of chases: the follower is the longer fish")
-    ax.set_title("Check 2, video only: the chaser is the longer fish\nwhere the winner is clearly larger"
-                 " (trials with >= 10 events)", fontsize=9)
+    ax.set_title("Check 2, video only: the chaser is the longer fish, except in\npair 2, where the fish are"
+                 " the same size (trials with >= 10 events)", fontsize=9)
     k, n = int(per["winner_chases"].sum()), int(per["identified"].sum())
     fig.suptitle(f"The winner is the chaser in {k} of {n} identified chases ({100 * k / n:.1f} %;"
                  f" {int(per['events'].sum())} chase events in {len(per)} trials)", fontsize=11)
@@ -442,8 +453,12 @@ def md_table(df: pd.DataFrame, floatfmt: str = ".3f") -> str:
         cells = []
         for c in cols:
             v = r[c]
-            cells.append(format(v, floatfmt) if isinstance(v, float) and np.isfinite(v) else
-                         ("" if isinstance(v, float) else str(v)))
+            if isinstance(v, float) and np.isfinite(v):
+                whole = (df[c].dropna() % 1 == 0).all() and df[c].max() > 1
+                is_count = pd.api.types.is_integer_dtype(df[c]) or whole
+                cells.append(str(int(v)) if is_count else format(v, floatfmt))
+            else:
+                cells.append("" if isinstance(v, float) else str(v))
         out.append("| " + " | ".join(cells) + " |")
     return "\n".join(out)
 
@@ -481,6 +496,11 @@ def wall_gain(elec: pd.DataFrame) -> float:
     return float(g["gain_db"].median())
 
 
+def unknown_pair3(per: pd.DataFrame) -> int:
+    p3 = per[per["pairing"].str.startswith("3")]
+    return int((p3["events"] - p3["identified"]).sum())
+
+
 def n_big_longer_txt(big: pd.DataFrame) -> str:
     return f"{int((big['ratio_video'] > 1).sum())} of the {len(big)}"
 
@@ -499,9 +519,7 @@ def stage_report() -> None:
     per = pd.read_csv(d1.RES / "chases_by_trial.csv")
     ev = pd.read_csv(d1.RES / "events_identity.csv")
     elec = pd.read_csv(d1.RES / "electrodes_fitted.csv")
-    conf = (ev["p_outside_leader"] >= 0.9) | (ev["p_outside_leader"] <= 0.1)
-    e = ev[conf]
-    agree = (e["S_inside_leader"] > 0) == (e["p_outside_leader"] > 0.5)
+    e, agree = inside_outside(ev)
     k, n = int(per["winner_chases"].sum()), int(per["identified"].sum())
     shift = elec[elec["channel"] != "ref"].assign(
         shift=lambda d: np.hypot(d["x_fit"] - d["x_image"], d["y_fit"] - d["y_image"]))
@@ -513,8 +531,9 @@ def stage_report() -> None:
     pt_all = pt_all.rename(columns={"dist_from": "from (BL)", "dist_to": "to (BL)", "accuracy": "all configurations",
                                     "tandem_accuracy": "one behind the other"})
     clash = ci[["dist", "both_known", "clash_rate_of_known"]].rename(
-        columns={"both_known": "frames", "clash_rate_of_known": "same identity, judged alone"})
-    clash["same identity, method"] = cj["clash_rate_of_known"].to_numpy()
+        columns={"dist": "distance (BL)", "both_known": "frames, both labelled",
+                 "clash_rate_of_known": "share same identity, judged alone"})
+    clash["share same identity, method"] = cj["clash_rate_of_known"].to_numpy()
     lq = loc.groupby("kind")["err_bl"].quantile([0.5, 0.9]).unstack().reset_index()
     lq.columns = ["frames", "median error (BL)", "90th percentile (BL)"]
     switch_tracks = int(rt["tracks_with_switch"].sum())
@@ -700,7 +719,12 @@ which is much more selective.
 - Hidden fish (tube, blocks) are not in the video tracks, so their identity is not needed; the electrodes do
   locate them (e.g. a fish in the tube), which is not used here.
 - Chase events and tracks are those of `chases/poses_r3` unchanged; events between a fish and a mis-detection
-  are not removed.
+  are not removed, and leader / follower are the chase detector's (if the tracker swapped the fish inside a
+  chase, the event's roles are wrong whatever the identity).
+- Unknown chases ({int(per['events'].sum()) - n}) are mostly in pair 3 ({unknown_pair3(per)} of them), the
+  trials with the most chasing and contacts; if the winner chases less often in hard (long, close) chases,
+  leaving them out would bias the share upwards.
+- Two trials have no chase events (2022-06-14, 2022-07-06: both fish in view for minutes only).
 
 ## Decisions for the author
 
