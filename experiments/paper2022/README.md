@@ -28,3 +28,19 @@ layout; nothing in `paper/` or `manuscript/` is changed and no output goes there
    2022 from the same code.
 
 Handoff for running more of the 2019 pipeline later: `docs/handoff_paper_2022.md`.
+
+## Result (2026-11-20)
+
+The unchanged script wrote the four chase centrings (`{l,w}chirps@{agon,agoff}.json`)
+and then stopped at the contact centrings (no contacts in 2022: `ValueError: a must be
+greater than 0`), as expected. Peak / jittered baseline (`plot_chase_triggered_rates.py`):
+
+| | 2019 (15 trials) | 2022 (18 trials) |
+|---|---|---|
+| loser, chase onset | 2.25x at +7.6 s; dip to ~0.5x just before | 2.16x at +7.1 s; already rising from ~-8 s |
+| loser, chase offset | 3.2x at +0.4 s | ~2.2x from 0 to +3 s, broader |
+| winner, chase onset | <= 1.3x | ~4x right at the onset |
+| winner, chase offset | drop to ~0.3x | raised during the chase, drop at the offset |
+
+The 2022 bands are wide (pair 3 dominates the chirps); the model splits chase bouts
+into single chases, which blunts the offset peak and fills the pre-onset dip.
