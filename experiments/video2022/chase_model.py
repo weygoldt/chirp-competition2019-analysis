@@ -106,8 +106,8 @@ class Logistic:
 
 @dataclass(frozen=True)
 class Decoder:
-    p_on: float = 0.6
-    p_off: float = 0.4
+    p_on: float = 0.8  # thresholds chosen 2026-11-20 by c8 decoder_sweep (leave one clip out, 51 clips)
+    p_off: float = 0.6
     hold_s: float = 0.6
     smooth_s: float = 0.4
     max_gap_s: float = 1.0

@@ -159,6 +159,32 @@ def summarize(rows: list[dict], frames: list[dict]) -> dict:
             "chaser_right": int(found["chaser_right"].sum()) if "chaser_right" in found else None}
 
 
+def decoder_sweep(clips: list[dict], probs: dict[str, tuple[np.ndarray, np.ndarray]]) -> pd.DataFrame:
+    """Scores of a few decoder settings on the held-out probabilities (the model is not refitted)."""
+    rows = []
+    for p_on in (0.5, 0.6, 0.7, 0.8):
+        for p_off in (0.3, 0.4, 0.5, 0.6):
+            if p_off >= p_on:
+                continue
+            for hold in (0.4, 0.6, 1.0):
+                dec = cm.Decoder(p_on=p_on, p_off=p_off, hold_s=hold)
+                r_all, f_all = [], []
+                for c in clips:
+                    pa, pb = probs[c["clip_id"]]
+                    pred = [(a, b, "A") for a, b in intervals(c["t"], cm.decode(pa, dec))] + \
+                           [(a, b, "B") for a, b in intervals(c["t"], cm.decode(pb, dec))]
+                    r, f = score_clip(c, pred)
+                    r_all += r
+                    f_all.append(f)
+                close = [k for k, c in enumerate(clips) if c["kind"] == "close"]
+                sm = summarize(r_all, f_all)
+                rows.append({"p_on": p_on, "p_off": p_off, "hold_s": hold, **{k: sm[k] for k in (
+                    "found", "chases", "extra_chases", "frame_recall", "frame_precision", "frame_iou",
+                    "onset_abs_err_median_s", "offset_abs_err_median_s")},
+                    "extra_in_close_clips": int(sum(f_all[k]["extra"] for k in close))})
+    return pd.DataFrame(rows)
+
+
 def main() -> None:
     import matplotlib
 
@@ -176,7 +202,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     clips = load_clips(args.sessions, args.run, args.series)
     dec = cm.Decoder()
-    rows_m, frames_m, rows_d, frames_d, preds = [], [], [], [], {}
+    rows_m, frames_m, rows_d, frames_d, preds, probs = [], [], [], [], {}, {}
     for k, c in enumerate(clips):
         X, y, cols = matrix([x for j, x in enumerate(clips) if j != k])
         model = cm.Logistic(args.l2).fit(X, y)
@@ -185,6 +211,7 @@ def main() -> None:
         pred = [(a, b, "A") for a, b in intervals(c["t"], cm.decode(pa, dec))] + \
                [(a, b, "B") for a, b in intervals(c["t"], cm.decode(pb, dec))]
         preds[c["clip_id"]] = (pa, pb, pred)
+        probs[c["clip_id"]] = (pa, pb)
         r, f = score_clip(c, pred)
         rows_m += [x | {"method": "model"} for x in r]
         frames_m.append(f)
@@ -203,6 +230,8 @@ def main() -> None:
             summary[f"{name}_{kind}"].pop("chaser_right", None)
             summary[f"{name}_{kind}"]["clips"] = len(ids)
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
+    sweep = decoder_sweep(clips, probs)
+    sweep.to_csv(out / "decoder_sweep.csv", index=False)
     pd.DataFrame(rows_m + rows_d).to_csv(out / "chases.csv", index=False)
     X, y, cols = matrix(clips)
     full = cm.Logistic(args.l2).fit(X, y)
