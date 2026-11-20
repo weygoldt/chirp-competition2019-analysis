@@ -82,6 +82,8 @@ def main() -> None:
     ap.add_argument("--l2", type=float, default=3.0)
     args = ap.parse_args()
     out = c8.OUT / args.name
+    if (out / "LOCKED.md").exists():
+        raise SystemExit(f"{out} is locked (LOCKED.md); write a new run under another --name")
     out.mkdir(parents=True, exist_ok=True)
     clips = c8.load_clips(args.sessions, args.run, "identity")
     X, y, cols = c8.matrix(clips)
