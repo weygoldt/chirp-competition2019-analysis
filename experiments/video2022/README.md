@@ -263,3 +263,30 @@ Round 2's other points: spine2 0.057, spine3 0.075, fins 0.08 body lengths
   clear round-3 miss: two fish crossing in open water. Round 3 is used for the
   full run (more precise snout / tail, fewer double detections; fish hidden
   in a shelter do not chase).
+
+## Full pose run and chase detection (milestone C; author's go 2026-11-19)
+
+- **Pose run** (`b3_predict.py poses_r3 --model weights/pose7_r3_l.pt`):
+  all 19 recordings, dark phase (0-3 h), every second frame (12.5 frames/s),
+  every detection >= 0.2 with all seven keypoints →
+  `/mnt/data1/chirp_v2/video2022/poses/poses_r3/` (226 MB). Resizing in the
+  decoding thread (`pose_model.prepare`) made it 2.5x faster (85 frames/s;
+  identical keypoints on 640 test frames): 8.4 h.
+- **Chases** (`chases.py`, `c1_chases.py`, tests `test_chases.py`): tracks
+  from confident full-length detections; a chase = both fish >= 1 BL/s,
+  <= 3 BL apart, same heading, the follower on the leader's path (within
+  0.4 BL of where the leader was up to 2 s earlier), >= 1 s. Output and
+  definitions: `/mnt/data1/chirp_v2/video2022/chases/poses_r3/README.md`.
+- **Result:** 1,422 events in the 18 trials (+32 in the 2022-07-07 control),
+  in 15.8 h with both fish in view (of 54 h of dark phase). Median over trials
+  50 events per hour with both fish in view, from 0 to 349 (2022-06-20,
+  pair 3 bout a). Pair 3: 632 → 153 → 74 events over its three bouts. Median
+  event 1.7 s, both fish ~2.7-2.9 BL/s, follower 0.4 s behind on the leader's
+  path.
+- **Chirps around chases** (`c4_chirps_around_chases.py`, first look): the
+  loser chirps 0.34 per second 0.5-5 s after chase onsets vs 0.18 at random
+  times with both fish in view (16 trials with events); without pair 3 0.010
+  vs 0.005. Higher after onsets in 8 of the 12 trials with >= 20 events and
+  any loser chirps.
+- **Videos** (`c2_render_chases.py`): 20 random events, at most 2 per
+  recording, in `chases/poses_r3/videos/`.
