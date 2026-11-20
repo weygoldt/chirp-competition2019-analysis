@@ -12,6 +12,11 @@ last ``TRAIL_S`` of each fish's path (spine1); a header with recording, recordin
 time, event id; a badge "CHASE" while the event lasts.
 
     .venv/bin/python experiments/video2022/c2_render_chases.py poses_r3 [--n 20]
+    .venv/bin/python experiments/video2022/c2_render_chases.py poses_r3_sep --match poses_r3
+
+``--match OLD``: render the events of this run that correspond to the videos of run
+``OLD`` (same recording and pair of tracks, onset within 0.2 s), with a timeline
+under the video: grey = OLD's event, red = this run's event, white = now.
 
 Output: ``$CHIRP_DATA/video2022/chases/<run>/videos/<event>.mp4``, ``<event>.jpg``
 (a still from the middle of the event), ``rendered.csv``, ``stills.jpg`` (all stills).
@@ -75,12 +80,19 @@ def draw_fish(img: np.ndarray, row: pd.Series, color: tuple[int, int, int], thic
     cv2.circle(img, pts["snout"], thick + 6, (255, 255, 255), 2, cv2.LINE_AA)
 
 
+def px(t: float, t0: float, t1: float, width: int) -> int:
+    """x pixel of time t on a timeline from t0 to t1 across ``width`` pixels."""
+    return round((t - t0) / (t1 - t0) * (width - 1))
+
+
 def render(event: pd.Series, tr: pd.DataFrame, video: Path, t_frame: np.ndarray, bl: float, stride: int,
-           out: Path) -> np.ndarray:
+           out: Path, old: tuple[float, float] | None = None) -> np.ndarray:
     """Write the event's video; return the still from the middle of the event."""
     import cv2
 
     t0, t1 = event["t_start"] - PAD_S, event["t_end"] + PAD_S
+    if old is not None:
+        t0, t1 = min(t0, old[0] - PAD_S), max(t1, old[1] + PAD_S)
     frames = np.flatnonzero((t_frame >= t0) & (t_frame <= t1))
     win = tr[(tr["frame"] >= frames[0] - stride) & (tr["frame"] <= frames[-1])]
     pair = win[win["track"].isin([event["leader"], event["follower"]])]
@@ -89,7 +101,8 @@ def render(event: pd.Series, tr: pd.DataFrame, video: Path, t_frame: np.ndarray,
     scale = min(1.0, MAX_SIDE / max(x1 - x0, y1 - y0))
     ow, oh = int((x1 - x0) * scale) // 2 * 2, int((y1 - y0) * scale) // 2 * 2
     head = 34
-    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{ow}x{oh + head}",
+    foot = 18 if old is not None else 0
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{ow}x{oh + head + foot}",
            "-r", str(c1.FPS), "-i", "-", "-c:v", "libx264", "-crf", "22", "-pix_fmt", "yuv420p", str(out)]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     mid = (event["t_start"] + event["t_end"]) / 2
@@ -111,8 +124,14 @@ def render(event: pd.Series, tr: pd.DataFrame, video: Path, t_frame: np.ndarray,
                 c = color.get(row["track"], OTHER)
                 draw_fish(canvas, row, c, 3 if row["track"] in color else 2)
         crop = cv2.resize(canvas[y0:y1, x0:x1], (ow, oh), interpolation=cv2.INTER_AREA)
-        frame = np.zeros((oh + head, ow, 3), np.uint8)
-        frame[head:] = crop
+        frame = np.zeros((oh + head + foot, ow, 3), np.uint8)
+        frame[head:head + oh] = crop
+        if old is not None:
+            y = oh + head
+            cv2.rectangle(frame, (px(old[0], t0, t1, ow), y + 2), (px(old[1], t0, t1, ow), y + 7), (150, 150, 150), -1)
+            cv2.rectangle(frame, (px(event["t_start"], t0, t1, ow), y + 10), (px(event["t_end"], t0, t1, ow), y + 15),
+                          (40, 40, 230), -1)
+            cv2.line(frame, (px(t, t0, t1, ow), y), (px(t, t0, t1, ow), y + 17), (255, 255, 255), 2)
         mm, ss = divmod(t, 60)
         cv2.putText(frame, f"{event['recording']}  t = {int(mm):03d}:{ss:04.1f}  {event['event']}", (8, 23),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
@@ -150,10 +169,27 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--per-recording", type=int, default=2)
     ap.add_argument("--events", nargs="*", help="event ids instead of a random draw")
+    ap.add_argument("--match", help="render the events matching the videos of this earlier run")
     args = ap.parse_args()
     root = c1.OUT / args.run
     ev = pd.read_csv(root / "events.csv")
-    sel = ev[ev["event"].isin(args.events)] if args.events else pick(ev, args.n, args.per_recording)
+    old_window = {}
+    if args.match:
+        old = pd.read_csv(c1.OUT / args.match / "videos" / "rendered.csv")
+        rows = []
+        for o in old.itertuples():
+            c = ev[(ev["recording"] == o.recording) & (ev["a"] == o.a) & (ev["b"] == o.b)
+                   & ((ev["t_start"] - o.t_start).abs() <= 0.2)]
+            if len(c):
+                rows.append(c.index[0])
+                old_window[c.iloc[0]["event"]] = (o.t_start, o.t_end)
+            else:
+                print(f"{o.event}: no matching event in {args.run}")
+        sel = ev.loc[rows]
+    elif args.events:
+        sel = ev[ev["event"].isin(args.events)]
+    else:
+        sel = pick(ev, args.n, args.per_recording)
     stride = int(pd.read_json(root / "params.json", typ="series")["stride"])
     bl = pd.read_csv(b1.TABLES / "recordings.csv").set_index("recording")["body_length_px"]
     videos = {r.name: r.video for r in list_recordings()}
@@ -164,7 +200,8 @@ def main() -> None:
         tr = pd.read_parquet(root / rec / "tracks.parquet")
         t_frame = np.load(b1.TABLES / "frame_time" / f"{rec}.npy")
         for _, e in g.iterrows():
-            still = render(e, tr, videos[rec], t_frame, float(bl[rec]), stride, out / f"{e['event']}.mp4")
+            still = render(e, tr, videos[rec], t_frame, float(bl[rec]), stride, out / f"{e['event']}.mp4",
+                           old_window.get(e["event"]))
             cv2.imwrite(str(out / f"{e['event']}.jpg"), still, [cv2.IMWRITE_JPEG_QUALITY, 90])
             stills.append(fit(still, 480, 400))
             print(f"{e['event']}: {e['duration_s']:.1f} s", flush=True)

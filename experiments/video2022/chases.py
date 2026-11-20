@@ -19,8 +19,15 @@ recording's median SLEAP body length), speeds in BL/s.
    (cos >= ``cos_min``), heads >= ``min_sep`` apart; the fish behind is the
    *follower* and must be on the *leader's path*: within ``r_path`` of where the
    leader was 1 frame to ``lag_max_s`` earlier.
-5. :func:`events`: chase frames of a pair merged across gaps <= ``merge_gap_s``,
-   kept if they last >= ``min_dur_s``; leader = the fish in front in most of the frames.
+5. :func:`events`: chase frames of a pair merged across gaps <= ``merge_gap_s``;
+   the chase ends when the fish separate (:func:`separation_pieces`: the distance has
+   grown more than ``sep_grow_bl`` above its minimum since the onset; the event ends at
+   the last frame the distance was within ``sep_tol_bl`` of that minimum, i.e. when the
+   gap began to open; author, 2026-11-20: offsets were too late). A run of chase
+   frames counts if it lasts >= ``min_dur_s`` before the offset is moved (so the onsets
+   are those of the plain rule); a second chase within the run, after the follower
+   closed in again, counts if it lasts >= ``min_dur_s`` itself. Leader = the fish in
+   front in most of the frames.
 """
 
 from __future__ import annotations
@@ -52,6 +59,8 @@ class Params:
     lag_max_s: float = 2.0
     merge_gap_s: float = 0.4
     min_dur_s: float = 1.0
+    sep_grow_bl: float = 0.5
+    sep_tol_bl: float = 0.15
 
 
 DEFAULT = Params()
@@ -210,10 +219,39 @@ def chase_frames(kin: pd.DataFrame, bl: float, stride: int, fps: float = 25.0, p
     return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
 
 
+def separation_pieces(dist: np.ndarray, grow: float, tol: float) -> list[tuple[int, int]]:
+    """Split a run of chase frames where the fish separate: (first, last) positions of the pieces.
+
+    A piece ends once ``dist`` has grown more than ``grow`` above its running minimum
+    since the piece began; its last frame is the last one before that with ``dist``
+    within ``tol`` of the running minimum. The next piece begins once the distance stops
+    growing (the follower closes in again); it becomes an event of its own only if it
+    lasts long enough.
+    """
+    pieces = []
+    start, n = 0, len(dist)
+    while start < n:
+        d = dist[start:]
+        run_min = np.minimum.accumulate(d)
+        over = np.flatnonzero(d > run_min + grow)
+        if len(over) == 0:
+            pieces.append((start, n - 1))
+            break
+        k = over[0]
+        near = np.flatnonzero(d[:k] <= run_min[:k] + tol)
+        pieces.append((start, start + int(near[-1])))
+        closing = np.flatnonzero(np.diff(d[k:]) < 0)
+        if len(closing) == 0:
+            break
+        start += int(k + closing[0])
+    return pieces
+
+
 def events(cf: pd.DataFrame, stride: int, fps: float = 25.0, p: Params = DEFAULT) -> pd.DataFrame:
     """Chase events: one row per event with times, leader / follower track and summary features."""
     cols = ["a", "b", "leader", "follower", "leader_share", "i_start", "i_end", "t_start", "t_end", "duration_s",
-            "n_frames", "speed_leader", "speed_follower", "speed_max", "dist", "lag_s", "cos"]
+            "n_frames", "speed_leader", "speed_follower", "speed_max", "dist", "lag_s", "cos", "separated",
+            "rechase", "t_end_run"]
     if cf.empty or not cf["chase"].any():
         return pd.DataFrame(columns=cols)
     gap = round(p.merge_gap_s * fps / stride)
@@ -221,11 +259,21 @@ def events(cf: pd.DataFrame, stride: int, fps: float = 25.0, p: Params = DEFAULT
     for (a, b), g in cf[cf["chase"]].groupby(["a", "b"]):
         i = g["i"].to_numpy()
         cut = np.flatnonzero(np.diff(i) > gap + 1) + 1
+        t = g["t_s"].to_numpy()
+        pieces = []
         for seg in np.split(np.arange(len(g)), cut):
+            # a run qualifies on its full length (the onsets do not change); the separation rule moves the
+            # offset of its first chase; later chases in the run (the follower closed in again) must last
+            # min_dur_s on their own
+            if t[seg[-1]] - t[seg[0]] + stride / fps < p.min_dur_s:
+                continue
+            parts = separation_pieces(g["dist"].to_numpy()[seg], p.sep_grow_bl, p.sep_tol_bl)
+            for k, (f, la) in enumerate(parts):
+                if k == 0 or t[seg[la]] - t[seg[f]] + stride / fps >= p.min_dur_s:
+                    pieces.append((seg[f:la + 1], la < len(seg) - 1, k > 0, float(t[seg[-1]])))
+        for seg, separated, rechase, t_end_run in pieces:
             s = g.iloc[seg]
             dur = (s["t_s"].iloc[-1] - s["t_s"].iloc[0]) + stride / fps
-            if dur < p.min_dur_s:
-                continue
             share_a = float((s["leader"] == a).mean())
             leader, follower = (a, b) if share_a >= 0.5 else (b, a)
             sp_l = np.where(s["leader"] == a, s["speed_a"], s["speed_b"])
@@ -236,7 +284,8 @@ def events(cf: pd.DataFrame, stride: int, fps: float = 25.0, p: Params = DEFAULT
                          "t_end": float(s["t_s"].iloc[-1]), "duration_s": float(dur), "n_frames": len(s),
                          "speed_leader": float(np.mean(sp_l)), "speed_follower": float(np.mean(sp_f)),
                          "speed_max": float(np.max(np.r_[sp_l, sp_f])), "dist": float(s["dist"].mean()),
-                         "lag_s": float(s["lag_s"].median()), "cos": float(s["cos"].mean())})
+                         "lag_s": float(s["lag_s"].median()), "cos": float(s["cos"].mean()),
+                         "separated": bool(separated), "rechase": bool(rechase), "t_end_run": t_end_run})
     return pd.DataFrame(rows, columns=cols).sort_values("t_start", ignore_index=True)
 
 

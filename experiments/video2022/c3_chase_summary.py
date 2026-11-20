@@ -52,7 +52,7 @@ def main() -> None:
                  f" dark bars: chases per hour of that time", fontsize=9)
     ax = fig.add_subplot(gs[0, 2])
     if len(ev):
-        ax.hist(ev["duration_s"], bins=np.arange(1, max(6, ev["duration_s"].max()) + 0.25, 0.25), color="0.4")
+        ax.hist(ev["duration_s"], bins=np.arange(0, max(6, ev["duration_s"].max()) + 0.25, 0.25), color="0.4")
     ax.set_xlabel("event duration (s)")
     ax.set_ylabel("events")
     ax.set_title(f"median {ev['duration_s'].median():.1f} s" if len(ev) else "no events", fontsize=9)

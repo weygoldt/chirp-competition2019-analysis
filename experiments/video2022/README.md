@@ -290,3 +290,20 @@ Round 2's other points: spine2 0.057, spine3 0.075, fins 0.08 body lengths
   any loser chirps.
 - **Videos** (`c2_render_chases.py`): 20 random events, at most 2 per
   recording, in `chases/poses_r3/videos/`.
+
+### Chase offsets from the separation of the fish (2026-11-20)
+
+Author: onsets look right in the videos, offsets too late; weigh the growing
+distance between the fish more. In the first version, the gap opened by more
+than 0.5 BL after the closest approach in 43 % of the events, while the event
+went on (median distance 0.59 BL at the closest approach, 0.92 BL at the end).
+`chases.separation_pieces`: a chase ends once the distance has grown more than
+`sep_grow_bl` = 0.5 BL above its minimum since the onset, at the last frame
+within `sep_tol_bl` = 0.15 BL of that minimum. Onsets are unchanged (runs
+qualify on their full length); a follower that closes in again for >= 1 s
+starts a new event. Result (`chases/poses_r3_sep/`): all 1,454 onsets kept,
+638 offsets moved earlier (median 1.3 s), 208 re-chases, median duration
+1.7 → 1.3 s, distance at the offset 0.92 → 0.77 BL. 295 chases now last
+< 0.5 s (flag `separated`). Thresholds 0.75 / 1.0 BL move fewer offsets (see
+the table in the chase README). The same 20 videos are re-rendered with an
+old (grey) vs new (red) timeline (`c2_render_chases.py poses_r3_sep --match poses_r3`).

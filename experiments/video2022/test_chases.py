@@ -88,3 +88,51 @@ def test_two_fish_keep_their_tracks_when_passing():
     assert tr["track"].nunique() == 2
     for _, g in tr.groupby("track"):
         assert g["spine1_y"].nunique() == 1
+
+
+def falling_behind() -> pd.DataFrame:
+    """Leader at 3 BL/s; follower on its path 0.4 s behind, slowing to 2 BL/s after 2 s (the gap opens)."""
+    t = FRAMES / FPS
+    lead = np.stack([1000 + 3.0 * BL * t, np.full(len(t), 700.0)], axis=1)
+    xf = np.where(t <= 2.0, 1000 + 3.0 * BL * (t - 0.4), 1000 + 3.0 * BL * 1.6 + 2.0 * BL * (t - 2.0))
+    foll = np.stack([xf, np.full(len(t), 700.0)], axis=1)
+    head = np.tile([1.0, 0.0], (len(t), 1))
+    return scene(fish_rows(lead, head, FRAMES), fish_rows(foll, head, FRAMES))
+
+
+def test_chase_ends_when_the_gap_opens():
+    ev = ch.detect(falling_behind(), BL, STRIDE, FPS)[3]
+    assert len(ev) == 1
+    assert 2.0 <= ev["t_end"].iloc[0] <= 2.4
+
+
+def test_without_the_separation_rule_the_chase_runs_on():
+    p = ch.Params(sep_grow_bl=float("inf"))
+    ev = ch.detect(falling_behind(), BL, STRIDE, FPS, p)[3]
+    assert len(ev) == 1
+    assert ev["t_end"].iloc[0] > 3.4
+
+
+def test_separation_pieces():
+    d = np.array([1.0, 0.8, 0.6, 0.65, 0.7, 0.9, 1.2, 1.4, 1.0, 0.7, 0.6])
+    # minimum 0.6 at 2; 1.2 at 6 is > 0.6 + 0.5 -> piece ends at the last value <= 0.75 before (position 4);
+    # the gap grows until 7, the next piece starts there (the follower closes in again)
+    assert ch.separation_pieces(d, 0.5, 0.15) == [(0, 4), (7, 10)]
+    assert ch.separation_pieces(d, np.inf, 0.15) == [(0, 10)]
+    # the gap keeps growing: no further piece
+    assert ch.separation_pieces(np.array([0.6, 0.7, 1.2, 1.5, 1.9]), 0.5, 0.15) == [(0, 1)]
+
+
+def test_short_chase_ending_in_a_separation_keeps_its_onset():
+    """A 1.5 s run of following whose gap opens after 0.6 s: the event keeps its onset and ends early."""
+    t = FRAMES / FPS
+    lead = np.stack([1000 + 3.0 * BL * t, np.full(len(t), 700.0)], axis=1)
+    xf = np.where(t <= 1.0, 1000 + 3.0 * BL * (t - 0.4), 1000 + 3.0 * BL * 0.6 + 1.5 * BL * (t - 1.0))
+    head = np.tile([1.0, 0.0], (len(t), 1))
+    d = scene(fish_rows(lead, head, FRAMES), fish_rows(np.stack([xf, np.full(len(t), 700.0)], axis=1), head, FRAMES))
+    plain = ch.detect(d, BL, STRIDE, FPS, ch.Params(sep_grow_bl=float("inf")))[3]
+    ev = ch.detect(d, BL, STRIDE, FPS)[3]
+    assert len(plain) == len(ev) == 1
+    assert ev["t_start"].iloc[0] == plain["t_start"].iloc[0]
+    assert ev["t_end"].iloc[0] < plain["t_end"].iloc[0]
+    assert ev["duration_s"].iloc[0] < 1.0

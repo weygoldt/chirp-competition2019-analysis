@@ -7,9 +7,9 @@ confident, full-length detections), so that chase rates can be given per hour
 with both fish in view: in some trials one fish spends most of the dark phase
 hidden in the tube.
 
-    .venv/bin/python experiments/video2022/c1_chases.py poses_r3
+    .venv/bin/python experiments/video2022/c1_chases.py poses_r3 [--name poses_r3_sep]
 
-Output: ``$CHIRP_DATA/video2022/chases/<run>/``: ``<rec>/tracks.parquet`` (the clean
+Output: ``$CHIRP_DATA/video2022/chases/<name>/``: ``<rec>/tracks.parquet`` (the clean
 detections with ``track``), ``<rec>/kinematics.parquet``, ``<rec>/chase_frames.parquet``,
 ``events.csv`` (all recordings), ``recordings.csv`` (per recording: visible times,
 events, rates), ``params.json``.
@@ -68,14 +68,16 @@ def run_recording(run: str, rec: str, bl: float, stride: int, p: ch.Params, out:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("run")
+    ap.add_argument("--name", help="output name (default: the run's name)")
     ap.add_argument("--recordings", nargs="*")
     args = ap.parse_args()
     src = bp.ROOT / args.run
     stride = json.loads((src / "meta.json").read_text())["stride"]
     p = ch.Params()
-    out = OUT / args.run
+    out = OUT / (args.name or args.run)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "params.json").write_text(json.dumps({"stride": stride, **dataclasses.asdict(p)}, indent=1))
+    (out / "params.json").write_text(json.dumps({"poses": args.run, "stride": stride, **dataclasses.asdict(p)},
+                                                indent=1))
     bl = pd.read_csv(b1.TABLES / "recordings.csv").set_index("recording")["body_length_px"]
     pairs = pairing()
     recs = sorted(r.parent.name for r in src.glob("*/done.json"))
