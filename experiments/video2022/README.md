@@ -313,4 +313,11 @@ Results, numbers and limits: `/mnt/data1/chirp_v2/video2022/identity/poses_r3/RE
 - `d2_identity_figures.py`: `electrodes`, `evidence`, `size`, `frames`, `chases`, `localize`, `report`.
 - Tests: `test_identity.py`.
 
-Order: `amplitudes` -> `calibrate` -> `evidence` -> `assign` -> `pairing` -> `events` -> figures and report.
+Order: `amplitudes` -> `calibrate` -> `evidence` -> `assign` -> `pairing` -> `events` -> `sensitivity` ->
+figures and report.
+
+Headline (2026-11-20, the output README has every number with its check): 98 % of the video detections
+get winner / loser; the electrodes reveal tracker swaps at contacts inside 806 of 20,116 tracks (those
+tracks are split into segments); the winner is the chaser in 1,292 of 1,295 identified chase events
+(127 of 1,422 unknown), stable over switch priors, evidence weights and thresholds; checked against body
+size (video only) and against the evidence inside vs outside each chase.

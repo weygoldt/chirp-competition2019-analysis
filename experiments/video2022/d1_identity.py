@@ -9,6 +9,7 @@ Stages, in this order (outputs under ``$CHIRP_DATA/video2022/identity/``)::
     $PY experiments/video2022/d1_identity.py assign       # validation/, <rec>/track_identity.csv (HMM labels)
     $PY experiments/video2022/d1_identity.py pairing      # validation/pairing_test.csv
     $PY experiments/video2022/d1_identity.py events       # events_identity.csv, chases_by_trial.csv
+    $PY experiments/video2022/d1_identity.py sensitivity  # validation/sensitivity.csv (chase result vs parameters)
     $PY experiments/video2022/d2_identity_figures.py      # figures/, README.md
 
 ``amplitudes`` and ``calibrate`` are long: run them detached (``systemd-run --user`` + ``scripts/guarded``).
@@ -576,9 +577,32 @@ def stage_events(p_min: float) -> None:
     print(per.to_string())
 
 
+def stage_sensitivity() -> None:
+    """The chase result under other switch priors, evidence weights and thresholds (validation/sensitivity.csv)."""
+    beta = json.loads((RES / "validation" / "summary.json").read_text())["beta_per_s"]
+    ev = pd.read_csv(CHASES / "events.csv")
+    recs = sorted(set(ev["recording"]) & {p.parent.name for p in RES.glob("*/observations.parquet")})
+    base = {r: with_runs(load_obs(r), EPS_EPISODE) for r in recs}
+    rows = []
+    for eps in (0.02, 0.1, 0.3, 0.5):
+        for scale in (1.0, 0.5):
+            post = {r: idn.track_posterior(o, beta * scale, eps, EPS_CALM) for r, o in base.items()}
+            for p_min in (0.9, 0.99):
+                k = n = tot = 0
+                for r in recs:
+                    e = event_identities(ev[ev["recording"] == r], idn.label_segments(post[r], p_min), p_min)
+                    k += int((e["chaser"] == "winner").sum())
+                    n += int((e["chaser"] != "unknown").sum())
+                    tot += len(e)
+                rows.append({"eps_episode": eps, "beta_per_s": beta * scale, "p_min": p_min, "events": tot,
+                             "identified": n, "winner_chases": k, "share_winner_chases": k / n if n else np.nan})
+                print(rows[-1], flush=True)
+    pd.DataFrame(rows).to_csv(RES / "validation" / "sensitivity.csv", index=False)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("stage", choices=["amplitudes", "calibrate", "evidence", "assign", "events", "pairing"])
+    ap.add_argument("stage", choices=["amplitudes", "calibrate", "evidence", "assign", "events", "pairing", "sensitivity"])
     ap.add_argument("--recordings", nargs="*")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--p-min", type=float, default=P_MIN)
@@ -596,6 +620,8 @@ def main() -> None:
         stage_events(args.p_min)
     elif args.stage == "pairing":
         stage_pairing(args.recordings)
+    elif args.stage == "sensitivity":
+        stage_sensitivity()
 
 
 if __name__ == "__main__":

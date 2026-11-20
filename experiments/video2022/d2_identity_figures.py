@@ -496,6 +496,11 @@ def wall_gain(elec: pd.DataFrame) -> float:
     return float(g["gain_db"].median())
 
 
+def winner_share(rt: pd.DataFrame) -> float:
+    """Share of the labelled frames (all recordings) labelled winner."""
+    return float((rt["winner"] * rt["frames"]).sum() / (rt["labelled"] * rt["frames"]).sum())
+
+
 def unknown_pair3(per: pd.DataFrame) -> int:
     p3 = per[per["pairing"].str.startswith("3")]
     return int((p3["events"] - p3["identified"]).sum())
@@ -575,6 +580,8 @@ electrode traces and the gap-filled wavetracker tracks of the two trial fish
   >= 4 % longer by hand (pairs 3-6), the frames labelled "winner" show the longer fish, with a winner / loser
   length ratio close to the measured one; in pair 2 (equal size) the ratio is
   {p2['ratio_video'].min():.2f}-{p2['ratio_video'].max():.2f} (`figures/size_check.png`).
+- **Sanity check:** of the labelled video frames, {pct(winner_share(rt), 0)} show the winner: the loser is the
+  fish in view most of the time, consistent with the winner holding the shelter (not tested here).
 - **The tracker swaps the fish when they touch.** The electrodes show a change of identity inside
   {switch_tracks} of {int(rt['tracks'].sum())} tracks; these tracks are cut into segments (one identity each).
 - **Who chases whom.** In {k} of {n} identified chase events ({pct(k / n)}) the winner is the follower (the
@@ -705,6 +712,11 @@ which is much more selective.
   longer skeleton:
 
 {md_table(cs[cs['events'] >= 10][['recording', 'pairing', 'events', 'share_follower_longer', 'ci_low', 'ci_high', 'ratio_measured']])}
+
+- **Other parameter choices** (`validation/sensitivity.csv`, `d1_identity.py sensitivity`): switch prior per
+  contact episode, evidence weight (beta and half of it) and threshold for "unknown":
+
+{md_table(pd.read_csv(VAL / 'sensitivity.csv'), '.3f') if (VAL / 'sensitivity.csv').exists() else '(not run)'}
 
 ## Limits
 
