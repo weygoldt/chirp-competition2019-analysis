@@ -53,7 +53,8 @@
       <b>offset</b> = it stops (falls back, turns away, gives up). Short pauses inside one pursuit belong to
       the same chase. Clips start 4 s before and end 8 s after the detector's guess, which is not shown.</div>
     <div><button id="on" class="primary">onset (<kbd>o</kbd>)</button>
-         <button id="off" class="primary">offset (<kbd>f</kbd>)</button></div>
+         <button id="off" class="primary">offset (<kbd>f</kbd>)</button>
+         <button id="toend" title="the chase is still going when the clip ends">runs to the end (<kbd>e</kbd>)</button></div>
     <div id="pending" class="muted"></div>
     <div><b>Chases</b><ul id="list"></ul></div>
     <label><input type="checkbox" id="cont"> last chase continues after the clip ends</label>
@@ -63,7 +64,7 @@
     <div><button id="prev">&lsaquo; previous</button> <button id="save" class="primary">save &amp; next (<kbd>Enter</kbd>)</button></div>
     <div id="status"></div>
     <div class="muted"><kbd>space</kbd> play/pause &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> 1 frame &middot;
-      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
+      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
   </aside>
 </main>
 <script>
@@ -94,7 +95,7 @@ function draw() {
   const list = document.getElementById('list'); list.innerHTML = '';
   chases.forEach((c, i) => {
     const li = document.createElement('li');
-    li.textContent = `${c.onset_s.toFixed(2)} s – ${c.offset_s.toFixed(2)} s  `;
+    li.textContent = `${c.onset_s.toFixed(2)} s – ${c.offset_s.toFixed(2)} s${c.continues ? ' (continues)' : ''}  `;
     const b = document.createElement('button'); b.textContent = 'remove';
     b.onclick = () => { chases.splice(i, 1); draw(); }; li.appendChild(b); list.appendChild(li);
   });
@@ -126,6 +127,14 @@ function setSource(t) {
 }
 
 function markOn() { pendingOn = tOf(frame()); draw(); }
+function markToEnd() {
+  if (pendingOn === null) { status('mark the onset first', 'err'); return; }
+  chases.push({onset_s: pendingOn, offset_s: tOf(nFrames() - 1), continues: true});
+  chases.sort((a, b) => a.onset_s - b.onset_s);
+  pendingOn = null; document.getElementById('nochase').checked = false;
+  status('chase runs to the end of the clip (saved as "continues")', 'ok'); draw();
+}
+
 function markOff() {
   const t = tOf(frame());
   if (pendingOn === null) { status('mark the onset first', 'err'); return; }
@@ -135,13 +144,13 @@ function markOff() {
 }
 
 async function save() {
-  if (pendingOn !== null) { status('an onset has no offset yet', 'err'); return; }
+  if (pendingOn !== null) markToEnd();  // a chase still going at the clip's end
   const none = document.getElementById('nochase').checked;
   if (!none && chases.length === 0) { status('mark a chase or tick "no chase"', 'err'); return; }
   const cont = document.getElementById('cont').checked;
   const body = {clip_id: clips[k].clip_id, no_chase: none, unsure: document.getElementById('unsure').checked,
                 note: document.getElementById('note').value,
-                chases: chases.map((c, i) => ({...c, continues: cont && i === chases.length - 1}))};
+                chases: chases.map((c, i) => ({...c, continues: !!c.continues || (cont && i === chases.length - 1)}))};
   const r = await fetch('/api/save', {method: 'POST', body: JSON.stringify(body)});
   const res = await r.json();
   if (!r.ok) { status(res.error, 'err'); return; }
@@ -157,6 +166,7 @@ document.getElementById('rate').onchange = e => { v.playbackRate = parseFloat(e.
 document.getElementById('marked').onchange = () => setSource(v.currentTime);
 document.getElementById('on').onclick = markOn;
 document.getElementById('off').onclick = markOff;
+document.getElementById('toend').onclick = markToEnd;
 document.getElementById('save').onclick = save;
 document.getElementById('prev').onclick = () => load(k - 1);
 tl.onclick = e => { const r = tl.getBoundingClientRect(); v.pause(); seekFrame(Math.floor((e.clientX - r.left) / r.width * nFrames())); };
@@ -170,6 +180,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight') { e.preventDefault(); v.pause(); seekFrame(frame() + step); }
   else if (e.key === 'o') markOn();
   else if (e.key === 'f') markOff();
+  else if (e.key === 'e') markToEnd();
   else if (e.key === 'm') { const m = document.getElementById('marked'); m.checked = !m.checked; setSource(v.currentTime); }
   else if (e.key === 'n') { const n = document.getElementById('nochase'); n.checked = !n.checked; }
   else if (e.key === 'Enter') { e.preventDefault(); save(); }
