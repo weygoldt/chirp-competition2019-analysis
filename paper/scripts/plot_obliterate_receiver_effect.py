@@ -30,15 +30,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import os
-import json
-from dataclasses import dataclass
 from pathlib import Path
 
 import seaborn as sns
-import numpy as np
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from matplotlib.transforms import blended_transform_factory
 
@@ -51,7 +47,6 @@ from style import (
     set_dark_style,  # noqa: F401  — imported for symmetry with other scripts
     winner_color,  # noqa: F401
     loser_color,  # noqa: F401
-    baseline_color,
     adjust_alpha,
 )
 
@@ -69,7 +64,6 @@ SLOPE_SUMMARY = (
     PROCESSED / "chirp_effect_on_dominant_adaptive_window"
     / "gamma_glmm_binary" / "slope_summary.csv"
 )
-RATE_DATA = PROCESSED / "loser_chirps_warped_chase" / "normalized_chirp_rate.csv"  # never read
 OUT_FIG = figure(f"{filename}.pdf")
 OBS_DATA = (
     PROCESSED / "chirp_effect_on_dominant_adaptive_window"
@@ -221,71 +215,7 @@ RR_LIMS = (0.58, 1.42)
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class HybridRates:
-    """All three datasets loaded on their native grids (no truncation)."""
-
-    t_onset: np.ndarray
-    obs_onset: np.ndarray
-    null_onset: np.ndarray
-
-    u: np.ndarray
-    obs_warped: np.ndarray
-    null_warped: np.ndarray
-
-    t_offset: np.ndarray
-    obs_offset: np.ndarray
-    null_offset: np.ndarray
-
-
-def load_hybrid_rates(
-    onset_path: Path,
-    warped_path: Path,
-    offset_path: Path,
-) -> HybridRates:
-    """Load the three JSONs into a HybridRates container.
-
-    Truncation to the display range happens at plot time, so the caller
-    can change T_pre_s / T_post_s without reloading.
-    """
-    with open(onset_path) as f:
-        onset = json.load(f)
-    with open(warped_path) as f:
-        warped = json.load(f)
-    with open(offset_path) as f:
-        offset = json.load(f)
-
-    return HybridRates(
-        t_onset=np.asarray(onset["conv_time"]),
-        obs_onset=np.asarray(onset["jackknifed_eventrate"]),
-        null_onset=np.asarray(onset["bootstrapped_baseline_jittered"]),
-        u=np.asarray(warped["u_grid"]),
-        obs_warped=np.asarray(warped["jackknifed_eventrate"]),
-        null_warped=np.asarray(warped["bootstrapped_baseline_jittered"]),
-        t_offset=np.asarray(offset["conv_time"]),
-        obs_offset=np.asarray(offset["jackknifed_eventrate"]),
-        null_offset=np.asarray(offset["bootstrapped_baseline_jittered"]),
-    )
-
-
 def load_slope_summary(path: Path = SLOPE_SUMMARY) -> pd.DataFrame:
-    return pd.read_csv(path)
-
-
-def load_rate_data(path: Path = RATE_DATA) -> pd.DataFrame:
-    """Load the hybrid-axis chirp-rate trace for panel a.
-
-    Expected columns:
-        x              hybrid-axis position (s pre-onset < 0; 0..1 normalised
-                       chase position; x > 1 encodes (x - 1) seconds past
-                       offset)
-        observed_mean  observed chirp rate (chirps/min) at x
-        observed_lo    observed 95 % CI lower bound
-        observed_hi    observed 95 % CI upper bound
-        null_mean      jitter-null chirp rate at x
-        null_lo        null 95 % CI lower bound
-        null_hi        null 95 % CI upper bound
-    """
     return pd.read_csv(path)
 
 
@@ -364,123 +294,6 @@ def setup_plot():
 # ---------------------------------------------------------------------------
 # Panel a: chirp-rate landscape on hybrid axis
 # ---------------------------------------------------------------------------
-def plot_hybrid_rate(
-    ax,
-    data: HybridRates,
-    T_pre_s: float = 20.0,
-    T_post_s: float = 20.0,
-    obs_color: str = loser_color,
-    null_color: str = baseline_color,
-    band_alpha: float = 0.5,
-    scale_per_minute: bool = True,
-    show_seams: bool = True,
-    annotate_ticks: bool = True,
-) -> dict:
-    """Plot onset/warped/offset rates on a single axis with equal thirds.
-
-    Plot-x layout:
-        [0, 1]  pre-chase   ← onset-centered,  t ∈ [-T_pre_s, 0]
-        [1, 2]  in-chase    ← warped,          u ∈ [0, 1]
-        [2, 3]  post-chase  ← offset-centered, t ∈ [0, T_post_s]
-
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes
-    data : HybridRates
-    T_pre_s, T_post_s : float
-        Display half-windows in seconds for the pre/post regions.
-    scale_per_minute : bool
-        Multiply rates by 60 so the y-axis reads chirps/min.
-
-    Returns
-    -------
-    dict
-        Layout metadata (seam positions, plot-x extent, T_pre/T_post) so
-        downstream code can overlay annotations.
-    """
-    scale = 60.0 if scale_per_minute else 1.0
-
-    pre = (data.t_onset >= -T_pre_s) & (data.t_onset <= 0.0)
-    inc = (data.u >= 0.0) & (data.u <= 1.0)
-    post = (data.t_offset >= 0.0) & (data.t_offset <= T_post_s)
-
-    def q(a, mask):
-        return np.percentile(a[:, mask], [2.5, 50, 97.5], axis=0) * scale
-
-    obs_pre_q = q(data.obs_onset, pre)
-    obs_in_q = q(data.obs_warped, inc)
-    obs_post_q = q(data.obs_offset, post)
-    null_pre_q = q(data.null_onset, pre)
-    null_in_q = q(data.null_warped, inc)
-    null_post_q = q(data.null_offset, post)
-
-    seam_on = 1.0
-    seam_off = 2.0
-    x_end = 3.0
-
-    x_pre = np.linspace(0.0, seam_on, int(pre.sum()))
-    x_in = np.linspace(seam_on, seam_off, int(inc.sum()))
-    x_post = np.linspace(seam_off, x_end, int(post.sum()))
-
-    x_all = np.concatenate([x_pre, x_in, x_post])
-    obs_lo = np.concatenate([obs_pre_q[0], obs_in_q[0], obs_post_q[0]])
-    obs_med = np.concatenate([obs_pre_q[1], obs_in_q[1], obs_post_q[1]])
-    obs_hi = np.concatenate([obs_pre_q[2], obs_in_q[2], obs_post_q[2]])
-    null_lo = np.concatenate([null_pre_q[0], null_in_q[0], null_post_q[0]])
-    null_med = np.concatenate([null_pre_q[1], null_in_q[1], null_post_q[1]])
-    null_hi = np.concatenate([null_pre_q[2], null_in_q[2], null_post_q[2]])
-
-    ax.fill_between(x_all, null_lo, null_hi, color=null_color, alpha=band_alpha, lw=0)
-    ax.plot(x_all, null_med, color=null_color, lw=1, label="null")
-    ax.fill_between(x_all, obs_lo, obs_hi, color=obs_color, alpha=band_alpha, lw=0)
-    ax.plot(x_all, obs_med, color=obs_color, lw=1, label="observed")
-
-    if show_seams:
-        ax.axvline(seam_on, c="k", lw=0.5, ls="--")
-        ax.axvline(seam_off, c="k", lw=0.5, ls="--")
-
-    # Not called (the figure has no rate panel any more); the post-offset bar follows the window.
-    post_end = seam_off + POST_OFFSET_WINDOW_S / T_post_s * (x_end - seam_off)
-    _rounded_rect(ax, (1.1, 2), (7.5, 8), C_TEAL_FILL, C_POSITIVE, zorder=-100)
-    _rounded_rect(ax, (2, post_end), (7.5, 8), C_TEAL_FILL, C_POSITIVE, zorder=-100)
-
-    if annotate_ticks:
-        ax.set_xticks(
-            [
-                0.0,
-                seam_on / 2,
-                seam_on,
-                (seam_on + seam_off) / 2,
-                seam_off,
-                (seam_off + x_end) / 2,
-                x_end,
-            ]
-        )
-        ax.set_xticklabels(
-            [
-                f"-{T_pre_s:g}",
-                f"-{T_pre_s / 2:g}",
-                "onset",
-                "",
-                "offset",
-                f"+{T_post_s / 2:g}",
-                f"+{T_post_s:g}",
-            ]
-        )
-
-    ax.set_xlim(0, x_end)
-    ax.set_ylim(0, 8)
-    ax.set_ylabel("Chirps/min)" if scale_per_minute else "Chirp rate (Hz)")
-
-    return {
-        "seam_onset": seam_on,
-        "seam_offset": seam_off,
-        "x_end": x_end,
-        "T_pre_s": T_pre_s,
-        "T_post_s": T_post_s,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Panel b: window-geometry schematic
 # ---------------------------------------------------------------------------
@@ -843,14 +656,7 @@ def draw_forest(ax: plt.Axes, df: pd.DataFrame) -> None:
 def main() -> None:
     df = load_slope_summary()
 
-    data = load_hybrid_rates(
-        onset_path=PROCESSED / "event_time_rates" / "lchirps@agon.json",
-        warped_path=PROCESSED / "event_time_rates" / "lchirps@warped_chase.json",
-        offset_path=PROCESSED / "event_time_rates" / "lchirps@agoff.json",
-    )
-
     fig, ax_schematic, ax_forest = setup_plot()
-    # layout = plot_hybrid_rate(ax_rate, data)
     draw_schematic(ax_schematic)
     draw_forest(ax_forest, df)
 

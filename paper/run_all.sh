@@ -71,16 +71,15 @@ chain_gamma() {        # 59 Gamma GLMMs (~2 h): Fig. obliterate_receiver_effect,
   heavy gamma-glmm 20G stats_chirp_affects_chasing.py
 }
 
-chain_rates() {        # Fig. event_time_rates_winner_loser_chirp (+ inputs of the receiver-effect figure)
+chain_rates() {        # Fig. event_time_rates_winner_loser_chirp (+ the offset window)
   tagged chirps heavy etr-default 12G analyze_event_time_rates_trial.py
   tagged ag heavy etr-ag 12G analyze_event_time_rates_trial.py --ag-events
-  heavy warped 12G analyze_warped_chase_chirp_rates_trial.py
   step plot_event_time_rates_winner_loser_chirp.py
   step plot_event_time_rates_winner_loser_chirp_src_paper.py
   step offset_window.py   # the window around chase offsets (from the primary run's loser peak)
 }
 
-chain_receiver() {     # needs chain_gamma and chain_rates
+chain_receiver() {     # needs chain_gamma and the offset window (chain_rates)
   step plot_obliterate_receiver_effect.py
   step plot_re_analysis.py
 }
