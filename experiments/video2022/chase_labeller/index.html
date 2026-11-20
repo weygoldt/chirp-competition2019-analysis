@@ -51,7 +51,8 @@
     <h1 id="title">Chase labeller</h1>
     <div class="muted">Mark every chase in the clip: <b>onset</b> = the follower starts pursuing the other fish;
       <b>offset</b> = it stops (falls back, turns away, gives up). Short pauses inside one pursuit belong to
-      the same chase. Clips start 4 s before and end 8 s after the detector's guess, which is not shown.</div>
+      the same chase. Tick "ends in contact" when a chase ends with a bite or jaw locking. Some clips contain
+      no chase at all (press <kbd>n</kbd>). The detector's guess is not shown.</div>
     <div><button id="on" class="primary">onset (<kbd>o</kbd>)</button>
          <button id="off" class="primary">offset (<kbd>f</kbd>)</button>
          <button id="toend" title="the chase is still going when the clip ends">runs to the end (<kbd>e</kbd>)</button></div>
@@ -64,7 +65,7 @@
     <div><button id="prev">&lsaquo; previous</button> <button id="save" class="primary">save &amp; next (<kbd>Enter</kbd>)</button></div>
     <div id="status"></div>
     <div class="muted"><kbd>space</kbd> play/pause &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> 1 frame &middot;
-      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
+      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>c</kbd> last chase ends in contact (bite, jaw lock) &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
   </aside>
 </main>
 <script>
@@ -96,6 +97,10 @@ function draw() {
   chases.forEach((c, i) => {
     const li = document.createElement('li');
     li.textContent = `${c.onset_s.toFixed(2)} s – ${c.offset_s.toFixed(2)} s${c.continues ? ' (continues)' : ''}  `;
+    const lab = document.createElement('label'); lab.style.marginRight = '6px';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!c.contact;
+    cb.onchange = () => { c.contact = cb.checked; };
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(' ends in contact')); li.appendChild(lab);
     const b = document.createElement('button'); b.textContent = 'remove';
     b.onclick = () => { chases.splice(i, 1); draw(); }; li.appendChild(b); list.appendChild(li);
   });
@@ -181,6 +186,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'o') markOn();
   else if (e.key === 'f') markOff();
   else if (e.key === 'e') markToEnd();
+  else if (e.key === 'c') { if (chases.length) { const c = chases[chases.length - 1]; c.contact = !c.contact; draw(); } }
   else if (e.key === 'm') { const m = document.getElementById('marked'); m.checked = !m.checked; setSource(v.currentTime); }
   else if (e.key === 'n') { const n = document.getElementById('nochase'); n.checked = !n.checked; }
   else if (e.key === 'Enter') { e.preventDefault(); save(); }

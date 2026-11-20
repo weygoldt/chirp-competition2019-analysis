@@ -25,6 +25,9 @@ def test_check_label_orders_chases_and_rejects_bad_ones():
     lab = srv.check_label({"clip_id": "a", "chases": [{"onset_s": 5, "offset_s": 6}, {"onset_s": 1, "offset_s": 2}]},
                           ids)
     assert [c["onset_s"] for c in lab["chases"]] == [1.0, 5.0]
+    assert [c["contact"] for c in lab["chases"]] == [False, False]
+    lab = srv.check_label({"clip_id": "a", "chases": [{"onset_s": 1, "offset_s": 2, "contact": True}]}, ids)
+    assert lab["chases"][0]["contact"] is True
     with pytest.raises(ValueError, match="unknown clip"):
         srv.check_label({"clip_id": "b", "chases": []}, ids)
     with pytest.raises(ValueError, match="before offset"):
