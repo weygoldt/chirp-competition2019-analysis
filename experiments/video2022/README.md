@@ -326,3 +326,30 @@ old (grey) vs new (red) timeline (`c2_render_chases.py poses_r3_sep --match pose
   detected onset to 8 s after the detected offset, raw and with fish markers;
   the detector's times are hidden (`truth.csv`). Labels: `labels.jsonl` (any
   number of chases per clip, onset / offset in clip seconds).
+
+### Winner / loser trajectories and the chaser-centric chase model (2026-11-20, pilot)
+
+- **Identities** (agent, branch `link2022`, `video2022/identity/poses_r3/`): the
+  11 electrodes sit around the tank (8 on the walls, 3 at the shelter); per
+  detection winner / loser / unknown (P >= 0.9, author: keep); tracks cut at the
+  806 swaps the electrodes show. Winner chases in 1,292 of 1,295 identified
+  events of the old detector.
+- **Merge** (`identity_tracks.py poses_r3` → `video2022/fish2/poses_r3/`): one
+  winner and one loser trajectory per trial (91-99 % of detections labelled,
+  2-62 same-label duplicates per trial dropped); both fish in view 1-53 % of
+  the dark phase. Used from here on.
+- **Chase model on them** (`c8_chase_model.py chase_v1 chase_v2 --series identity`,
+  36 labelled clips, 54 chases, leave one clip out): 49 of 54 chases found,
+  6 extra; frame recall 0.80, precision 0.79; onset / offset error 0.5 / 0.6 s;
+  chaser right in 48 of 49. Old detector: 34 of 54, recall 0.29; none of the 10
+  chases in the "close but not detected" clips (model: 9). In the author's own
+  labelled chases the winner is the chaser in 51 of 52.
+- **Applied to all trials** (`c9_chase_model_apply.py` → `chases/model/model_v1/`):
+  2,720 chases, the winner chases in 2,629. The rates are much higher and more
+  even than the old detector's; in quiet pairs (6, 1, 2a) the model's chases are
+  weaker (chasee 1.1-1.5 BL/s) and less confident: likely part calm following,
+  not chasing. To be settled with the remaining labels.
+- **Chirps** (`c10_chirps_model_chases.py`): relative to random moments with both
+  fish in view in the same trials, the loser chirps 1.5x (5 s before) / 1.9x
+  (after) around confident chase onsets (p >= 0.9, 1,010 chases), most (2.2x) in
+  the 5 s after a chase ends; around less confident chases 1.3x.
