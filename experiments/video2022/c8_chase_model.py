@@ -17,6 +17,13 @@ Frame labels: inside a labelled chase, the chaser (the fish that swims towards t
 other more, ``c7_chase_labels_kinematics.roles``) chases the other; everything else
 is "not chasing".
 
+The two fish of a clip (``--series``):
+
+- ``identity`` (default): the winner and the loser (``identity_tracks.py``: pose tracks
+  cut at the swaps the electrodes show and named by them); fish A = winner, B = loser;
+- ``chain``: the clip's two event tracks, each chained to its continuations
+  (``c5_chase_timeseries.chain``), as in the first prototype.
+
     .venv/bin/python experiments/video2022/c8_chase_model.py chase_v1 [chase_v2 ...] [--name proto]
 
 Output: ``$CHIRP_DATA/video2022/chases/model/<name>/`` (``clips.png``, ``summary.json``,
@@ -42,11 +49,12 @@ import c6_chase_label_session as c6
 import c7_chase_labels_kinematics as c7
 import chase_model as cm
 import chases as ch
+import identity_tracks as it
 
 OUT = c1.OUT / "model"
 
 
-def load_clips(sessions: list[str], run: str) -> list[dict]:
+def load_clips(sessions: list[str], run: str, series: str = "identity") -> list[dict]:
     """Per labelled clip: its series, features of both directions, frame labels, labelled chases, detector chases."""
     root = c1.OUT / run
     params = json.loads((root / "params.json").read_text())
@@ -63,11 +71,22 @@ def load_clips(sessions: list[str], run: str) -> list[dict]:
             row = truth.loc[cid]
             rec = row["recording"]
             if rec not in cache:
-                kin = pd.read_parquet(root / rec / "kinematics.parquet")
-                tr = pd.read_parquet(root / rec / "tracks.parquet", columns=["track", "frame", "tail_x", "tail_y"])
-                cache = {rec: (kin, tr, c5.spans_of(kin))}
-            kin, tr, spans = cache[rec]
-            s = c7.clip_series(row, kin, tr, spans, float(blpx[rec]), stride, p).reset_index(drop=True)
+                if series == "identity":
+                    cache = {rec: it.load(run, rec)}
+                else:
+                    kin = pd.read_parquet(root / rec / "kinematics.parquet")
+                    tr = pd.read_parquet(root / rec / "tracks.parquet", columns=["track", "frame", "tail_x", "tail_y"])
+                    cache = {rec: (kin, tr, c5.spans_of(kin))}
+            if series == "identity":
+                f0 = int(row["frame0"])
+                i_lo, i_hi = f0 // stride, (f0 + int(row["n_frames"])) // stride
+                kin_id = cache[rec]
+                s = c7.pair_frame(it.on_grid(kin_id, "winner", i_lo, i_hi), it.on_grid(kin_id, "loser", i_lo, i_hi),
+                                  f0, stride, float(blpx[rec]))
+                s = s[s["t"] >= 0].reset_index(drop=True)
+            else:
+                kin, tr, spans = cache[rec]
+                s = c7.clip_series(row, kin, tr, spans, float(blpx[rec]), stride, p).reset_index(drop=True)
             feats = cm.directed_features(s)
             t = s["t"].to_numpy()
             y = {"A": np.zeros(len(s), int), "B": np.zeros(len(s), int)}
@@ -151,10 +170,11 @@ def main() -> None:
     ap.add_argument("--run", default="poses_r3")
     ap.add_argument("--name", default="proto")
     ap.add_argument("--l2", type=float, default=3.0)
+    ap.add_argument("--series", choices=("identity", "chain"), default="identity")
     args = ap.parse_args()
     out = OUT / args.name
     out.mkdir(parents=True, exist_ok=True)
-    clips = load_clips(args.sessions, args.run)
+    clips = load_clips(args.sessions, args.run, args.series)
     dec = cm.Decoder()
     rows_m, frames_m, rows_d, frames_d, preds = [], [], [], [], {}
     for k, c in enumerate(clips):
@@ -171,9 +191,17 @@ def main() -> None:
         r, f = score_clip(c, [(a, b, "?") for a, b in c["detector"]])
         rows_d += [x | {"method": "detector"} for x in r]
         frames_d.append(f)
-    summary = {"clips": len(clips), "sessions": args.sessions, "decoder": dec.__dict__, "l2": args.l2,
-               "model": summarize(rows_m, frames_m), "detector": summarize(rows_d, frames_d)}
+    summary = {"clips": len(clips), "sessions": args.sessions, "series": args.series, "decoder": dec.__dict__,
+               "l2": args.l2, "model": summarize(rows_m, frames_m), "detector": summarize(rows_d, frames_d)}
     summary["detector"].pop("chaser_right")
+    kind_of = {c["clip_id"]: c["kind"] for c in clips}
+    for kind in sorted(set(kind_of.values())):
+        ids = [c["clip_id"] for c in clips if c["kind"] == kind]
+        idx = [k for k, c in enumerate(clips) if c["kind"] == kind]
+        for name, rows, frames in (("model", rows_m, frames_m), ("detector", rows_d, frames_d)):
+            summary[f"{name}_{kind}"] = summarize([r for r in rows if r["clip_id"] in ids], [frames[k] for k in idx])
+            summary[f"{name}_{kind}"].pop("chaser_right", None)
+            summary[f"{name}_{kind}"]["clips"] = len(ids)
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
     pd.DataFrame(rows_m + rows_d).to_csv(out / "chases.csv", index=False)
     X, y, cols = matrix(clips)
@@ -202,7 +230,7 @@ def main() -> None:
     fig.suptitle("Chase model, leave one clip out", fontsize=10)
     fig.savefig(out / "clips.png", dpi=130)
     plt.close(fig)
-    print(json.dumps({k: summary[k] for k in ("clips", "model", "detector")}, indent=1))
+    print(json.dumps({k: v for k, v in summary.items() if k.startswith(("clips", "model", "detector"))}, indent=1))
     print("largest standardised coefficients:\n", coef.head(12).round(2).to_string())
     print(f"-> {out}")
 

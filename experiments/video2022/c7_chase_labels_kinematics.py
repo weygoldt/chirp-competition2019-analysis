@@ -59,8 +59,16 @@ def clip_series(row: pd.Series, kin: pd.DataFrame, tr: pd.DataFrame, spans: pd.D
     lag_max = round(p.lag_max_s * c1.FPS / stride)
     i_lo, i_hi = int(row["frame0"]) // stride - lag_max, (int(row["frame0"]) + int(row["n_frames"])) // stride
     A, B = c5.series(kin, tr, a, i_lo, i_hi), c5.series(kin, tr, b, i_lo, i_hi)
+    out = pair_frame(A, B, int(row["frame0"]), stride, bl)
+    return out[out["t"] >= 0]
+
+
+def pair_frame(A: pd.DataFrame, B: pd.DataFrame, frame0: int, stride: int, bl: float) -> pd.DataFrame:
+    """Two fish's kinematics on the same frame grid (index i; columns x, y, vx, vy, speed) -> the pair table:
+    per fish position, velocity, speed, acceleration; distance (BL), its change, alignment, aims; ``t`` = time
+    since frame ``frame0`` (s)."""
     out = pd.DataFrame(index=A.index)
-    out["t"] = (A.index * stride - int(row["frame0"])) / c1.FPS  # clip time (s)
+    out["t"] = (A.index * stride - frame0) / c1.FPS
     dt = stride / c1.FPS
     for name, s in (("A", A), ("B", B)):
         out[f"x_{name}"], out[f"y_{name}"] = s["x"].to_numpy(float), s["y"].to_numpy(float)
@@ -75,7 +83,7 @@ def clip_series(row: pd.Series, kin: pd.DataFrame, tr: pd.DataFrame, spans: pd.D
     out["cos"] = (va * vb).sum(1) / (na * nb + 1e-12)
     out["aim_A"] = (va[:, 0] * dx + va[:, 1] * dy) / (na * nd + 1e-12)  # A swims towards B
     out["aim_B"] = -(vb[:, 0] * dx + vb[:, 1] * dy) / (nb * nd + 1e-12)  # B swims towards A
-    return out[out["t"] >= 0]
+    return out
 
 
 def roles(s: pd.DataFrame, on: float, off: float) -> tuple[str, str, float]:
