@@ -130,6 +130,19 @@ def main() -> None:
         rows.append(summary(f"ici.{model}", f"ICI {model}: exp(beta_chirp)",
                             np.exp(posterior[var].to_numpy().ravel()), "x"))
 
+    # The same models on the chasing events whose window was never shortened
+    # (chase at least as long as the pre-offset part, next chase no sooner than
+    # the post-offset part): there the window cannot depend on the response.
+    for model in ["M1_causal", "M3_causal_adj_prev", "M4_causal_adj_full",
+                  "M5_duration_from_chirp"]:
+        path = GAMMA_DIR / f"primary_recording__untruncated__{model}.nc"
+        if not path.exists():
+            print(f"missing {path}")
+            continue
+        rows.append(summary(f"ici_complete_windows.{model}",
+                            f"ICI {model}, complete windows: exp(beta_chirp)",
+                            np.exp(draws(path, WINDOW_PREDICTOR)), "x"))
+
     # Random-effects comparison for M4 (appendix).
     crossed = GAMMA_DIR / "sensitivity_loserid_winnerid_recording__full__M4_causal_adj_full.nc"
     primary = GAMMA_DIR / "primary_recording__full__M4_causal_adj_full.nc"
