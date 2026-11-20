@@ -307,3 +307,22 @@ starts a new event. Result (`chases/poses_r3_sep/`): all 1,454 onsets kept,
 < 0.5 s (flag `separated`). Thresholds 0.75 / 1.0 BL move fewer offsets (see
 the table in the chase README). The same 20 videos are re-rendered with an
 old (grey) vs new (red) timeline (`c2_render_chases.py poses_r3_sep --match poses_r3`).
+
+### Chase time series and an onset / offset labelling session (2026-11-20)
+
+- Author: 0.5 BL separation rule too short; the fish keep chasing beyond the
+  (old) offsets; rather merge successive chases than split one. I had read
+  the earlier comment the wrong way round. The separation rule is now off by
+  default (`sep_grow_bl = inf`; `poses_r3_sep` stays as the record of the try).
+- `c5_chase_timeseries.py poses_r3 --videos`: per event (the 20 of the
+  videos), speed, acceleration, alignment, distances and which chase criteria
+  hold, from 3 s before the onset to 6 s after the offset; each fish's track
+  chained to its continuation. `aligned.png`: medians over all 1,454 events.
+  At the detected offset the alignment collapses for ~0.3 s (median cos
+  0.9 → 0, a turn) while distance and speed hardly change: offsets mostly
+  come from brief turns, not from the fish separating.
+- `c6_chase_label_session.py poses_r3 chase_v1` + `serve_chase_labels.sh chase_v1`
+  (port 8768): 20 candidates not shown before, clips from 4 s before the
+  detected onset to 8 s after the detected offset, raw and with fish markers;
+  the detector's times are hidden (`truth.csv`). Labels: `labels.jsonl` (any
+  number of chases per clip, onset / offset in clip seconds).

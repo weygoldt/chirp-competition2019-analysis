@@ -59,7 +59,7 @@ class Params:
     lag_max_s: float = 2.0
     merge_gap_s: float = 0.4
     min_dur_s: float = 1.0
-    sep_grow_bl: float = 0.5
+    sep_grow_bl: float = float("inf")  # 0.5 tried 2026-11-20: too short (author); off until labelled offsets
     sep_tol_bl: float = 0.15
 
 

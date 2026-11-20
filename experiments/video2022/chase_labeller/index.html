@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chase labeller</title>
+<style>
+  :root { --bg: #16181c; --panel: #22252b; --text: #e8e8e8; --muted: #9aa0a6; --accent: #e6820e; --red: #e5484d; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; padding: 12px; }
+  #stage { display: flex; flex-direction: column; gap: 8px; }
+  video { width: 100%; max-height: 74vh; background: #000; }
+  #timeline { position: relative; height: 26px; background: var(--panel); cursor: pointer; border-radius: 3px; }
+  #timeline .chase { position: absolute; top: 5px; height: 16px; background: var(--red); opacity: .75; }
+  #timeline .pending { position: absolute; top: 3px; width: 3px; height: 20px; background: var(--accent); }
+  #timeline .cursor { position: absolute; top: 0; width: 2px; height: 26px; background: #fff; }
+  #bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  button { background: var(--panel); color: var(--text); border: 1px solid #3a3f47; border-radius: 4px; padding: 5px 9px;
+           cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+  aside { background: var(--panel); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  h1 { font-size: 15px; margin: 0; }
+  .muted { color: var(--muted); font-size: 12px; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  kbd { background: #33373e; border-radius: 3px; padding: 0 4px; font-size: 12px; }
+  textarea { width: 100%; box-sizing: border-box; background: #1b1d22; color: var(--text); border: 1px solid #3a3f47; }
+  #status { min-height: 18px; }
+  .ok { color: #46a758; } .err { color: var(--red); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <section id="stage">
+    <video id="v" muted playsinline preload="auto"></video>
+    <div id="timeline"></div>
+    <div id="bar">
+      <button data-step="-10" title="shift+left">&laquo; 10</button>
+      <button data-step="-1" title="left">&lsaquo; 1</button>
+      <button id="play" title="space">play</button>
+      <button data-step="1" title="right">1 &rsaquo;</button>
+      <button data-step="10" title="shift+right">10 &raquo;</button>
+      <label>speed <select id="rate"><option>0.25</option><option selected>0.5</option><option>1</option></select></label>
+      <label><input type="checkbox" id="marked"> fish markers (<kbd>m</kbd>)</label>
+      <span id="time" class="muted"></span>
+    </div>
+  </section>
+  <aside>
+    <h1 id="title">Chase labeller</h1>
+    <div class="muted">Mark every chase in the clip: <b>onset</b> = the follower starts pursuing the other fish;
+      <b>offset</b> = it stops (falls back, turns away, gives up). Short pauses inside one pursuit belong to
+      the same chase. Clips start 4 s before and end 8 s after the detector's guess, which is not shown.</div>
+    <div><button id="on" class="primary">onset (<kbd>o</kbd>)</button>
+         <button id="off" class="primary">offset (<kbd>f</kbd>)</button></div>
+    <div id="pending" class="muted"></div>
+    <div><b>Chases</b><ul id="list"></ul></div>
+    <label><input type="checkbox" id="cont"> last chase continues after the clip ends</label>
+    <label><input type="checkbox" id="nochase"> no chase in this clip (<kbd>n</kbd>)</label>
+    <label><input type="checkbox" id="unsure"> unsure</label>
+    <textarea id="note" rows="2" placeholder="note (optional)"></textarea>
+    <div><button id="prev">&lsaquo; previous</button> <button id="save" class="primary">save &amp; next (<kbd>Enter</kbd>)</button></div>
+    <div id="status"></div>
+    <div class="muted"><kbd>space</kbd> play/pause &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> 1 frame &middot;
+      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
+  </aside>
+</main>
+<script>
+const v = document.getElementById('v'), tl = document.getElementById('timeline');
+let clips = [], labels = {}, k = 0, chases = [], pendingOn = null;
+
+function fps() { return clips[k].fps; }
+function nFrames() { return clips[k].n_frames; }
+function frame() { return Math.min(nFrames() - 1, Math.floor(v.currentTime * fps() + 1e-6)); }
+function seekFrame(f) { f = Math.max(0, Math.min(nFrames() - 1, f)); v.currentTime = (f + 0.5) / fps(); }
+function tOf(f) { return f / fps(); }
+function status(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = cls || ''; }
+
+function draw() {
+  const dur = nFrames() / fps();
+  tl.innerHTML = '';
+  for (const c of chases) {
+    const d = document.createElement('div'); d.className = 'chase';
+    d.style.left = (100 * c.onset_s / dur) + '%'; d.style.width = (100 * (c.offset_s - c.onset_s) / dur) + '%';
+    tl.appendChild(d);
+  }
+  if (pendingOn !== null) {
+    const d = document.createElement('div'); d.className = 'pending'; d.style.left = (100 * pendingOn / dur) + '%';
+    tl.appendChild(d);
+  }
+  const cur = document.createElement('div'); cur.className = 'cursor';
+  cur.style.left = (100 * v.currentTime / dur) + '%'; tl.appendChild(cur);
+  const list = document.getElementById('list'); list.innerHTML = '';
+  chases.forEach((c, i) => {
+    const li = document.createElement('li');
+    li.textContent = `${c.onset_s.toFixed(2)} s – ${c.offset_s.toFixed(2)} s  `;
+    const b = document.createElement('button'); b.textContent = 'remove';
+    b.onclick = () => { chases.splice(i, 1); draw(); }; li.appendChild(b); list.appendChild(li);
+  });
+  document.getElementById('pending').textContent =
+      pendingOn === null ? '' : `onset at ${pendingOn.toFixed(2)} s, now mark the offset`;
+  document.getElementById('time').textContent =
+      `frame ${frame()} / ${nFrames() - 1}  (${v.currentTime.toFixed(2)} s)`;
+}
+
+function load(i) {
+  k = Math.max(0, Math.min(clips.length - 1, i));
+  const c = clips[k], lab = labels[c.clip_id];
+  chases = lab ? lab.chases.map(x => ({...x})) : [];
+  pendingOn = null;
+  document.getElementById('cont').checked = !!(lab && lab.chases.some(x => x.continues));
+  document.getElementById('nochase').checked = !!(lab && lab.no_chase);
+  document.getElementById('unsure').checked = !!(lab && lab.unsure);
+  document.getElementById('note').value = lab ? lab.note : '';
+  document.getElementById('title').textContent =
+      `Clip ${k + 1} of ${clips.length}` + (lab ? ' (saved)' : '');
+  setSource(0);
+}
+
+function setSource(t) {
+  const c = clips[k];
+  v.src = document.getElementById('marked').checked ? c.video_marked : c.video;
+  v.playbackRate = parseFloat(document.getElementById('rate').value);
+  v.addEventListener('loadeddata', () => { v.currentTime = t; draw(); }, {once: true});
+}
+
+function markOn() { pendingOn = tOf(frame()); draw(); }
+function markOff() {
+  const t = tOf(frame());
+  if (pendingOn === null) { status('mark the onset first', 'err'); return; }
+  if (t <= pendingOn) { status('the offset must come after the onset', 'err'); return; }
+  chases.push({onset_s: pendingOn, offset_s: t}); chases.sort((a, b) => a.onset_s - b.onset_s);
+  pendingOn = null; document.getElementById('nochase').checked = false; status(''); draw();
+}
+
+async function save() {
+  if (pendingOn !== null) { status('an onset has no offset yet', 'err'); return; }
+  const none = document.getElementById('nochase').checked;
+  if (!none && chases.length === 0) { status('mark a chase or tick "no chase"', 'err'); return; }
+  const cont = document.getElementById('cont').checked;
+  const body = {clip_id: clips[k].clip_id, no_chase: none, unsure: document.getElementById('unsure').checked,
+                note: document.getElementById('note').value,
+                chases: chases.map((c, i) => ({...c, continues: cont && i === chases.length - 1}))};
+  const r = await fetch('/api/save', {method: 'POST', body: JSON.stringify(body)});
+  const res = await r.json();
+  if (!r.ok) { status(res.error, 'err'); return; }
+  labels[res.clip_id] = res;
+  const done = clips.filter(c => labels[c.clip_id]).length;
+  status(`saved (${done} of ${clips.length} clips done)`, 'ok');
+  if (k < clips.length - 1) load(k + 1); else status(`saved: all ${clips.length} clips done, thank you!`, 'ok');
+}
+
+document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { v.pause(); seekFrame(frame() + +b.dataset.step); });
+document.getElementById('play').onclick = () => v.paused ? v.play() : v.pause();
+document.getElementById('rate').onchange = e => { v.playbackRate = parseFloat(e.target.value); };
+document.getElementById('marked').onchange = () => setSource(v.currentTime);
+document.getElementById('on').onclick = markOn;
+document.getElementById('off').onclick = markOff;
+document.getElementById('save').onclick = save;
+document.getElementById('prev').onclick = () => load(k - 1);
+tl.onclick = e => { const r = tl.getBoundingClientRect(); v.pause(); seekFrame(Math.floor((e.clientX - r.left) / r.width * nFrames())); };
+v.addEventListener('timeupdate', draw);
+v.addEventListener('seeked', draw);
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'TEXTAREA') return;
+  const step = e.shiftKey ? 10 : 1;
+  if (e.key === ' ') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); v.pause(); seekFrame(frame() - step); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); v.pause(); seekFrame(frame() + step); }
+  else if (e.key === 'o') markOn();
+  else if (e.key === 'f') markOff();
+  else if (e.key === 'm') { const m = document.getElementById('marked'); m.checked = !m.checked; setSource(v.currentTime); }
+  else if (e.key === 'n') { const n = document.getElementById('nochase'); n.checked = !n.checked; }
+  else if (e.key === 'Enter') { e.preventDefault(); save(); }
+  else if (e.key === 'Backspace') { e.preventDefault(); chases.pop(); draw(); }
+});
+
+(async () => {
+  clips = await (await fetch('/api/clips')).json();
+  labels = await (await fetch('/api/labels')).json();
+  const first = clips.findIndex(c => !labels[c.clip_id]);
+  load(first < 0 ? 0 : first);
+})();
+</script>
+</body>
+</html>

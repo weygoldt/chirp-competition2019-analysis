@@ -38,6 +38,7 @@ def straight(frames: np.ndarray, x0: float, y0: float, v_bl: float, delay_s: flo
 
 
 FRAMES = np.arange(0, 100, STRIDE)  # 4 s
+SEP = ch.Params(sep_grow_bl=0.5)  # the separation rule (off by default)
 
 
 def test_follower_on_the_leaders_path_is_a_chase():
@@ -101,14 +102,13 @@ def falling_behind() -> pd.DataFrame:
 
 
 def test_chase_ends_when_the_gap_opens():
-    ev = ch.detect(falling_behind(), BL, STRIDE, FPS)[3]
+    ev = ch.detect(falling_behind(), BL, STRIDE, FPS, SEP)[3]
     assert len(ev) == 1
     assert 2.0 <= ev["t_end"].iloc[0] <= 2.4
 
 
 def test_without_the_separation_rule_the_chase_runs_on():
-    p = ch.Params(sep_grow_bl=float("inf"))
-    ev = ch.detect(falling_behind(), BL, STRIDE, FPS, p)[3]
+    ev = ch.detect(falling_behind(), BL, STRIDE, FPS)[3]
     assert len(ev) == 1
     assert ev["t_end"].iloc[0] > 3.4
 
@@ -130,8 +130,8 @@ def test_short_chase_ending_in_a_separation_keeps_its_onset():
     xf = np.where(t <= 1.0, 1000 + 3.0 * BL * (t - 0.4), 1000 + 3.0 * BL * 0.6 + 1.5 * BL * (t - 1.0))
     head = np.tile([1.0, 0.0], (len(t), 1))
     d = scene(fish_rows(lead, head, FRAMES), fish_rows(np.stack([xf, np.full(len(t), 700.0)], axis=1), head, FRAMES))
-    plain = ch.detect(d, BL, STRIDE, FPS, ch.Params(sep_grow_bl=float("inf")))[3]
-    ev = ch.detect(d, BL, STRIDE, FPS)[3]
+    plain = ch.detect(d, BL, STRIDE, FPS)[3]
+    ev = ch.detect(d, BL, STRIDE, FPS, SEP)[3]
     assert len(plain) == len(ev) == 1
     assert ev["t_start"].iloc[0] == plain["t_start"].iloc[0]
     assert ev["t_end"].iloc[0] < plain["t_end"].iloc[0]
