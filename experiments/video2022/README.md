@@ -353,3 +353,29 @@ old (grey) vs new (red) timeline (`c2_render_chases.py poses_r3_sep --match pose
   fish in view in the same trials, the loser chirps 1.5x (5 s before) / 1.9x
   (after) around confident chase onsets (p >= 0.9, 1,010 chases), most (2.2x) in
   the 5 s after a chase ends; around less confident chases 1.3x.
+
+### Final chase model (2026-11-20; 51 labelled clips)
+
+- **Labels:** `chase_v1` (15 clips) + `chase_v2` (36 of 49 clips; the author
+  stopped there): 75 chases (14 in "close but not detected" clips), 30 contacts,
+  5 clips without a chase.
+- **Held out one clip at a time** (`c8_chase_model.py chase_v1 chase_v2 --name final_v2`):
+  decoder thresholds from `decoder_sweep.csv`: start at p >= 0.8, end after
+  0.6 s below 0.6 (chosen on the same held-out probabilities, so slightly
+  optimistic): 62 of 75 chases found, 9 extra (2 in the close clips); frame
+  recall 0.76, precision 0.84; onset / offset error 0.38 / 0.44 s (median, bias
+  +0.04 / +0.1 s); chaser as the author's in 61 of 62. Old detector: 47 of 75,
+  recall 0.32, onsets 0.9 s late, offsets 1.0 s early.
+- **All trials** (`c9_chase_model_apply.py chase_v1 chase_v2 --name model_v2`):
+  2,047 chases, the winner chases in 2,018 (98.6 %).
+- **Chirps** (`c10_chirps_model_chases.py model_v2 model_v1 --old`,
+  `c11_chirps_isolated_chases.py`), relative to random moments with both fish in
+  view in the same trial: around all chases the loser's chirping rises over
+  ~10 s, peaks within ~3 s of the offset (~2x) and decays; no sharp step for
+  any source, because chases come in bouts. Isolated chases (no other chase
+  within 10 s): before the model's onset the loser chirps less than at random
+  (0.6-0.75x), from the onset on ~1.5x; around confident chases it peaks at the
+  offset (~2.9x just before, 2.1x in the 2 s after) and is back at baseline
+  within ~5 s. With the old detector the rate is already raised before its
+  (late) onsets and stays raised after its (early) offsets. Less confident
+  chases (p < 0.9) show no peak at the offset.
