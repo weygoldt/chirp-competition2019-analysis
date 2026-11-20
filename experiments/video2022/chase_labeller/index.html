@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chase labeller</title>
 <style>
-  :root { --bg: #16181c; --panel: #22252b; --text: #e8e8e8; --muted: #9aa0a6; --accent: #e6820e; --red: #e5484d; }
+  :root { --bg: #16181c; --panel: #22252b; --text: #e8e8e8; --muted: #9aa0a6; --accent: #e6820e; --red: #e5484d; --contact: #9b59b6; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; padding: 12px; }
   #stage { display: flex; flex-direction: column; gap: 8px; }
   video { width: 100%; max-height: 74vh; background: #000; }
-  #timeline { position: relative; height: 26px; background: var(--panel); cursor: pointer; border-radius: 3px; }
-  #timeline .chase { position: absolute; top: 5px; height: 16px; background: var(--red); opacity: .75; }
+  #timeline { position: relative; height: 34px; background: var(--panel); cursor: pointer; border-radius: 3px; }
+  #timeline .chase { position: absolute; top: 3px; height: 13px; background: var(--red); opacity: .75; }
+  #timeline .contact { position: absolute; top: 18px; height: 13px; background: var(--contact); opacity: .9; }
   #timeline .pending { position: absolute; top: 3px; width: 3px; height: 20px; background: var(--accent); }
-  #timeline .cursor { position: absolute; top: 0; width: 2px; height: 26px; background: #fff; }
+  #timeline .cursor { position: absolute; top: 0; width: 2px; height: 34px; background: #fff; }
+  #timeline .pending.c { background: var(--contact); top: 15px; }
+  button.contactbtn { background: var(--contact); color: #fff; border-color: var(--contact); font-weight: 600; }
   #bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   button { background: var(--panel); color: var(--text); border: 1px solid #3a3f47; border-radius: 4px; padding: 5px 9px;
            cursor: pointer; font: inherit; }
@@ -51,13 +54,17 @@
     <h1 id="title">Chase labeller</h1>
     <div class="muted">Mark every chase in the clip: <b>onset</b> = the follower starts pursuing the other fish;
       <b>offset</b> = it stops (falls back, turns away, gives up). Short pauses inside one pursuit belong to
-      the same chase. Tick "ends in contact" when a chase ends with a bite or jaw locking. Some clips contain
-      no chase at all (press <kbd>n</kbd>). The detector's guess is not shown.</div>
+      the same chase. Tick "ends in contact" when a chase ends with a bite or jaw locking. Mark every
+      <b>contact</b> (bite, jaw locking) as its own event with start and end (purple), wherever it happens.
+      Some clips contain no chase at all (press <kbd>n</kbd>). The detector's guess is not shown.</div>
     <div><button id="on" class="primary">onset (<kbd>o</kbd>)</button>
          <button id="off" class="primary">offset (<kbd>f</kbd>)</button>
          <button id="toend" title="the chase is still going when the clip ends">runs to the end (<kbd>e</kbd>)</button></div>
+    <div><button id="con" class="contactbtn">contact starts (<kbd>b</kbd>)</button>
+         <button id="coff" class="contactbtn">contact ends (<kbd>v</kbd>)</button></div>
     <div id="pending" class="muted"></div>
     <div><b>Chases</b><ul id="list"></ul></div>
+    <div><b>Contacts</b> <span class="muted">(bite, jaw lock)</span><ul id="clist"></ul></div>
     <label><input type="checkbox" id="cont"> last chase continues after the clip ends</label>
     <label><input type="checkbox" id="nochase"> no chase in this clip (<kbd>n</kbd>)</label>
     <label><input type="checkbox" id="unsure"> unsure</label>
@@ -65,12 +72,12 @@
     <div><button id="prev">&lsaquo; previous</button> <button id="save" class="primary">save &amp; next (<kbd>Enter</kbd>)</button></div>
     <div id="status"></div>
     <div class="muted"><kbd>space</kbd> play/pause &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> 1 frame &middot;
-      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>c</kbd> last chase ends in contact (bite, jaw lock) &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
+      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>c</kbd> last chase ends in contact &middot; <kbd>b</kbd> / <kbd>v</kbd> contact starts / ends &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
   </aside>
 </main>
 <script>
 const v = document.getElementById('v'), tl = document.getElementById('timeline');
-let clips = [], labels = {}, k = 0, chases = [], pendingOn = null;
+let clips = [], labels = {}, k = 0, chases = [], pendingOn = null, contacts = [], pendingC = null;
 
 function fps() { return clips[k].fps; }
 function nFrames() { return clips[k].n_frames; }
@@ -87,8 +94,17 @@ function draw() {
     d.style.left = (100 * c.onset_s / dur) + '%'; d.style.width = (100 * (c.offset_s - c.onset_s) / dur) + '%';
     tl.appendChild(d);
   }
+  for (const c of contacts) {
+    const d = document.createElement('div'); d.className = 'contact';
+    d.style.left = (100 * c.onset_s / dur) + '%'; d.style.width = (100 * Math.max(c.offset_s - c.onset_s, 0.08) / dur) + '%';
+    tl.appendChild(d);
+  }
   if (pendingOn !== null) {
     const d = document.createElement('div'); d.className = 'pending'; d.style.left = (100 * pendingOn / dur) + '%';
+    tl.appendChild(d);
+  }
+  if (pendingC !== null) {
+    const d = document.createElement('div'); d.className = 'pending c'; d.style.left = (100 * pendingC / dur) + '%';
     tl.appendChild(d);
   }
   const cur = document.createElement('div'); cur.className = 'cursor';
@@ -104,8 +120,16 @@ function draw() {
     const b = document.createElement('button'); b.textContent = 'remove';
     b.onclick = () => { chases.splice(i, 1); draw(); }; li.appendChild(b); list.appendChild(li);
   });
+  const clist = document.getElementById('clist'); clist.innerHTML = '';
+  contacts.forEach((c, i) => {
+    const li = document.createElement('li');
+    li.textContent = `${c.onset_s.toFixed(2)} s \u2013 ${c.offset_s.toFixed(2)} s${c.continues ? ' (continues)' : ''}  `;
+    const b = document.createElement('button'); b.textContent = 'remove';
+    b.onclick = () => { contacts.splice(i, 1); draw(); }; li.appendChild(b); clist.appendChild(li);
+  });
   document.getElementById('pending').textContent =
-      pendingOn === null ? '' : `onset at ${pendingOn.toFixed(2)} s, now mark the offset`;
+      (pendingOn === null ? '' : `chase onset at ${pendingOn.toFixed(2)} s, now mark its offset. `) +
+      (pendingC === null ? '' : `contact start at ${pendingC.toFixed(2)} s, now mark its end.`);
   document.getElementById('time').textContent =
       `frame ${frame()} / ${nFrames() - 1}  (${v.currentTime.toFixed(2)} s)`;
 }
@@ -114,7 +138,8 @@ function load(i) {
   k = Math.max(0, Math.min(clips.length - 1, i));
   const c = clips[k], lab = labels[c.clip_id];
   chases = lab ? lab.chases.map(x => ({...x})) : [];
-  pendingOn = null;
+  contacts = lab && lab.contacts ? lab.contacts.map(x => ({...x})) : [];
+  pendingOn = null; pendingC = null;
   document.getElementById('cont').checked = !!(lab && lab.chases.some(x => x.continues));
   document.getElementById('nochase').checked = !!(lab && lab.no_chase);
   document.getElementById('unsure').checked = !!(lab && lab.unsure);
@@ -148,14 +173,29 @@ function markOff() {
   pendingOn = null; document.getElementById('nochase').checked = false; status(''); draw();
 }
 
+function markCOn() { pendingC = tOf(frame()); draw(); }
+function markCOff() {
+  const t = tOf(frame());
+  if (pendingC === null) { status('mark the contact start first', 'err'); return; }
+  if (t < pendingC) { status('the contact end must come after its start', 'err'); return; }
+  contacts.push({onset_s: pendingC, offset_s: Math.max(t, pendingC + 1 / fps())});
+  contacts.sort((a, b) => a.onset_s - b.onset_s); pendingC = null; status(''); draw();
+}
+function contactToEnd() {
+  contacts.push({onset_s: pendingC, offset_s: tOf(nFrames() - 1), continues: true});
+  contacts.sort((a, b) => a.onset_s - b.onset_s); pendingC = null;
+}
+
 async function save() {
+  if (pendingC !== null) contactToEnd();  // a contact still going at the clip's end
   if (pendingOn !== null) markToEnd();  // a chase still going at the clip's end
   const none = document.getElementById('nochase').checked;
   if (!none && chases.length === 0) { status('mark a chase or tick "no chase"', 'err'); return; }
   const cont = document.getElementById('cont').checked;
   const body = {clip_id: clips[k].clip_id, no_chase: none, unsure: document.getElementById('unsure').checked,
                 note: document.getElementById('note').value,
-                chases: chases.map((c, i) => ({...c, continues: !!c.continues || (cont && i === chases.length - 1)}))};
+                chases: chases.map((c, i) => ({...c, continues: !!c.continues || (cont && i === chases.length - 1)})),
+                contacts: contacts};
   const r = await fetch('/api/save', {method: 'POST', body: JSON.stringify(body)});
   const res = await r.json();
   if (!r.ok) { status(res.error, 'err'); return; }
@@ -172,6 +212,8 @@ document.getElementById('marked').onchange = () => setSource(v.currentTime);
 document.getElementById('on').onclick = markOn;
 document.getElementById('off').onclick = markOff;
 document.getElementById('toend').onclick = markToEnd;
+document.getElementById('con').onclick = markCOn;
+document.getElementById('coff').onclick = markCOff;
 document.getElementById('save').onclick = save;
 document.getElementById('prev').onclick = () => load(k - 1);
 tl.onclick = e => { const r = tl.getBoundingClientRect(); v.pause(); seekFrame(Math.floor((e.clientX - r.left) / r.width * nFrames())); };
@@ -186,6 +228,8 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'o') markOn();
   else if (e.key === 'f') markOff();
   else if (e.key === 'e') markToEnd();
+  else if (e.key === 'b') markCOn();
+  else if (e.key === 'v') markCOff();
   else if (e.key === 'c') { if (chases.length) { const c = chases[chases.length - 1]; c.contact = !c.contact; draw(); } }
   else if (e.key === 'm') { const m = document.getElementById('marked'); m.checked = !m.checked; setSource(v.currentTime); }
   else if (e.key === 'n') { const n = document.getElementById('nochase'); n.checked = !n.checked; }

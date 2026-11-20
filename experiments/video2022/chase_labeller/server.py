@@ -44,7 +44,7 @@ def parse_range(header: str | None, size: int) -> tuple[int, int] | None:
 
 def check_label(lab: dict, clip_ids: set[str]) -> dict:
     """A label as saved: clip id, chases (onset / offset in clip seconds, continues past the clip's end,
-    ends in contact), flags, note."""
+    ends in contact), contacts (bites, jaw locking: start / end, independent of chases), flags, note."""
     if lab.get("clip_id") not in clip_ids:
         raise ValueError(f"unknown clip {lab.get('clip_id')!r}")
     chases = []
@@ -56,7 +56,14 @@ def check_label(lab: dict, clip_ids: set[str]) -> dict:
                        "contact": bool(c.get("contact", False))})
     if lab.get("no_chase") and chases:
         raise ValueError("'no chase' together with marked chases")
+    contacts = []
+    for c in lab.get("contacts", []):
+        on, off = float(c["onset_s"]), float(c["offset_s"])
+        if not 0 <= on < off:
+            raise ValueError(f"contact start {on} must be >= 0 and before its end {off}")
+        contacts.append({"onset_s": on, "offset_s": off, "continues": bool(c.get("continues", False))})
     return {"clip_id": lab["clip_id"], "chases": sorted(chases, key=lambda c: c["onset_s"]),
+            "contacts": sorted(contacts, key=lambda c: c["onset_s"]),
             "no_chase": bool(lab.get("no_chase", False)), "unsure": bool(lab.get("unsure", False)),
             "note": str(lab.get("note", ""))[:500]}
 

@@ -45,3 +45,12 @@ def test_latest_label_wins(tmp_path):
     got = srv.latest(tmp_path / "labels.jsonl")
     assert got["a"]["chases"][0]["onset_s"] == 0.2
     assert got["a"]["labeller"] == "me"
+
+
+def test_contacts_are_their_own_events():
+    lab = srv.check_label({"clip_id": "a", "no_chase": True,
+                           "contacts": [{"onset_s": 4, "offset_s": 4.5}, {"onset_s": 1, "offset_s": 1.2}]}, {"a"})
+    assert [c["onset_s"] for c in lab["contacts"]] == [1.0, 4.0]
+    assert lab["no_chase"] is True
+    with pytest.raises(ValueError, match="contact start"):
+        srv.check_label({"clip_id": "a", "contacts": [{"onset_s": 2, "offset_s": 1}]}, {"a"})
