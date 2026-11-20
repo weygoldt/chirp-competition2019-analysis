@@ -72,7 +72,8 @@
     <div><button id="prev">&lsaquo; previous</button> <button id="save" class="primary">save &amp; next (<kbd>Enter</kbd>)</button></div>
     <div id="status"></div>
     <div class="muted"><kbd>space</kbd> play/pause &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> 1 frame &middot;
-      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>c</kbd> last chase ends in contact &middot; <kbd>b</kbd> / <kbd>v</kbd> contact starts / ends &middot; <kbd>Backspace</kbd> remove last chase &middot; click the bar to jump</div>
+      <kbd>shift</kbd>+arrows 10 frames &middot; <kbd>e</kbd> chase still going at the clip's end &middot; <kbd>c</kbd> last chase ends in contact &middot; <kbd>b</kbd> / <kbd>v</kbd> contact starts / ends &middot; <kbd>Backspace</kbd> / <kbd>shift</kbd>+<kbd>Backspace</kbd> remove last chase / contact &middot;
+      <kbd>Esc</kbd> cancel an open start &middot; removing needs a new save (<kbd>Enter</kbd>) &middot; click the bar to jump</div>
   </aside>
 </main>
 <script>
@@ -234,7 +235,9 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'm') { const m = document.getElementById('marked'); m.checked = !m.checked; setSource(v.currentTime); }
   else if (e.key === 'n') { const n = document.getElementById('nochase'); n.checked = !n.checked; }
   else if (e.key === 'Enter') { e.preventDefault(); save(); }
+  else if (e.key === 'Backspace' && e.shiftKey) { e.preventDefault(); contacts.pop(); draw(); }
   else if (e.key === 'Backspace') { e.preventDefault(); chases.pop(); draw(); }
+  else if (e.key === 'Escape') { pendingOn = null; pendingC = null; status('open start cancelled'); draw(); }
 });
 
 (async () => {
