@@ -60,10 +60,11 @@ def main() -> None:
     ev = pd.read_csv(root / "events.csv")
     edges = np.arange(-WINDOW_S, WINDOW_S + BIN_S / 2, BIN_S)
     rng = np.random.default_rng(SEED)
+    trials = set(c1.pairing().index)
     rows = []
     for rec, g in ev.groupby("recording"):
         path = CHIRPS / rec / "chirps_rtdetr_t080.parquet"
-        if not path.exists():  # 2022-07-07 is no trial
+        if rec not in trials:  # 2022-07-07 is a control, no winner / loser
             continue
         ch = pd.read_parquet(path)
         tr = pd.read_parquet(root / rec / "tracks.parquet", columns=["frame", "t_s"])

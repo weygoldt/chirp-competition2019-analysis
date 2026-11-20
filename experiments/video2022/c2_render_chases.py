@@ -130,6 +130,18 @@ def render(event: pd.Series, tr: pd.DataFrame, video: Path, t_frame: np.ndarray,
     return still
 
 
+def fit(img: np.ndarray, w: int, h: int) -> np.ndarray:
+    """``img`` scaled to fit a w x h box, centred on black."""
+    import cv2
+
+    sc = min(w / img.shape[1], h / img.shape[0])
+    small = cv2.resize(img, (int(img.shape[1] * sc), int(img.shape[0] * sc)), interpolation=cv2.INTER_AREA)
+    out = np.zeros((h, w, 3), np.uint8)
+    y0, x0 = (h - small.shape[0]) // 2, (w - small.shape[1]) // 2
+    out[y0:y0 + small.shape[0], x0:x0 + small.shape[1]] = small
+    return out
+
+
 def main() -> None:
     import cv2
 
@@ -154,12 +166,11 @@ def main() -> None:
         for _, e in g.iterrows():
             still = render(e, tr, videos[rec], t_frame, float(bl[rec]), stride, out / f"{e['event']}.mp4")
             cv2.imwrite(str(out / f"{e['event']}.jpg"), still, [cv2.IMWRITE_JPEG_QUALITY, 90])
-            stills.append(cv2.resize(still, (480, int(480 * still.shape[0] / still.shape[1]))))
+            stills.append(fit(still, 480, 400))
             print(f"{e['event']}: {e['duration_s']:.1f} s", flush=True)
     sel.to_csv(out / "rendered.csv", index=False)
     if stills:
-        h = max(s.shape[0] for s in stills)
-        tiles = [np.pad(s, ((0, h - s.shape[0]), (0, 0), (0, 0))) for s in stills]
+        tiles = list(stills)
         while len(tiles) % 4:
             tiles.append(np.zeros_like(tiles[0]))
         cv2.imwrite(str(out / "stills.jpg"), np.vstack([np.hstack(tiles[i:i + 4]) for i in range(0, len(tiles), 4)]),
