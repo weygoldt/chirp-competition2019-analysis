@@ -106,6 +106,7 @@
       <tr><td>duration</td><td id="b-dur"></td><td id="y-dur" class="yours"></td><td></td></tr>
     </table>
     <div class="muted">times: recording seconds; differences in s and video frames</div>
+    <div class="muted" id="rawboris" title="the values in the BORIS export (video time of the _mod.avi), and the video frames round(25 t) the analysis uses"></div>
     <div class="row">
       <button id="on" class="primary">onset here (<kbd>o</kbd>)</button>
       <button id="off" class="primary">offset here (<kbd>f</kbd>)</button>
@@ -333,6 +334,8 @@ function syncForm() {
   $('y-dur').textContent = yon != null && yoff != null ? (yoff - yon).toFixed(2) : '–';
   $('d-on').textContent = o && yon != null ? fmtD(yon - bon, rev.on - c.onset_frame) : '';
   $('d-off').textContent = o && yoff != null ? fmtD(yoff - boff, rev.off - c.offset_frame) : '';
+  $('rawboris').textContent = o ? `in the BORIS file (${c.recording.slice(0, 10)}.csv, video s): onset ${c.boris_onset_s.toFixed(3)}, ` +
+    `offset ${c.boris_offset_s.toFixed(3)} → video frames ${c.onset_frame}, ${c.offset_frame}` : '';
   for (const id of ['reset', 'j-bon', 'j-boff']) $(id).disabled = !o;
   for (const opt of $('zero').options) opt.disabled = !o && opt.value.startsWith('boris');
 }
