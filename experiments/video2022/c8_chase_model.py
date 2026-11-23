@@ -54,7 +54,7 @@ import identity_tracks as it
 OUT = c1.OUT / "model"
 
 
-def load_clips(sessions: list[str], run: str, series: str = "identity") -> list[dict]:
+def load_clips(sessions: list[str], run: str, series: str = "identity", fish2: str | None = None) -> list[dict]:
     """Per labelled clip: its series, features of both directions, frame labels, labelled chases, detector chases."""
     root = c1.OUT / run
     params = json.loads((root / "params.json").read_text())
@@ -72,7 +72,7 @@ def load_clips(sessions: list[str], run: str, series: str = "identity") -> list[
             rec = row["recording"]
             if rec not in cache:
                 if series == "identity":
-                    cache = {rec: it.load(run, rec)}
+                    cache = {rec: it.load(fish2 or run, rec)}
                 else:
                     kin = pd.read_parquet(root / rec / "kinematics.parquet")
                     tr = pd.read_parquet(root / rec / "tracks.parquet", columns=["track", "frame", "tail_x", "tail_y"])
@@ -197,10 +197,12 @@ def main() -> None:
     ap.add_argument("--name", default="proto")
     ap.add_argument("--l2", type=float, default=3.0)
     ap.add_argument("--series", choices=("identity", "chain"), default="identity")
+    ap.add_argument("--fish2", help="winner / loser trajectory run (identity_tracks.py; default: --run), "
+                    "e.g. poses_r3_filled")
     args = ap.parse_args()
     out = OUT / args.name
     out.mkdir(parents=True, exist_ok=True)
-    clips = load_clips(args.sessions, args.run, args.series)
+    clips = load_clips(args.sessions, args.run, args.series, args.fish2)
     dec = cm.Decoder()
     rows_m, frames_m, rows_d, frames_d, preds, probs = [], [], [], [], {}, {}
     for k, c in enumerate(clips):

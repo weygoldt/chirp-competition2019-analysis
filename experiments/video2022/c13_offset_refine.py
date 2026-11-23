@@ -9,7 +9,7 @@ The refinement's settings (``GRID``) are chosen on the *other* clips (smallest m
 and applied to the held-out clip, so the refined errors are not fitted to the chases
 they are measured on.
 
-    .venv/bin/python experiments/video2022/c13_offset_refine.py
+    .venv/bin/python experiments/video2022/c13_offset_refine.py [--fish2 poses_r3_filled]
 
 Output: ``$CHIRP_DATA/video2022/chases/model/offset_refine/`` (``errors.csv``,
 ``grid.csv``, ``errors.png``).
@@ -89,14 +89,16 @@ def main() -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    clips = c8.load_clips(["chase_v1", "chase_v2"], "poses_r3", "identity")
+    fish2 = sys.argv[sys.argv.index("--fish2") + 1] if "--fish2" in sys.argv else None
+    out = OUT if fish2 is None else OUT.with_name(f"{OUT.name}_{fish2}")
+    out.mkdir(parents=True, exist_ok=True)
+    clips = c8.load_clips(["chase_v1", "chase_v2"], "poses_r3", "identity", fish2)
     d = loco_offsets(clips)
     d["err_model"] = d["model_off"] - d["label_off"]
     all_err = np.array([refined_errors(clips, d, r) for r in GRID])  # (grid, chases)
     grid = pd.DataFrame([r.__dict__ | {"score": score(e), "median_abs": float(np.median(np.abs(e)))}
                          for r, e in zip(GRID, all_err, strict=True)]).sort_values("score")
-    grid.to_csv(OUT / "grid.csv", index=False)
+    grid.to_csv(out / "grid.csv", index=False)
     # held-out choice: settings chosen on the other clips
     held = np.empty(len(d))
     chosen = []
@@ -106,7 +108,7 @@ def main() -> None:
         held[test] = all_err[best][test]
         chosen.append(best)
     d["err_refined"] = held
-    d.to_csv(OUT / "errors.csv", index=False)
+    d.to_csv(out / "errors.csv", index=False)
     print(f"{len(d)} labelled chase offsets matched by the held-out model")
     print("model offsets:          ", describe(d["err_model"].to_numpy()))
     print("refined (held out):     ", describe(held))
@@ -131,8 +133,8 @@ def main() -> None:
     axes[1].set_xlabel("|error| of the model offset (s)")
     axes[1].set_ylabel("|error| after refinement (s)")
     fig.suptitle(f"Chase offsets vs the author's ({len(d)} labelled chases, model and settings held out)", fontsize=10)
-    fig.savefig(OUT / "errors.png", dpi=150)
-    print(OUT / "errors.png")
+    fig.savefig(out / "errors.png", dpi=150)
+    print(out / "errors.png")
 
 
 if __name__ == "__main__":

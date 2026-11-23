@@ -79,13 +79,14 @@ def main() -> None:
     ap.add_argument("sessions", nargs="+")
     ap.add_argument("--run", default="poses_r3")
     ap.add_argument("--name", default="model_v1")
+    ap.add_argument("--fish2", help="winner / loser trajectory run (default: --run), e.g. poses_r3_filled")
     ap.add_argument("--l2", type=float, default=3.0)
     args = ap.parse_args()
     out = c8.OUT / args.name
     if (out / "LOCKED.md").exists():
         raise SystemExit(f"{out} is locked (LOCKED.md); write a new run under another --name")
     out.mkdir(parents=True, exist_ok=True)
-    clips = c8.load_clips(args.sessions, args.run, "identity")
+    clips = c8.load_clips(args.sessions, args.run, "identity", args.fish2)
     X, y, cols = c8.matrix(clips)
     model = cm.Logistic(args.l2).fit(X, y)
     dec = cm.Decoder()
@@ -94,12 +95,12 @@ def main() -> None:
         "coef": model.coef.tolist(), "mu": model.mu.tolist(), "sd": model.sd.tolist()}, indent=1))
     stride = int(json.loads((c1.OUT / args.run / "params.json").read_text())["stride"])
     blpx = pd.read_csv(b1.TABLES / "recordings.csv").set_index("recording")["body_length_px"]
-    cov = pd.read_csv(it.OUT / args.run / "coverage.csv").set_index("recording")
+    cov = pd.read_csv(it.OUT / (args.fish2 or args.run) / "coverage.csv").set_index("recording")
     old = pd.read_csv(c1.OUT / args.run / "events.csv")
     pairs = c1.pairing()
     evs, rows = [], []
     for rec in cov.index:
-        s = recording_series(it.load(args.run, rec), float(blpx[rec]), stride)
+        s = recording_series(it.load(args.fish2 or args.run, rec), float(blpx[rec]), stride)
         ev = chases_in(s, model, cols, dec)
         evs.append(ev.assign(recording=rec))
         h_both = cov.loc[rec, "share_both_seen"] * cov.loc[rec, "frames"] * stride / c1.FPS / 3600

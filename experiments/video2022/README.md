@@ -410,3 +410,22 @@ several slowdowns within ~1-2 s, of which the author took another one than the m
 (`c13b_offset_cases.py`, `c13c_offset_gaps.py`, `chases/model/offset_refine/`).
 The 2022 kernels' bluntness comes mainly from the chase definition (gaps between
 chases; `experiments/paper2022/merge_gap_test.py`), only in part from offset timing.
+
+### Filled winner / loser trajectories (2026-11-23)
+
+Missing fish-frames around the labelled chases: 50 % nothing detected, 29 %
+detected but dropped (confidence < 0.5 or short skeleton), 21 % detected but
+left unnamed by the electrodes. `identity_tracks.py poses_r3 --fill`
+(`fill_gaps`, test `test_identity_tracks.py`) → `fish2/poses_r3_filled`: in
+gaps up to 2 s an unused detection (any confidence >= 0.2, unnamed or dropped)
+within 0.75 BL of the fish's interpolated path and not on the other fish is
+taken; remaining gaps up to 1 s are interpolated (column `source`). Both fish
+in view rises e.g. 53 → 63 % (3a), 52 → 60 % (4a). Chase model held out
+(`c8_chase_model.py ... --fish2 poses_r3_filled --name final_v2_filled`): 62 of
+75 found, 8 extra; frame recall 0.76 → 0.80, precision 0.84; offset |error|
+median 0.44 → 0.38 s, 75 % 0.80 → 0.62 s, 90 % 3.76 → 3.38 s, within 0.5 s
+57 → 64 %; chaser right 62 of 62. All trials: `chases/model/model_v3_filled`
+(not locked): 2,165 chases, the winner chases in 2,128. Loser-chirp kernel at
+the offset (fast estimator, `experiments/paper2022/kernels_v2_vs_v3.py`):
+confident chases, gaps < 5 s merged: 2.48x (v2) → 2.66x (v3), at -0.8 s, vs
+2019 3.24x at +0.3 s.
