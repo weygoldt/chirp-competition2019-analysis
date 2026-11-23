@@ -114,7 +114,11 @@ def tiny_session() -> dict:
     chases = [{"id": "r1_c000", "recording": "r1", "k": 0, "onset_frame": 1000, "offset_frame": 1100,
                "onset_rec_s": 39.0, "offset_rec_s": 43.0, "shares_offset_with": []},
               {"id": "r1_c001", "recording": "r1", "k": 1, "onset_frame": 9000, "offset_frame": 9500,
-               "onset_rec_s": 359.0, "offset_rec_s": 379.0, "shares_offset_with": []}]
+               "onset_rec_s": 359.0, "offset_rec_s": 379.0, "shares_offset_with": []},
+              {"id": "r1_c002", "recording": "r1", "k": 2, "onset_frame": 1150, "offset_frame": 1200,
+               "onset_rec_s": 45.0, "offset_rec_s": 47.0, "shares_offset_with": []},
+              {"id": "r1_c003", "recording": "r1", "k": 3, "onset_frame": 1250, "offset_frame": 1290,
+               "onset_rec_s": 49.0, "offset_rec_s": 50.6, "shares_offset_with": []}]
     return {"meta": {"data_root": "/nonexistent", "active_phase_s": [0, 300]}, "recordings": {"r1": rec},
             "chases": chases, "order": ["r1_c001", "r1_c000"]}
 
@@ -197,3 +201,73 @@ def test_build_recording_on_2020_05_13():
     shared = {c["id"]: c["shares_offset_with"] for c in chases if c["shares_offset_with"]}
     assert shared == {f"{rec}_c019": [f"{rec}_c020"], f"{rec}_c020": [f"{rec}_c019"]}
     assert all(np.diff(info["chirps"]["loser"]) >= 0)
+
+
+def window_rev(chases, frame0=900, n=400, **kw):
+    return {"chase_id": "r1_c000", "mode": "window", "window": {"frame0": frame0, "n": n},
+            "chases": [{"onset_frame": a, "offset_frame": b} for a, b in chases], **kw}
+
+
+def test_window_review_is_checked():
+    s = tiny_session()
+    chases, recs = {c["id"]: c for c in s["chases"]}, s["recordings"]
+    rev = srv.check_revision(window_rev([(1140, 1299), (900, 940), (950, 1080)], blind=True), chases, recs)
+    assert rev["mode"] == "window"
+    assert [m["onset_frame"] for m in rev["chases"]] == [900, 950, 1140]  # sorted
+    assert rev["chases"][0]["starts_before_window"]  # onset on the first frame
+    assert rev["chases"][2]["ends_after_window"]  # offset on the last frame (900 + 400 - 1)
+    assert not rev["chases"][1]["starts_before_window"]
+    assert rev["chases"][1]["onset_rec_s"] == pytest.approx(0.04 * 950 - 1.0)
+    with pytest.raises(ValueError, match="overlap"):
+        srv.check_revision(window_rev([(950, 1080), (1080, 1100)]), chases, recs)
+    with pytest.raises(ValueError, match="inside the window"):
+        srv.check_revision(window_rev([(950, 1300)]), chases, recs)
+    with pytest.raises(ValueError, match="mark every chase"):
+        srv.check_revision(window_rev([]), chases, recs)
+    with pytest.raises(ValueError, match="together with marked"):
+        srv.check_revision(window_rev([(950, 1080)], no_chase_in_window=True), chases, recs)
+    assert srv.check_revision(window_rev([], no_chase_in_window=True), chases, recs)["chases"] == []
+    with pytest.raises(ValueError, match="needs the window"):
+        srv.check_revision({"chase_id": "r1_c000", "mode": "window", "chases": []}, chases, recs)
+
+
+def test_window_matching():
+    s = tiny_session()
+    chases, recs = {c["id"]: c for c in s["chases"]}, s["recordings"]
+    # window 900-1299 holds BORIS c000 (1000-1100), c002 (1150-1200), c003 (1250-1290)
+    rev = srv.check_revision(window_rev([(900, 940), (950, 1080), (1140, 1299)], blind=True), chases, recs)
+    rows = {(r["status"], r.get("chase_id")): r for r in ex.match_window(rev, s)}
+    m = rows[("matched", "r1_c000")]
+    assert m["d_onset_s"] == pytest.approx(-2.0)  # 50 frames of 0.04 s earlier
+    assert m["d_offset_s"] == pytest.approx(-0.8)
+    assert ("merged", "r1_c002") in rows
+    assert ("merged", "r1_c003") in rows  # one of your chases spans both
+    assert "d_onset_s" not in rows[("merged", "r1_c002")]  # no shifts from merged chases
+    yo = rows[("yours_only", None)]
+    assert yo["onset_censored"]  # running when the window starts
+    # a split, BORIS only, and a censored end of a matched chase
+    rev = srv.check_revision(dict(window_rev([(8950, 9100), (9200, 9450)], 8900, 700), chase_id="r1_c001"),
+                             chases, recs)
+    assert [r["status"] for r in ex.match_window(rev, s)] == ["split"]
+    rev = srv.check_revision(dict(window_rev([], 8900, 700, no_chase_in_window=True), chase_id="r1_c001"),
+                             chases, recs)
+    assert [r["status"] for r in ex.match_window(rev, s)] == ["boris_only"]
+    rev = srv.check_revision(dict(window_rev([(8950, 9599)], 8900, 700), chase_id="r1_c001"), chases, recs)
+    (r,) = ex.match_window(rev, s)
+    assert r["status"] == "matched"
+    assert r["offset_censored"]
+    assert r["d_onset_s"] == pytest.approx(-2.0)
+    assert "d_offset_s" not in r  # the chase ran past the window's end
+
+
+def test_window_table_counts_each_boris_chase_once(tmp_path):
+    (tmp_path / "session.json").write_text(json.dumps(tiny_session()))
+    s = srv.Session(tmp_path, "me")
+    s.save(window_rev([(950, 1080), (1140, 1299)], blind=True))
+    s.save(dict(window_rev([(1145, 1210)], 1100, 250, blind=True), chase_id="r1_c002"))  # c002 again, own window
+    wf = ex.window_table(tiny_session(), srv.latest(tmp_path / "revisions.jsonl"))
+    assert wf["chase_id"].dropna().is_unique
+    own = wf[wf["chase_id"] == "r1_c002"].iloc[0]
+    assert own["window_of"] == "r1_c002"
+    assert own["status"] == "matched"
+    assert "matched" in ex.summary(ex.revision_table(tiny_session(), {}), wf)

@@ -31,6 +31,7 @@
   select, textarea { background: #1b1d22; color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; }
   aside { background: var(--panel); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
           overflow-y: auto; min-height: 0; }
+  aside > * { flex-shrink: 0; }  /* the sidebar scrolls; its rows never squeeze into each other */
   h1 { font-size: 15px; margin: 0; }
   .muted { color: var(--muted); font-size: 12px; }
   .badges span { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 9px; margin: 2px 4px 0 0;
@@ -53,6 +54,11 @@
   #list li:hover { background: #2b2f36; }
   #list li.cur { background: #3a2c1c; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: #555; }
+  .dot.window { background: #5b8def; }
+  #marklist ol { margin: 0; padding-left: 20px; font-variant-numeric: tabular-nums; }
+  #marklist li { cursor: pointer; }
+  #marklist li.sel { color: var(--yours); }
+  #marklist button { padding: 0 5px; font-size: 11px; margin-left: 6px; }
   .dot.same { background: var(--ok); } .dot.edited { background: var(--yours); } .dot.nochase { background: var(--red); }
   details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   kbd { background: #33373e; border-radius: 3px; padding: 0 4px; font-size: 11px; }
@@ -99,6 +105,8 @@
       <div class="muted" id="subtitle"></div>
       <div class="badges" id="badges"></div>
     </div>
+    <div id="modehint" class="muted"></div>
+    <div id="cmp">
     <table>
       <tr><th></th><th>BORIS</th><th>yours</th><th>yours &minus; BORIS</th></tr>
       <tr><td>onset</td><td id="b-on"></td><td id="y-on" class="yours"></td><td id="d-on"></td></tr>
@@ -106,10 +114,13 @@
       <tr><td>duration</td><td id="b-dur"></td><td id="y-dur" class="yours"></td><td></td></tr>
     </table>
     <div class="muted">times: recording seconds; differences in s and video frames</div>
+    </div>
+    <div id="marklist"></div>
     <div class="muted" id="rawboris" title="the values in the BORIS export (video time of the _mod.avi), and the video frames round(25 t) the analysis uses"></div>
     <div class="row">
       <button id="on" class="primary">onset here (<kbd>o</kbd>)</button>
       <button id="off" class="primary">offset here (<kbd>f</kbd>)</button>
+      <button id="toend" title="the chase is still running at the end of the window">runs past the end (<kbd>e</kbd>)</button>
       <button id="reset" title="your marks = BORIS marks">reset to BORIS (<kbd>r</kbd>)</button>
     </div>
     <div class="row">
@@ -121,13 +132,13 @@
     <div class="row">
       <label><input type="checkbox" id="onunsure"> onset unsure (<kbd>u</kbd>)</label>
       <label><input type="checkbox" id="offunsure"> offset unsure (<kbd>i</kbd>)</label>
-      <label><input type="checkbox" id="nochase"> not a chase (<kbd>x</kbd>)</label>
+      <label><input type="checkbox" id="nochase"> <span id="nochaselabel">not a chase</span> (<kbd>x</kbd>)</label>
     </div>
     <div class="row">
       <label><input type="checkbox" id="showorig" checked> show BORIS markers (<kbd>h</kbd>)</label>
       <label><input type="checkbox" id="showchirps" checked> show chirps (<kbd>c</kbd>)</label>
     </div>
-    <textarea id="note" rows="2" placeholder="note (optional): what happens at the BORIS offset, why you moved it, …"></textarea>
+    <textarea id="note" rows="2" placeholder="note (optional): what you see at the onset / offset, why you placed it there, …"></textarea>
     <div class="row">
       <button id="prev">&lsaquo; prev (<kbd>p</kbd>)</button>
       <button id="next">next (<kbd>n</kbd>) &rsaquo;</button>
@@ -142,7 +153,10 @@
       <p class="muted">Mark where <i>you</i> see the chase start and end, frame by frame. Your marks start on the
         BORIS marks; move them (keys or drag), or save them unchanged if you agree. Chirps are shown for
         orientation and cannot be edited. To mark without the annotator's times, untick "show BORIS markers"
-        before opening a chase (the window is then widened by 0-8 s at each end, at random, so its edges do not give the times away); to
+        before opening a chase (the window is then widened by 0-8 s at each end, at random, so its edges do not give the times away).
+        Blind, you mark <b>every chase in the window</b> (<kbd>o</kbd> &hellip; <kbd>f</kbd> for each), not "the" chase: the
+        export matches your chases to the BORIS chases by overlap. A chase already running when the window starts: its onset on
+        the first frame (<kbd>Home</kbd>, <kbd>o</kbd>); still running at the end: <kbd>e</kbd>. To
         mark from the video alone, also untick "show chirps". Each save records whether markers and chirps
         were visible. Nothing in the dataset is changed: saves go to <code>revisions.jsonl</code>.</p>
       <div class="keys">
@@ -162,6 +176,10 @@
         <div><kbd>Enter</kbd> save &amp; next open</div>
         <div><kbd>n</kbd> <kbd>p</kbd> next / prev</div>
         <div><kbd>Esc</kbd> stop replay</div>
+        <div><kbd>Home</kbd> <kbd>End</kbd> window start / end</div>
+        <div><kbd>e</kbd> chase runs past the end</div>
+        <div><kbd>Backspace</kbd> delete selected chase</div>
+        <div>click a chase bar: select it</div>
       </div>
     </details>
   </aside>
@@ -210,9 +228,15 @@ function hms(t) {
 }
 function chaseState(id) {
   const r = revs[id]; if (!r) return 'todo';
+  if (r.mode === 'window') return 'window';
   if (r.not_a_chase) return 'nochase';
   return (r.onset_frame === r.boris_onset_frame && r.offset_frame === r.boris_offset_frame) ? 'same' : 'edited';
 }
+const winMode = () => !!rev && rev.mode === 'window';
+function selMark() { return winMode() && rev.marks.length ? rev.marks[clamp(rev.sel, 0, rev.marks.length - 1)] : null; }
+function yourOn() { return winMode() ? (selMark() ? selMark().on : null) : rev.on; }
+function yourOff() { return winMode() ? (selMark() ? selMark().off : null) : rev.off; }
+function winEnd() { return cur.win.frame0 + cur.win.n - 1; }
 function inFig6(c) { const a = S.meta.active_phase_s; return c.onset_rec_s >= a[0] && c.offset_rec_s < a[1]; }
 function short(rec) { return rec.slice(0, 10); }
 
@@ -263,23 +287,51 @@ function go(i, keepPad) {
   if (dirty && !confirm('Discard the unsaved changes to this chase?')) return;
   pos = clamp(i, 0, view.length - 1);
   const chase = byId[view[pos]], info = S.recordings[chase.recording], saved = revs[chase.id];
-  if (!keepPad) {
-    pad = {pre: S.meta.pad_before_s, post: S.meta.pad_after_s};
-    if (!showOrig()) {  // blind: jitter the window so its edges do not give the BORIS times away
-      pad.pre += BLIND_JITTER_S * hashUnit(chase.id + ':pre'); pad.post += BLIND_JITTER_S * hashUnit(chase.id + ':post');
-    }
-  }
-  if (saved) rev = {on: saved.onset_frame, off: saved.offset_frame, notChase: saved.not_a_chase,
-                    onUnsure: saved.onset_unsure, offUnsure: saved.offset_unsure, note: saved.note};
-  else rev = {on: showOrig() ? chase.onset_frame : null, off: showOrig() ? chase.offset_frame : null,
+  if (!keepPad) pad = padsFor(chase, !showOrig());
+  const windowMode = saved ? saved.mode === 'window' : !showOrig();
+  if (windowMode) {
+    rev = {mode: 'window', marks: (saved ? saved.chases : []).map(m => ({on: m.onset_frame, off: m.offset_frame,
+           onUnsure: m.onset_unsure, offUnsure: m.offset_unsure})), pending: null, sel: -1,
+           noChase: saved ? saved.no_chase_in_window : false, note: saved ? saved.note : ''};
+    rev.sel = rev.marks.length - 1;
+    if (saved) pad = windowPads(chase, info, saved.window);  // reopen exactly the window that was marked
+  } else if (saved) rev = {mode: 'target', on: saved.onset_frame, off: saved.offset_frame, notChase: saved.not_a_chase,
+                           onUnsure: saved.onset_unsure, offUnsure: saved.offset_unsure, note: saved.note};
+  else rev = {mode: 'target', on: showOrig() ? chase.onset_frame : null, off: showOrig() ? chase.offset_frame : null,
               notChase: false, onUnsure: false, offUnsure: false, note: ''};
   dirty = false; sawOrig = showOrig(); sawChirps = showChirps();
-  openClip(chase, info, null);
+  openClip(chase, info, null, windowMode && saved ? saved.window : null);
 }
-function openClip(chase, info, keepAbs) {
-  const map = info.led_map;
-  const lo = Math.min(chase.onset_frame, rev.on ?? Infinity), hi = Math.max(chase.offset_frame, rev.off ?? -Infinity);
-  const win = chaseWindow(map, lo, hi, pad.pre, pad.post, info.n_frames);
+// window pads (recording s before the BORIS onset / after the offset); blind: widened by a fixed random 0-8 s
+function padsFor(chase, blind) {
+  const p = {pre: S.meta.pad_before_s, post: S.meta.pad_after_s};
+  if (blind) { p.pre += BLIND_JITTER_S * hashUnit(chase.id + ':pre'); p.post += BLIND_JITTER_S * hashUnit(chase.id + ':post'); }
+  return p;
+}
+// the pads that give a saved window back
+function windowPads(chase, info, w) {
+  const m = info.led_map;
+  return {pre: toRec(m, chase.onset_frame) - toRec(m, w.frame0), post: toRec(m, w.frame0 + w.n - 1) - toRec(m, chase.offset_frame)};
+}
+function markSpan() {  // the frames your marks cover (to keep them inside the window)
+  if (rev.mode === 'window') {
+    const f = rev.marks.flatMap(m => [m.on, m.off]).concat(rev.pending != null ? [rev.pending] : []);
+    return f.length ? [Math.min(...f), Math.max(...f)] : [Infinity, -Infinity];
+  }
+  return [rev.on ?? Infinity, rev.off ?? -Infinity];
+}
+function openClip(chase, info, keepAbs, forceWin) {
+  const map = info.led_map, span = markSpan();
+  const lo = Math.min(chase.onset_frame, span[0]), hi = Math.max(chase.offset_frame, span[1]);
+  const win = forceWin ? {frame0: forceWin.frame0, n: forceWin.n} : chaseWindow(map, lo, hi, pad.pre, pad.post, info.n_frames);
+  const old = cur && cur.chase === chase ? cur.win : null;
+  if (old && rev.mode === 'window') {  // a chase marked as running past the old edge keeps running past the new one
+    const oldEnd = old.frame0 + old.n - 1, end = win.frame0 + win.n - 1;
+    for (const m of rev.marks) {
+      if (m.on === old.frame0 && win.frame0 < old.frame0) m.on = win.frame0;
+      if (m.off === oldEnd && end > oldEnd) m.off = end;
+    }
+  }
   const recT = new Float64Array(win.n);
   for (let i = 0; i < win.n; i++) recT[i] = toRec(map, win.frame0 + i);
   cur = {chase, info, win, recT};
@@ -297,9 +349,8 @@ function openClip(chase, info, keepAbs) {
 }
 function prefetchNext() {
   const i = nextOpen(pos); if (i < 0 || i === pos) return;
-  const c = byId[view[i]], info = S.recordings[c.recording];
-  const w = chaseWindow(info.led_map, c.onset_frame, c.offset_frame, S.meta.pad_before_s, S.meta.pad_after_s, info.n_frames);
-  if (!showOrig()) return;  // blind windows are jittered; cut on request
+  const c = byId[view[i]], info = S.recordings[c.recording], p = padsFor(c, !showOrig());
+  const w = chaseWindow(info.led_map, c.onset_frame, c.offset_frame, p.pre, p.post, info.n_frames);
   fetch('api/prefetch', {method: 'POST', body: JSON.stringify({recording: c.recording, frame0: w.frame0, n: w.n})});
 }
 v.addEventListener('error', async () => {
@@ -320,12 +371,45 @@ function syncForm() {
   if (c.shares_offset_with.length && o)
     b.push(`<span class="warn">BORIS offset shared with ${c.shares_offset_with.map(x => 'c' + x.split('_c')[1]).join(', ')}: an offset is missing in the BORIS file</span>`);
   const st = chaseState(c.id);
-  if (st !== 'todo') b.push(`<span class="saved">saved: ${{same: 'same as BORIS', edited: 'edited', nochase: 'not a chase'}[st]}` +
+  if (st !== 'todo') b.push(`<span class="saved">saved: ${{same: 'same as BORIS', edited: 'edited', nochase: 'not a chase',
+    window: revs[c.id].no_chase_in_window ? 'no chase in the window' : `${(revs[c.id].chases || []).length} chase(s) in the window`}[st]}` +
                             `${revs[c.id].blind ? ', blind' : ''}${revs[c.id].chirps_hidden ? ', no chirps' : ''}</span>`);
   if (dirty) b.push('<span class="warn">unsaved changes</span>');
   $('badges').innerHTML = b.join('');
-  $('onunsure').checked = rev.onUnsure; $('offunsure').checked = rev.offUnsure; $('nochase').checked = rev.notChase;
   if (document.activeElement !== $('note')) $('note').value = rev.note;
+  $('cmp').hidden = winMode(); $('marklist').hidden = !winMode();
+  $('nochaselabel').textContent = winMode() ? 'no chase in this window' : 'not a chase';
+  $('toend').disabled = !winMode(); $('reset').disabled = winMode() || !o;
+  $('modehint').innerHTML = winMode()
+    ? 'Mark <b>every</b> chase you see in this window: <kbd>o</kbd> at its onset, <kbd>f</kbd> at its offset. ' +
+      'Running when the window starts: onset on the first frame (<kbd>Home</kbd> <kbd>o</kbd>); still running at the end: <kbd>e</kbd>.'
+    : 'Adjust this BORIS chase: your marks start on the BORIS marks.';
+  if (winMode()) {
+    const m = selMark();
+    $('onunsure').checked = !!(m && m.onUnsure); $('offunsure').checked = !!(m && m.offUnsure); $('nochase').checked = rev.noChase;
+    const t0 = cur.recT[0];
+    const items = rev.marks.map((mk, i) => {
+      const a = recOf(mk.on) - t0, z = recOf(mk.off) - t0;
+      const fl = [mk.on === cur.win.frame0 ? 'running at window start' : '', mk.off === winEnd() ? 'running past window end' : '',
+                  mk.onUnsure ? 'onset unsure' : '', mk.offUnsure ? 'offset unsure' : ''].filter(Boolean).join(', ');
+      return `<li data-i="${i}" class="${i === rev.sel ? 'sel' : ''}">${a.toFixed(2)} \u2192 ${z.toFixed(2)} s (${(z - a).toFixed(2)} s)` +
+             `${fl ? ' <span class="muted">' + fl + '</span>' : ''}<button data-del="${i}">delete</button></li>`;
+    }).join('');
+    $('marklist').innerHTML = `<div class="muted">your chases (s from the window start)` +
+      `${rev.pending != null ? `; open onset at ${(recOf(rev.pending) - t0).toFixed(2)} s, mark its offset (<kbd>f</kbd>, <kbd>e</kbd>) or <kbd>Backspace</kbd>` : ''}</div>` +
+      (items ? `<ol>${items}</ol>` : '<div class="muted">none yet</div>');
+    $('marklist').querySelectorAll('li').forEach(li => li.onclick = ev => {
+      const i = +li.dataset.i;
+      if (ev.target.dataset.del !== undefined) { rev.marks.splice(i, 1); rev.sel = Math.min(rev.sel, rev.marks.length - 1); changed(); return; }
+      rev.sel = i; syncForm(); schedule(); seekAbs(rev.marks[i].on);
+    });
+    for (const id of ['b-on', 'b-off', 'b-dur', 'y-on', 'y-off', 'y-dur', 'd-on', 'd-off']) $(id).textContent = '';
+    $('rawboris').textContent = '';
+    for (const id of ['j-bon', 'j-boff']) $(id).disabled = !o;
+    for (const opt of $('zero').options) opt.disabled = !o && opt.value.startsWith('boris');
+    return;
+  }
+  $('onunsure').checked = rev.onUnsure; $('offunsure').checked = rev.offUnsure; $('nochase').checked = rev.notChase;
   const bon = c.onset_rec_s, boff = c.offset_rec_s;
   $('b-on').textContent = o ? fmtRec(bon) : 'hidden'; $('b-off').textContent = o ? fmtRec(boff) : 'hidden';
   $('b-dur').textContent = o ? (boff - bon).toFixed(2) : 'hidden';
@@ -336,7 +420,7 @@ function syncForm() {
   $('d-off').textContent = o && yoff != null ? fmtD(yoff - boff, rev.off - c.offset_frame) : '';
   $('rawboris').textContent = o ? `in the BORIS file (${c.recording.slice(0, 10)}.csv, video s): onset ${c.boris_onset_s.toFixed(3)}, ` +
     `offset ${c.boris_offset_s.toFixed(3)} → video frames ${c.onset_frame}, ${c.offset_frame}` : '';
-  for (const id of ['reset', 'j-bon', 'j-boff']) $(id).disabled = !o;
+  for (const id of ['j-bon', 'j-boff']) $(id).disabled = !o;
   for (const opt of $('zero').options) opt.disabled = !o && opt.value.startsWith('boris');
 }
 function changed() { dirty = true; syncForm(); schedule(); }
@@ -346,14 +430,14 @@ function zeroT() {
   const z = $('zero').value, c = cur.chase;
   if (z === 'boris_offset' && showOrig()) return c.offset_rec_s;
   if (z === 'boris_onset' && showOrig()) return c.onset_rec_s;
-  if (z === 'your_offset' && rev.off != null) return recOf(rev.off);
-  if (z === 'your_onset' && rev.on != null) return recOf(rev.on);
+  if (z === 'your_offset' && yourOff() != null) return recOf(yourOff());
+  if (z === 'your_onset' && yourOn() != null) return recOf(yourOn());
   return cur.recT[0];
 }
 function zeroName() {
   const z = $('zero').value;
   if (z.startsWith('boris') && !showOrig()) return 'window start';
-  if ((z === 'your_offset' && rev.off == null) || (z === 'your_onset' && rev.on == null)) return 'window start';
+  if ((z === 'your_offset' && yourOff() == null) || (z === 'your_onset' && yourOn() == null)) return 'window start';
   return $('zero').selectedOptions[0].textContent;
 }
 const LANES = [{k: 'axis', h: 20}, {k: 'boris', h: 20, label: 'BORIS'}, {k: 'yours', h: 24, label: 'yours'},
@@ -433,6 +517,28 @@ function drawTimeline(cv, t0, t1, detail) {
   }
   // your marks
   const Y = L.yours;
+  if (winMode()) {
+    if (rev.noChase) { g.fillStyle = COL.red; g.textAlign = 'left'; g.fillText('no chase in this window', LABEL_W + 6, Y.y + Y.h / 2); }
+    rev.marks.forEach((m, i) => {
+      const a = recOf(m.on), z = recOf(m.off), sel = i === rev.sel;
+      g.fillStyle = sel ? 'rgba(230,130,14,.6)' : 'rgba(230,130,14,.3)'; g.fillRect(x(a), Y.y + 4, x(z) - x(a), Y.h - 8);
+      g.strokeStyle = COL.yours; g.lineWidth = sel ? 1.5 : 0.7;
+      for (const t of [a, z]) {
+        g.beginPath(); g.moveTo(x(t), top); g.lineTo(x(t), bot); g.stroke();
+        g.fillStyle = COL.yours; g.fillRect(x(t) - 4, Y.y + 1, 8, Y.h - 2);
+      }
+      g.fillStyle = '#111'; g.textAlign = 'center'; if (x(z) - x(a) > 14) g.fillText(String(i + 1), (x(a) + x(z)) / 2, Y.y + Y.h / 2);
+    });
+    if (rev.pending != null) {
+      const t = recOf(rev.pending); g.strokeStyle = COL.yours; g.setLineDash([2, 2]); g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x(t), top); g.lineTo(x(t), bot); g.stroke(); g.setLineDash([]);
+      g.fillStyle = COL.yours; g.beginPath(); g.moveTo(x(t), Y.y + 2); g.lineTo(x(t) + 10, Y.y + Y.h / 2); g.lineTo(x(t), Y.y + Y.h - 2); g.fill();
+    }
+    const tp = cur.recT[curClip()];
+    g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x(tp), A.y + A.h - 6); g.lineTo(x(tp), bot); g.stroke();
+    g.restore();
+    return;
+  }
   if (rev.notChase) {
     g.fillStyle = COL.red; g.textAlign = 'left'; g.fillText('not a chase', LABEL_W + 6, Y.y + Y.h / 2);
   }
@@ -469,9 +575,14 @@ function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; red
 // timeline mouse: click = jump, drag an orange handle = move your mark
 function handleNear(cv, px, py) {
   const L = cv._lanes, x = cv._x;
-  if (!L || rev.notChase) return null;
+  if (!L || (!winMode() && rev.notChase)) return null;
   if (py < L.boris.y || py > L.winner.y + L.winner.h) return null;
   let best = null, bd = 7;
+  if (winMode()) {
+    rev.marks.forEach((m, i) => { for (const k of ['on', 'off']) {
+      const d = Math.abs(x(recOf(m[k])) - px); if (d < bd) { bd = d; best = {i, k}; } } });
+    return best;
+  }
   for (const k of ['on', 'off']) {
     if (rev[k] == null) continue;
     const d = Math.abs(x(recOf(rev[k])) - px);
@@ -484,9 +595,17 @@ for (const cv of [$('tl-over'), $('tl-detail')]) {
   cv.addEventListener('mousedown', e => {
     if (!cur) return;
     const [px, py] = pt(e); v.pause(); replayStop = null;
-    drag = handleNear(cv, px, py);
-    drag = drag ? {k: drag, cv} : null;
-    if (!drag) seekAbs(frameAt(cv._t(px)));
+    const h = handleNear(cv, px, py);
+    drag = h ? (winMode() ? {k: h.k, i: h.i, cv} : {k: h, cv}) : null;
+    if (drag && winMode()) { rev.sel = drag.i; syncForm(); }
+    if (!drag) {
+      const f = frameAt(cv._t(px));
+      if (winMode() && py >= cv._lanes.yours.y && py <= cv._lanes.yours.y + cv._lanes.yours.h) {
+        const i = rev.marks.findIndex(m => f >= m.on && f <= m.off);
+        if (i >= 0) { rev.sel = i; syncForm(); }
+      }
+      seekAbs(f);
+    }
     e.preventDefault();
   });
   cv.addEventListener('mousemove', e => {
@@ -499,6 +618,13 @@ window.addEventListener('mousemove', e => {
   if (!drag || !cur) return;
   const r = drag.cv.getBoundingClientRect();
   let f = frameAt(drag.cv._t(e.clientX - r.left));
+  if (winMode()) {
+    const ms = rev.marks, m = ms[drag.i], prev = ms[drag.i - 1], next = ms[drag.i + 1];
+    if (drag.k === 'on') f = clamp(f, prev ? prev.off + 1 : cur.win.frame0, m.off - 1);
+    else f = clamp(f, m.on + 1, next ? next.on - 1 : winEnd());
+    if (f !== m[drag.k]) { m[drag.k] = f; seekAbs(f); changed(); }
+    return;
+  }
   if (drag.k === 'on' && rev.off != null) f = Math.min(f, rev.off - 1);
   if (drag.k === 'off' && rev.on != null) f = Math.max(f, rev.on + 1);
   if (f !== rev[drag.k]) { rev[drag.k] = f; seekAbs(f); changed(); }
@@ -531,31 +657,61 @@ function setRate(dir) {
   sel.selectedIndex = i; v.playbackRate = parseFloat(sel.value); status(`speed ${sel.value}x`);
 }
 function replay() {
-  const f = rev.off ?? cur.chase.offset_frame, t = recOf(f);
+  const f = winMode() ? (yourOff() ?? curAbs()) : (rev.off ?? cur.chase.offset_frame), t = recOf(f);
   const a = frameAt(t - 3), b = frameAt(t + 2);
   seekAbs(a); replayStop = b; v.play();
 }
 
 // ---------- marking
+function overlaps(a, b, skip) { return rev.marks.some((m, i) => i !== skip && a <= m.off && b >= m.on); }
+function addMark(on, off) {
+  if (overlaps(on, off, -1)) { status('this chase would overlap one you marked; drag its handles or delete it', 'err'); return false; }
+  rev.marks.push({on, off, onUnsure: false, offUnsure: false}); rev.marks.sort((a, b) => a.on - b.on);
+  rev.sel = rev.marks.findIndex(m => m.on === on); rev.pending = null; rev.noChase = false; changed(); status('');
+  return true;
+}
 function markOn() {
   const f = curAbs();
+  if (winMode()) {
+    if (rev.marks.some(m => f >= m.on && f <= m.off)) { status('inside a chase you marked: drag its handles or delete it', 'err'); return; }
+    rev.pending = f; rev.noChase = false; changed();
+    status(f === cur.win.frame0 ? 'onset on the first frame: this chase was already running when the window starts' : 'onset set, now mark the offset (f)');
+    return;
+  }
   if (rev.off != null && f >= rev.off) { status('the onset must come before your offset', 'err'); return; }
   rev.on = f; rev.notChase = false; changed(); status('');
 }
 function markOff() {
   const f = curAbs();
+  if (winMode()) {
+    if (rev.pending == null) { status('mark the onset first (o)', 'err'); return; }
+    if (f <= rev.pending) { status('the offset must come after the onset', 'err'); return; }
+    addMark(rev.pending, f); return;
+  }
   if (rev.on != null && f <= rev.on) { status('the offset must come after your onset', 'err'); return; }
   rev.off = f; rev.notChase = false; changed(); status('');
+}
+function markToEnd() {
+  if (!winMode()) return;
+  if (rev.pending == null) { status('mark the onset first (o)', 'err'); return; }
+  if (addMark(rev.pending, winEnd())) status('offset on the last frame: this chase is still running when the window ends', 'ok');
+}
+function deleteMark() {
+  if (!winMode()) return;
+  if (rev.pending != null) { rev.pending = null; changed(); status('open onset removed'); return; }
+  if (!rev.marks.length) return;
+  rev.marks.splice(clamp(rev.sel, 0, rev.marks.length - 1), 1); rev.sel = rev.marks.length - 1; changed(); status('chase deleted');
 }
 function resetToBoris() { if (!showOrig()) return; rev.on = cur.chase.onset_frame; rev.off = cur.chase.offset_frame; changed(); }
 function jump(k) {
   if (k === 'bon' || k === 'boff') { if (!showOrig()) return; seekAbs(k === 'bon' ? cur.chase.onset_frame : cur.chase.offset_frame); }
-  else { const f = rev[k === 'yon' ? 'on' : 'off']; if (f != null) seekAbs(f); }
+  else { const f = k === 'yon' ? yourOn() : yourOff(); if (f != null) seekAbs(f); }
   v.pause(); replayStop = null;
 }
 function toggle(id) { const el = $(id); el.checked = !el.checked; el.dispatchEvent(new Event('change')); }
 
 async function save(goNext) {
+  if (winMode()) return saveWindow(goNext);
   if (!rev.notChase && (rev.on == null || rev.off == null)) { status('mark the onset and the offset, or tick "not a chase"', 'err'); return; }
   rev.note = $('note').value;
   const body = {chase_id: cur.chase.id, onset_frame: rev.on, offset_frame: rev.off, not_a_chase: rev.notChase,
@@ -569,6 +725,24 @@ async function save(goNext) {
   revs[res.chase_id] = res; dirty = false;
   status(`saved ${short(res.recording)} c${String(res.k).padStart(3, '0')}` +
          (res.d_offset_s != null ? ` (offset ${fmtD(res.d_offset_s, res.offset_frame - res.boris_offset_frame)})` : ''), 'ok');
+  syncForm(); markList();
+  if (goNext) { const i = nextOpen(pos); if (i >= 0) go(i); else status('every chase in this list is reviewed', 'ok'); }
+}
+
+async function saveWindow(goNext) {
+  if (rev.pending != null) { status('an onset is still open: mark its offset (f, or e if it runs past the end) or remove it (Backspace)', 'err'); return; }
+  if (!rev.noChase && !rev.marks.length) { status('mark every chase in the window, or tick "no chase in this window"', 'err'); return; }
+  rev.note = $('note').value;
+  const body = {chase_id: cur.chase.id, mode: 'window', window: cur.win, no_chase_in_window: rev.noChase,
+                chases: rev.marks.map(m => ({onset_frame: m.on, offset_frame: m.off, onset_unsure: m.onUnsure, offset_unsure: m.offUnsure})),
+                blind: !sawOrig, chirps_hidden: !sawChirps, note: rev.note};
+  let res;
+  try {
+    const r = await fetch('api/save', {method: 'POST', body: JSON.stringify(body)});
+    res = await r.json(); if (!r.ok) { status(res.error, 'err'); return; }
+  } catch (e) { status('save failed: ' + e, 'err'); return; }
+  revs[res.chase_id] = res; dirty = false;
+  status(`saved ${short(res.recording)} c${String(res.k).padStart(3, '0')}: ${res.no_chase_in_window ? 'no chase' : res.chases.length + ' chase(s)'} in the window`, 'ok');
   syncForm(); markList();
   if (goNext) { const i = nextOpen(pos); if (i >= 0) go(i); else status('every chase in this list is reviewed', 'ok'); }
 }
@@ -588,9 +762,22 @@ $('on').onclick = markOn; $('off').onclick = markOff; $('reset').onclick = reset
 $('j-bon').onclick = () => jump('bon'); $('j-boff').onclick = () => jump('boff');
 $('j-yon').onclick = () => jump('yon'); $('j-yoff').onclick = () => jump('yoff');
 $('replay').onclick = replay;
-$('onunsure').onchange = e => { rev.onUnsure = e.target.checked; changed(); };
-$('offunsure').onchange = e => { rev.offUnsure = e.target.checked; changed(); };
-$('nochase').onchange = e => { rev.notChase = e.target.checked; changed(); };
+$('onunsure').onchange = e => {
+  if (winMode()) { const m = selMark(); if (m) m.onUnsure = e.target.checked; else e.target.checked = false; } else rev.onUnsure = e.target.checked;
+  changed();
+};
+$('offunsure').onchange = e => {
+  if (winMode()) { const m = selMark(); if (m) m.offUnsure = e.target.checked; else e.target.checked = false; } else rev.offUnsure = e.target.checked;
+  changed();
+};
+$('nochase').onchange = e => {
+  if (winMode()) {
+    if (e.target.checked && (rev.marks.length || rev.pending != null)) { e.target.checked = false; status('delete your chases first', 'err'); return; }
+    rev.noChase = e.target.checked;
+  } else rev.notChase = e.target.checked;
+  changed();
+};
+$('toend').onclick = markToEnd;
 $('note').oninput = () => { rev.note = $('note').value; dirty = true; };
 $('showorig').onchange = () => { if (showOrig()) sawOrig = true; renderList(); syncForm(); schedule(); };
 $('showchirps').onchange = () => { if (showChirps()) sawChirps = true; syncForm(); schedule(); };
@@ -608,6 +795,8 @@ document.addEventListener('keydown', e => {
     k: replay, u: () => toggle('onunsure'), i: () => toggle('offunsure'), x: () => toggle('nochase'),
     h: () => toggle('showorig'), c: () => toggle('showchirps'), n: () => go(pos + 1), p: () => go(pos - 1),
     Enter: () => save(true), Escape: () => { replayStop = null; v.pause(); },
+    e: markToEnd, Backspace: deleteMark, Delete: deleteMark,
+    Home: () => { v.pause(); replayStop = null; seekAbs(cur.win.frame0); }, End: () => { v.pause(); replayStop = null; seekAbs(winEnd()); },
   }[k];
   if (act) { e.preventDefault(); if (t.tagName === 'SELECT') t.blur(); act(); }
 });

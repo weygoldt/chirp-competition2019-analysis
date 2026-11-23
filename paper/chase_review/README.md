@@ -28,7 +28,7 @@ systemctl --user stop chase-review-offsets_v1   # stop the server
 | `build_session.py` | the chases, LED maps, chirps and contacts → `session.json` (paper environment) |
 | `server.py` | serves the page, cuts the video of each window on request, appends saves (standard library + ffmpeg) |
 | `index.html`, `timemap.js` | the page; `timemap.js` = video frame ↔ recording time (the LED map) |
-| `export_revisions.py` | `revisions.jsonl` → `paper/output/chase_review/NAME/revisions.csv` + summary |
+| `export_revisions.py` | `revisions.jsonl` → `paper/output/chase_review/NAME/revisions.csv` (one-chase reviews), `window_matches.csv` (blind window reviews matched to BORIS) + summary |
 | `serve.sh` | `server.py` as a systemd user service (`chase-review-NAME`) |
 
 A session lives in `/mnt/data1/chirp_v2/labels/chase_review_2019/NAME/`:
@@ -64,18 +64,39 @@ offset lie in the first 3 h (the centres the event rates use), in a fixed random
 the reviewed chases are an unbiased sample at every point. `all chases` adds the 42 later
 ones; a single trial lists its chases in time order.
 
-**Blind marking.** To place onsets and offsets without the annotator's times, untick `show
-BORIS markers` (`h`) *before* opening a chase: the BORIS lane, times and durations are
-hidden, your marks start empty, and the window is widened by 0-8 s at each end (fixed per
-chase) so its edges do not give the BORIS times away. To mark from the video alone, also
-untick `show chirps` (`c`); otherwise the chirp ticks can pull your marks towards chirps,
-which would make a chirp-vs-offset comparison circular. Each save records `blind` (BORIS
-markers hidden the whole time the chase was open) and `chirps_hidden`.
+**Blind marking: every chase in the window.** To place onsets and offsets without the
+annotator's times, untick `show BORIS markers` (`h`) *before* opening a chase: the BORIS
+lane, times and durations are hidden, and the window is widened by 0-8 s at each end (fixed
+per chase) so its edges do not give the BORIS times away. Chases come in bouts, so a window
+often holds several, and blind you cannot know which one it was cut for. So blind you mark
+**every chase you see in the window** (`o` at an onset, `f` at its offset, as often as
+needed; drag handles to adjust, click a bar to select it, `Backspace` deletes the selected
+one), or tick `no chase in this window` (`x`):
+
+- a chase already running when the window starts: onset on the first frame (`Home`, `o`);
+- a chase still running when it ends: `e` (offset on the last frame);
+- `+10 s before` / `+10 s after` widen the window; a chase marked on the old edge moves to
+  the new one, so mark its real end there.
+
+Such a review is saved as `mode: "window"` with the list of chases (each with
+`starts_before_window` / `ends_after_window` and the unsure flags). `export_revisions.py`
+matches them to the BORIS chases in the window by overlap: `matched` (one-to-one), `merged`
+(one of your chases spans several BORIS chases), `split` (several of yours in one BORIS
+chase), `boris_only`, `yours_only`; shifts come from matched pairs only, and an end on the
+window's edge (yours) or outside it (BORIS) is left out. The first blind reviews (one chase
+per window, before 2026-11-23 13:00) stay as they were (`mode: "target"`).
+
+To mark from the video alone, also untick `show chirps` (`c`); otherwise the chirp ticks can
+pull your marks towards chirps, which would make a chirp-vs-offset comparison circular. Each
+save records `blind` (BORIS markers hidden the whole time the window was open) and
+`chirps_hidden`.
 
 Keys: `space` play/pause, `←`/`→` one frame (`shift`: 10), `[`/`]` slower/faster, `o`/`f`
 onset/offset here, `r` reset to BORIS, `q`/`w` jump to BORIS onset/offset, `1`/`2` to yours,
-`k` replay offset, `u`/`i` unsure, `x` not a chase, `h` BORIS markers, `c` chirps, `Enter`
-save and next open chase, `n`/`p` next/previous, `Esc` stop.
+`k` replay offset, `u`/`i` unsure, `x` not a chase (blind: no chase in this window), `h` BORIS
+markers, `c` chirps, `Enter` save and next open chase, `n`/`p` next/previous, `Esc` stop;
+blind also `e` runs past the end, `Home`/`End` window start/end, `Backspace` delete the
+selected chase.
 
 ## Times and frames
 

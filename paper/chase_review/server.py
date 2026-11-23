@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import contextlib
+import itertools
 import json
 import queue
 import re
@@ -88,8 +89,51 @@ def make_clip(video: Path, frame0: int, n: int, fps: float, delay: int, out: Pat
     return out
 
 
+def check_window_marks(rev: dict, info: dict) -> dict:
+    """The fields of a window review: every chase the reviewer saw in the window (video frames).
+
+    Each chase has ``onset_frame`` < ``offset_frame``; chases are sorted and must not overlap.
+    ``starts_before_window`` / ``ends_after_window``: the chase was already running at the
+    window's first frame / still running at its last (its onset / offset is on that frame), so
+    that end is unknown. ``no_chase_in_window``: the reviewer saw no chase at all.
+    """
+    win = rev.get("window")
+    if not isinstance(win, dict):
+        raise ValueError("a window review needs the window (frame0, n)")
+    w0, wn = int(win["frame0"]), int(win["n"])
+    if not (w0 >= 0 and wn > 0 and w0 + wn <= info["n_frames"]):
+        raise ValueError(f"window {w0}+{wn} outside the video ({info['n_frames']} frames)")
+    marks = []
+    for m in rev.get("chases") or []:
+        on, off = int(m["onset_frame"]), int(m["offset_frame"])
+        if not w0 <= on < off <= w0 + wn - 1:
+            raise ValueError(f"chase {on}-{off}: the onset must come before the offset, both inside the window "
+                             f"{w0}-{w0 + wn - 1}")
+        marks.append({"onset_frame": on, "offset_frame": off,
+                      "onset_rec_s": to_rec_s(info["led_map"], on), "offset_rec_s": to_rec_s(info["led_map"], off),
+                      "onset_unsure": bool(m.get("onset_unsure", False)),
+                      "offset_unsure": bool(m.get("offset_unsure", False)),
+                      "starts_before_window": on == w0, "ends_after_window": off == w0 + wn - 1})
+    marks.sort(key=lambda m: m["onset_frame"])
+    for a, b in itertools.pairwise(marks):
+        if b["onset_frame"] <= a["offset_frame"]:
+            raise ValueError(f"your chases {a['onset_frame']}-{a['offset_frame']} and "
+                             f"{b['onset_frame']}-{b['offset_frame']} overlap")
+    no_chase = bool(rev.get("no_chase_in_window", False))
+    if no_chase and marks:
+        raise ValueError("'no chase in this window' together with marked chases")
+    if not no_chase and not marks:
+        raise ValueError("mark every chase in the window, or tick 'no chase in this window'")
+    return {"mode": "window", "chases": marks, "no_chase_in_window": no_chase, "window": {"frame0": w0, "n": wn}}
+
+
 def check_revision(rev: dict, chases: dict[str, dict], recordings: dict[str, dict]) -> dict:
     """A revision as saved: chase id, revised onset / offset (video frames), flags and note.
+
+    Two kinds. ``mode="target"`` (the default; BORIS markers shown): the reviewer's onset and
+    offset of this one BORIS chase. ``mode="window"`` (blind): every chase the reviewer saw in
+    the window opened for this chase (``check_window_marks``); ``export_revisions.py`` matches
+    them to the BORIS chases by overlap.
 
     ``not_a_chase``: the BORIS event is no chase (then the frames may be null).
     ``onset_unsure`` / ``offset_unsure``: the reviewer could not place that end well.
@@ -102,6 +146,12 @@ def check_revision(rev: dict, chases: dict[str, dict], recordings: dict[str, dic
         raise ValueError(f"unknown chase {cid!r}")
     chase = chases[cid]
     info = recordings[chase["recording"]]
+    if rev.get("mode") == "window":
+        return {"chase_id": cid, "recording": chase["recording"], "k": chase["k"], **check_window_marks(rev, info),
+                "blind": bool(rev.get("blind", False)), "chirps_hidden": bool(rev.get("chirps_hidden", False)),
+                "note": str(rev.get("note", ""))[:1000]}
+    if rev.get("mode", "target") != "target":
+        raise ValueError(f"unknown mode {rev.get('mode')!r}")
     not_a_chase = bool(rev.get("not_a_chase", False))
     on, off = rev.get("onset_frame"), rev.get("offset_frame")
     if not_a_chase and (on is None or off is None):
@@ -113,7 +163,7 @@ def check_revision(rev: dict, chases: dict[str, dict], recordings: dict[str, dic
         if not 0 <= on < off < info["n_frames"]:
             raise ValueError(f"onset frame {on} must be >= 0 and before offset frame {off} (video has "
                              f"{info['n_frames']} frames)")
-    out = {"chase_id": cid, "recording": chase["recording"], "k": chase["k"],
+    out = {"chase_id": cid, "recording": chase["recording"], "k": chase["k"], "mode": "target",
            "onset_frame": on, "offset_frame": off, "not_a_chase": not_a_chase,
            "onset_unsure": bool(rev.get("onset_unsure", False)),
            "offset_unsure": bool(rev.get("offset_unsure", False)),
