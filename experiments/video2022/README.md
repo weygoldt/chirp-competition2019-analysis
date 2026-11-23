@@ -394,3 +394,19 @@ rise after it (2019 1.33x, 2022 1.53x in the first 2 s), peak at the offset
 (2019 ~3.2x, 2022 ~2.9x, both ~0.3-0.5 s before it) and decay over the next
 5-10 s. All 2022 chases give a blunter curve (chases come in bouts); the
 isolated ones are selected from quiet periods, which deepens the dips.
+
+### Offset refinement with the chaser's deceleration: no gain (2026-11-23)
+
+Author: offsets are still the weak point; in the 2019 re-labelling the loser chirps
+right after almost every chase offset; refine the offsets with the winner's
+deceleration. `offset_refine.py` (kinematics only, never chirps): the time of the
+largest "chaser slows more than chasee, gap opens" cue within a window around the
+detected offset. `c13_offset_refine.py`, on the 56 labelled offsets matched by the
+held-out model, settings chosen on the other clips: |error| median 0.44 → 0.50 s,
+75 % 0.80 → 2.21 s, 90 % 3.76 → 3.80 s; worse. Where the model is right it already
+sits on the slowdown; where it is off (> 0.5 s, 24 of 56), 45 % have a tracking gap
+at the author's offset (fish touching; vs 9 % of the good ones), and the others have
+several slowdowns within ~1-2 s, of which the author took another one than the model
+(`c13b_offset_cases.py`, `c13c_offset_gaps.py`, `chases/model/offset_refine/`).
+The 2022 kernels' bluntness comes mainly from the chase definition (gaps between
+chases; `experiments/paper2022/merge_gap_test.py`), only in part from offset timing.
