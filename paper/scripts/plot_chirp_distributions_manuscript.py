@@ -7,7 +7,8 @@
 # counted). Axes and color scale end at a high quantile of the shown chirps (AXIS_QUANTILE),
 # rounded up to a round number; the chirps beyond them are counted. Rows: v2 parquet of PAPER_DETECTIONS
 # (chirps.load_chirp_table, rows with keep), winner and loser chirps of the 33 analysed competitions.
-# The plotted distributions (median, central 90 %, range) and counts go to write_stats
+# The plotted distributions (median, central 90 %, the central 99 % span the text reports, and
+# the range, which only a few extreme estimates set) and counts go to write_stats
 # ("chirp_distributions").
 #
 # Panel C: one example chirp per region 1-3 of A, chosen by rule (REGIONS, the clean-candidate
@@ -195,8 +196,14 @@ def bound(values: np.ndarray) -> float:
 
 
 def distribution(values: np.ndarray) -> dict:
-    """Median, central 90 % and range of a plotted quantity."""
+    """Median, central 90 %, span and range of a plotted quantity.
+
+    The span runs from the (1 - AXIS_QUANTILE) to the AXIS_QUANTILE quantile (the central 99 %),
+    the same rule that bounds the axes; it is the extent the text reports. The range (minimum,
+    maximum) is set by a few extreme estimates (heights up to ~1300 Hz) and is kept as a record.
+    """
     return {"median": np.median(values), "p5_p95": np.percentile(values, [5, 95]),
+            "span": np.quantile(values, [1 - AXIS_QUANTILE, AXIS_QUANTILE]),
             "range": [values.min(), values.max()]}
 
 
@@ -413,6 +420,7 @@ def main():
         "axis_limits": {"width10_ms": limits["width"], "height_hz": limits["height"],
                         "undershoot_hz": limits["undershoot"]},
         "n_beyond_axes": int(((width > limits["width"]) | (height > limits["height"])).sum()),
+        "n_beyond_height_axis": int((height > limits["height"]).sum()),
         "n_beyond_color_scale": int((undershoot > limits["undershoot"]).sum()),
         "width10_ms": distribution(width), "height_hz": distribution(height),
         "undershoot_hz": distribution(undershoot),
