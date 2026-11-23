@@ -120,6 +120,7 @@
     <div class="row">
       <button id="on" class="primary">onset here (<kbd>o</kbd>)</button>
       <button id="off" class="primary">offset here (<kbd>f</kbd>)</button>
+      <button id="allmode" title="mark every chase in this window instead of adjusting this one BORIS chase">every chase here (<kbd>m</kbd>)</button>
       <button id="toend" title="the chase is still running at the end of the window">runs past the end (<kbd>e</kbd>)</button>
       <button id="reset" title="your marks = BORIS marks">reset to BORIS (<kbd>r</kbd>)</button>
     </div>
@@ -178,6 +179,7 @@
         <div><kbd>Esc</kbd> stop replay</div>
         <div><kbd>Home</kbd> <kbd>End</kbd> window start / end</div>
         <div><kbd>e</kbd> chase runs past the end</div>
+        <div><kbd>m</kbd> mark every chase here</div>
         <div><kbd>Backspace</kbd> delete selected chase</div>
         <div>click a chase bar: select it</div>
       </div>
@@ -379,11 +381,11 @@ function syncForm() {
   if (document.activeElement !== $('note')) $('note').value = rev.note;
   $('cmp').hidden = winMode(); $('marklist').hidden = !winMode();
   $('nochaselabel').textContent = winMode() ? 'no chase in this window' : 'not a chase';
-  $('toend').disabled = !winMode(); $('reset').disabled = winMode() || !o;
+  $('toend').disabled = !winMode(); $('reset').disabled = winMode() || !o; $('allmode').hidden = winMode();
   $('modehint').innerHTML = winMode()
     ? 'Mark <b>every</b> chase you see in this window: <kbd>o</kbd> at its onset, <kbd>f</kbd> at its offset. ' +
       'Running when the window starts: onset on the first frame (<kbd>Home</kbd> <kbd>o</kbd>); still running at the end: <kbd>e</kbd>.'
-    : 'Adjust this BORIS chase: your marks start on the BORIS marks.';
+    : 'Adjust this BORIS chase: your marks start on the BORIS marks. Several chases here? Press <kbd>m</kbd>.';
   if (winMode()) {
     const m = selMark();
     $('onunsure').checked = !!(m && m.onUnsure); $('offunsure').checked = !!(m && m.offUnsure); $('nochase').checked = rev.noChase;
@@ -678,7 +680,11 @@ function markOn() {
     status(f === cur.win.frame0 ? 'onset on the first frame: this chase was already running when the window starts' : 'onset set, now mark the offset (f)');
     return;
   }
-  if (rev.off != null && f >= rev.off) { status('the onset must come before your offset', 'err'); return; }
+  if (rev.off != null && f >= rev.off) {
+    status('this chase is in one-chase mode (adjust the BORIS chase): the onset must come before your offset. ' +
+           'To mark several chases here, press m (every chase here).', 'err');
+    return;
+  }
   rev.on = f; rev.notChase = false; changed(); status('');
 }
 function markOff() {
@@ -690,6 +696,18 @@ function markOff() {
   }
   if (rev.on != null && f <= rev.on) { status('the offset must come after your onset', 'err'); return; }
   rev.off = f; rev.notChase = false; changed(); status('');
+}
+// switch the open chase to marking every chase in its window. Your own marks of this chase are kept;
+// the BORIS marks a fresh chase starts with are not (they are the annotator's, not yours).
+function toWindowMode(quiet) {
+  if (winMode()) return;
+  const saved = revs[cur.chase.id];
+  const own = rev.on != null && rev.off != null && !rev.notChase && (dirty || !!saved);
+  rev = {mode: 'window', marks: own ? [{on: rev.on, off: rev.off, onUnsure: rev.onUnsure, offUnsure: rev.offUnsure}] : [],
+         pending: null, sel: own ? 0 : -1, noChase: false, note: rev.note};
+  dirty = own || dirty; syncForm(); schedule();
+  if (!quiet) status('now marking every chase in this window (o ... f for each)' +
+                     (sawOrig ? '; the BORIS markers were shown, so this is saved as not blind' : ''), 'ok');
 }
 function markToEnd() {
   if (!winMode()) return;
@@ -779,7 +797,16 @@ $('nochase').onchange = e => {
 };
 $('toend').onclick = markToEnd;
 $('note').oninput = () => { rev.note = $('note').value; dirty = true; };
-$('showorig').onchange = () => { if (showOrig()) sawOrig = true; renderList(); syncForm(); schedule(); };
+$('showorig').onchange = () => {
+  if (showOrig()) sawOrig = true;
+  else if (cur && !winMode() && !dirty && !revs[cur.chase.id]) {
+    toWindowMode(true);
+    status('markers hidden: mark every chase in this window. This chase was opened with the markers shown, so it is saved as ' +
+           'not blind; the next one opens blind.', 'ok');
+  }
+  renderList(); syncForm(); schedule();
+};
+$('allmode').onclick = () => toWindowMode();
 $('showchirps').onchange = () => { if (showChirps()) sawChirps = true; syncForm(); schedule(); };
 $('save').onclick = () => save(true);
 $('prev').onclick = () => go(pos - 1);
@@ -795,7 +822,7 @@ document.addEventListener('keydown', e => {
     k: replay, u: () => toggle('onunsure'), i: () => toggle('offunsure'), x: () => toggle('nochase'),
     h: () => toggle('showorig'), c: () => toggle('showchirps'), n: () => go(pos + 1), p: () => go(pos - 1),
     Enter: () => save(true), Escape: () => { replayStop = null; v.pause(); },
-    e: markToEnd, Backspace: deleteMark, Delete: deleteMark,
+    e: markToEnd, m: () => toWindowMode(), Backspace: deleteMark, Delete: deleteMark,
     Home: () => { v.pause(); replayStop = null; seekAbs(cur.win.frame0); }, End: () => { v.pause(); replayStop = null; seekAbs(winEnd()); },
   }[k];
   if (act) { e.preventDefault(); if (t.tagName === 'SELECT') t.blur(); act(); }
