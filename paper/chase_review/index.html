@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chase review</title>
+<style>
+  :root { --bg: #16181c; --panel: #22252b; --lane: #1c1f24; --text: #e8e8e8; --muted: #9aa0a6; --line: #3a3f47;
+          --yours: #e6820e; --boris: #b4bac2; --boris-dim: #50555e; --contact: #b07cd8;
+          --loser: #34858d; --winner: #5ea869; --red: #e5484d; --ok: #46a758; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 10px; height: 100vh; }
+  #stage { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #videowrap { position: relative; background: #000; display: flex; justify-content: center; }
+  video { display: block; max-width: 100%; max-height: 56vh; }
+  #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+             background: rgba(0,0,0,.55); color: var(--muted); font-size: 15px; }
+  #overlay[hidden] { display: none; }
+  #readout { font: 12px/1.3 ui-monospace, monospace; color: var(--muted); min-height: 16px; }
+  #readout b { color: var(--text); font-weight: 600; }
+  canvas { width: 100%; display: block; background: var(--panel); border-radius: 3px; }
+  #tl-over { height: 118px; } #tl-detail { height: 118px; }
+  .tlhead { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  #bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px;
+           cursor: pointer; font: inherit; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--yours); color: #111; border-color: var(--yours); font-weight: 600; }
+  select, textarea { background: #1b1d22; color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+  aside { background: var(--panel); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+          overflow-y: auto; min-height: 0; }
+  h1 { font-size: 15px; margin: 0; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .badges span { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 9px; margin: 2px 4px 0 0;
+                 border: 1px solid var(--line); color: var(--muted); }
+  .badges .warn { border-color: #a5622a; color: #f0a35e; }
+  .badges .saved { border-color: #2f6b3a; color: #7fd18d; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 2px 4px; font-size: 13px; }
+  th:first-child, td:first-child { text-align: left; color: var(--muted); font-weight: 400; }
+  th { color: var(--muted); font-weight: 400; font-size: 12px; }
+  td.yours { color: var(--yours); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  label { user-select: none; }
+  textarea { width: 100%; }
+  #status { min-height: 18px; font-size: 13px; }
+  .ok { color: var(--ok); } .err { color: var(--red); }
+  #list { list-style: none; margin: 0; padding: 0; max-height: 26vh; overflow-y: auto; border: 1px solid var(--line);
+          border-radius: 4px; font: 12px/1.6 ui-monospace, monospace; }
+  #list li { padding: 0 6px; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+  #list li:hover { background: #2b2f36; }
+  #list li.cur { background: #3a2c1c; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: #555; }
+  .dot.same { background: var(--ok); } .dot.edited { background: var(--yours); } .dot.nochase { background: var(--red); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  kbd { background: #33373e; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+  button.primary kbd { background: rgba(0,0,0,.18); color: #111; }
+  input[type=range] { width: 80px; vertical-align: middle; }
+  .keys { font-size: 12px; color: var(--muted); columns: 2; column-gap: 12px; }
+  .keys div { break-inside: avoid; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; height: auto; } }
+</style>
+</head>
+<body>
+<main>
+  <section id="stage">
+    <div id="videowrap">
+      <video id="v" muted playsinline preload="auto"></video>
+      <div id="overlay">loading…</div>
+    </div>
+    <div id="readout"></div>
+    <div class="tlhead"><span>whole window (click to jump, drag the orange handles)</span><span id="zerolabel"></span></div>
+    <canvas id="tl-over"></canvas>
+    <div class="tlhead"><span>zoom: &plusmn;2 s around the playhead, one tick per video frame</span><span></span></div>
+    <canvas id="tl-detail"></canvas>
+    <div id="bar">
+      <button data-step="-10" title="shift+left">&laquo; 10</button>
+      <button data-step="-1" title="left">&lsaquo; 1</button>
+      <button id="play" title="space">play</button>
+      <button data-step="1" title="right">1 &rsaquo;</button>
+      <button data-step="10" title="shift+right">10 &raquo;</button>
+      <label>speed <select id="rate"><option>0.1</option><option>0.25</option><option selected>0.5</option>
+        <option>1</option><option>2</option><option>4</option></select></label>
+      <label>t = 0 at <select id="zero">
+        <option value="boris_offset" selected>BORIS offset</option><option value="boris_onset">BORIS onset</option>
+        <option value="your_offset">your offset</option><option value="your_onset">your onset</option>
+        <option value="clip">window start</option></select></label>
+      <label title="brightness of the video (display only)">bright <input type="range" id="bright" min="0.5" max="4" step="0.1" value="1"></label>
+      <label title="contrast of the video (display only)">contrast <input type="range" id="contrast" min="0.5" max="3" step="0.1" value="1"></label>
+      <button id="morepre" title="show 10 s more before the onset">+10 s before</button>
+      <button id="morepost" title="show 10 s more after the offset">+10 s after</button>
+    </div>
+  </section>
+  <aside>
+    <div>
+      <h1 id="title">Chase review</h1>
+      <div class="muted" id="subtitle"></div>
+      <div class="badges" id="badges"></div>
+    </div>
+    <table>
+      <tr><th></th><th>BORIS</th><th>yours</th><th>yours &minus; BORIS</th></tr>
+      <tr><td>onset</td><td id="b-on"></td><td id="y-on" class="yours"></td><td id="d-on"></td></tr>
+      <tr><td>offset</td><td id="b-off"></td><td id="y-off" class="yours"></td><td id="d-off"></td></tr>
+      <tr><td>duration</td><td id="b-dur"></td><td id="y-dur" class="yours"></td><td></td></tr>
+    </table>
+    <div class="muted">times: recording seconds; differences in s and video frames</div>
+    <div class="row">
+      <button id="on" class="primary">onset here (<kbd>o</kbd>)</button>
+      <button id="off" class="primary">offset here (<kbd>f</kbd>)</button>
+      <button id="reset" title="your marks = BORIS marks">reset to BORIS (<kbd>r</kbd>)</button>
+    </div>
+    <div class="row">
+      <span class="muted">jump to</span>
+      <button id="j-bon">BORIS onset (<kbd>q</kbd>)</button><button id="j-boff">BORIS offset (<kbd>w</kbd>)</button>
+      <button id="j-yon">your onset (<kbd>1</kbd>)</button><button id="j-yoff">your offset (<kbd>2</kbd>)</button>
+      <button id="replay" title="play from 3 s before to 2 s after your offset">replay offset (<kbd>k</kbd>)</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="onunsure"> onset unsure (<kbd>u</kbd>)</label>
+      <label><input type="checkbox" id="offunsure"> offset unsure (<kbd>i</kbd>)</label>
+      <label><input type="checkbox" id="nochase"> not a chase (<kbd>x</kbd>)</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="showorig" checked> show BORIS markers (<kbd>h</kbd>)</label>
+      <label><input type="checkbox" id="showchirps" checked> show chirps (<kbd>c</kbd>)</label>
+    </div>
+    <textarea id="note" rows="2" placeholder="note (optional): what happens at the BORIS offset, why you moved it, …"></textarea>
+    <div class="row">
+      <button id="prev">&lsaquo; prev (<kbd>p</kbd>)</button>
+      <button id="next">next (<kbd>n</kbd>) &rsaquo;</button>
+      <button id="save" class="primary">save &amp; next open (<kbd>Enter</kbd>)</button>
+    </div>
+    <div id="status"></div>
+    <div class="row"><label>show <select id="view"></select></label></div>
+    <div class="muted" id="progress"></div>
+    <ol id="list"></ol>
+    <details>
+      <summary>what to mark, keys</summary>
+      <p class="muted">Mark where <i>you</i> see the chase start and end, frame by frame. Your marks start on the
+        BORIS marks; move them (keys or drag), or save them unchanged if you agree. Chirps are shown for
+        orientation and cannot be edited. To mark without the annotator's times, untick "show BORIS markers"
+        before opening a chase (the window is then widened by 0-8 s at each end, at random, so its edges do not give the times away); to
+        mark from the video alone, also untick "show chirps". Each save records whether markers and chirps
+        were visible. Nothing in the dataset is changed: saves go to <code>revisions.jsonl</code>.</p>
+      <div class="keys">
+        <div><kbd>space</kbd> play / pause</div>
+        <div><kbd>&larr;</kbd> <kbd>&rarr;</kbd> 1 frame</div>
+        <div><kbd>shift</kbd>+arrows 10 frames</div>
+        <div><kbd>[</kbd> <kbd>]</kbd> slower / faster</div>
+        <div><kbd>o</kbd> / <kbd>f</kbd> onset / offset here</div>
+        <div><kbd>r</kbd> reset to BORIS</div>
+        <div><kbd>q</kbd> <kbd>w</kbd> BORIS on / off</div>
+        <div><kbd>1</kbd> <kbd>2</kbd> your on / off</div>
+        <div><kbd>k</kbd> replay your offset</div>
+        <div><kbd>u</kbd> <kbd>i</kbd> on / off unsure</div>
+        <div><kbd>x</kbd> not a chase</div>
+        <div><kbd>h</kbd> BORIS markers</div>
+        <div><kbd>c</kbd> chirps</div>
+        <div><kbd>Enter</kbd> save &amp; next open</div>
+        <div><kbd>n</kbd> <kbd>p</kbd> next / prev</div>
+        <div><kbd>Esc</kbd> stop replay</div>
+      </div>
+    </details>
+  </aside>
+</main>
+<script src="timemap.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const v = $('v');
+const DETAIL_HALF_S = 2;
+const BLIND_JITTER_S = 8;  // blind windows start 0-8 s earlier and end 0-8 s later (per chase, fixed)
+const COL = Object.fromEntries(['yours', 'boris', 'boris-dim', 'contact', 'loser', 'winner', 'red', 'muted', 'lane', 'text', 'line']
+  .map(k => [k, getComputedStyle(document.documentElement).getPropertyValue('--' + k).trim()]));
+
+let S = null, byId = {}, revs = {}, view = [], pos = 0;
+let cur = null;      // {chase, info, win: {frame0, n}, recT: rec time of each clip frame}
+let rev = null;      // your marks: {on, off} (video frames) + flags
+let dirty = false, sawOrig = false, sawChirps = false;
+let pad = {pre: 10, post: 10};
+let shownFrame = 0, drag = null, replayStop = null, raf = 0;
+
+// ---------- small helpers
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const showOrig = () => $('showorig').checked;
+const showChirps = () => $('showchirps').checked;
+function status(msg, cls) { const s = $('status'); s.textContent = msg; s.className = cls || ''; }
+function fps() { return cur.info.fps; }
+function clipFrameNow() { return clamp(Math.floor(v.currentTime * fps() + 1e-6), 0, cur.win.n - 1); }
+function curClip() { return v.paused ? clipFrameNow() : shownFrame; }
+function curAbs() { return cur.win.frame0 + curClip(); }
+function recOf(f) { return toRec(cur.info.led_map, f); }
+function frameAt(t) { return toFrame(cur.info.led_map, t, cur.win.frame0, cur.win.frame0 + cur.win.n - 1); }
+function seekAbs(f) {
+  const i = clamp(f - cur.win.frame0, 0, cur.win.n - 1);
+  shownFrame = i; v.currentTime = (i + 0.5) / fps(); schedule();
+}
+function hashUnit(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; }
+function fmtRec(t) { return t.toFixed(2); }
+function fmtD(dt, dframes) {
+  const sgn = dt > 0 ? '+' : dt < 0 ? '−' : '±';
+  return `${sgn}${Math.abs(dt).toFixed(2)} s (${dframes > 0 ? '+' : dframes < 0 ? '\u2212' : ''}${Math.abs(dframes)} fr)`;
+}
+function hms(t) {
+  const s = Math.max(0, t), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${(s % 60).toFixed(2).padStart(5, '0')}`;
+}
+function chaseState(id) {
+  const r = revs[id]; if (!r) return 'todo';
+  if (r.not_a_chase) return 'nochase';
+  return (r.onset_frame === r.boris_onset_frame && r.offset_frame === r.boris_offset_frame) ? 'same' : 'edited';
+}
+function inFig6(c) { const a = S.meta.active_phase_s; return c.onset_rec_s >= a[0] && c.offset_rec_s < a[1]; }
+function short(rec) { return rec.slice(0, 10); }
+
+// ---------- views and the list
+function buildViews() {
+  const sel = $('view'), byRec = {};
+  for (const c of S.chases) (byRec[c.recording] = byRec[c.recording] || []).push(c.id);
+  const opts = [['fig6', `Fig. 6 chases (first 3 h), random order`], ['all', `all ${S.chases.length} chases, random order`]];
+  for (const rec of Object.keys(S.recordings).sort()) opts.push([rec, `${rec} (${byRec[rec].length}, in time order)`]);
+  sel.innerHTML = opts.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+  sel.onchange = () => { setView(sel.value); const i = nextOpen(-1); go(i < 0 ? 0 : i); };
+}
+function setView(key) {
+  if (key === 'all') view = S.order.slice();
+  else if (key === 'fig6') view = S.order.filter(id => inFig6(byId[id]));
+  else view = S.chases.filter(c => c.recording === key).map(c => c.id);
+  renderList();
+}
+function renderList() {
+  const ol = $('list');
+  ol.innerHTML = view.map((id, i) => {
+    const c = byId[id];
+    return `<li data-i="${i}"><span class="dot ${chaseState(id)}"></span>${short(c.recording)} c${String(c.k).padStart(3, '0')}` +
+           (showOrig() ? `<span class="muted">${(c.offset_rec_s - c.onset_rec_s).toFixed(1)} s</span>` : '') + '</li>';
+  }).join('');
+  ol.querySelectorAll('li').forEach(li => li.onclick = () => go(+li.dataset.i));
+  markList();
+}
+function markList() {
+  const lis = $('list').children;
+  for (const li of lis) {
+    const i = +li.dataset.i; li.classList.toggle('cur', i === pos);
+    li.firstChild.className = 'dot ' + chaseState(view[i]);
+  }
+  if (lis[pos]) lis[pos].scrollIntoView({block: 'nearest'});
+  const done = S.chases.filter(c => revs[c.id]).length, f6 = S.chases.filter(inFig6);
+  const vdone = view.filter(id => revs[id]).length;
+  $('progress').textContent = `reviewed ${done} of ${S.chases.length} (Fig. 6: ${f6.filter(c => revs[c.id]).length} of ${f6.length}); ` +
+    `this list ${vdone} of ${view.length}`;
+}
+function nextOpen(from) {
+  for (let d = 1; d <= view.length; d++) { const i = (from + d + view.length) % view.length; if (!revs[view[i]]) return i; }
+  return -1;
+}
+
+// ---------- loading a chase
+function go(i, keepPad) {
+  if (dirty && !confirm('Discard the unsaved changes to this chase?')) return;
+  pos = clamp(i, 0, view.length - 1);
+  const chase = byId[view[pos]], info = S.recordings[chase.recording], saved = revs[chase.id];
+  if (!keepPad) {
+    pad = {pre: S.meta.pad_before_s, post: S.meta.pad_after_s};
+    if (!showOrig()) {  // blind: jitter the window so its edges do not give the BORIS times away
+      pad.pre += BLIND_JITTER_S * hashUnit(chase.id + ':pre'); pad.post += BLIND_JITTER_S * hashUnit(chase.id + ':post');
+    }
+  }
+  if (saved) rev = {on: saved.onset_frame, off: saved.offset_frame, notChase: saved.not_a_chase,
+                    onUnsure: saved.onset_unsure, offUnsure: saved.offset_unsure, note: saved.note};
+  else rev = {on: showOrig() ? chase.onset_frame : null, off: showOrig() ? chase.offset_frame : null,
+              notChase: false, onUnsure: false, offUnsure: false, note: ''};
+  dirty = false; sawOrig = showOrig(); sawChirps = showChirps();
+  openClip(chase, info, null);
+}
+function openClip(chase, info, keepAbs) {
+  const map = info.led_map;
+  const lo = Math.min(chase.onset_frame, rev.on ?? Infinity), hi = Math.max(chase.offset_frame, rev.off ?? -Infinity);
+  const win = chaseWindow(map, lo, hi, pad.pre, pad.post, info.n_frames);
+  const recT = new Float64Array(win.n);
+  for (let i = 0; i < win.n; i++) recT[i] = toRec(map, win.frame0 + i);
+  cur = {chase, info, win, recT};
+  syncForm();
+  $('overlay').hidden = false; $('overlay').textContent = 'cutting the video of this window…';
+  v.pause(); replayStop = null;
+  const url = `clip/${chase.recording}/${win.frame0}-${win.n}.mp4`;
+  v.src = url; v.playbackRate = parseFloat($('rate').value);
+  v.addEventListener('loadeddata', () => {
+    $('overlay').hidden = true;
+    seekAbs(keepAbs ?? win.frame0);
+  }, {once: true});
+  markList(); schedule();
+  prefetchNext();
+}
+function prefetchNext() {
+  const i = nextOpen(pos); if (i < 0 || i === pos) return;
+  const c = byId[view[i]], info = S.recordings[c.recording];
+  const w = chaseWindow(info.led_map, c.onset_frame, c.offset_frame, S.meta.pad_before_s, S.meta.pad_after_s, info.n_frames);
+  if (!showOrig()) return;  // blind windows are jittered; cut on request
+  fetch('api/prefetch', {method: 'POST', body: JSON.stringify({recording: c.recording, frame0: w.frame0, n: w.n})});
+}
+v.addEventListener('error', async () => {
+  if (!cur) return;
+  let msg = 'the video did not load';
+  try { const r = await fetch(v.src); if (!r.ok) msg = (await r.json()).error; } catch (e) { /* keep msg */ }
+  $('overlay').textContent = msg; status(msg, 'err');
+});
+
+// ---------- the form
+function syncForm() {
+  const c = cur.chase, info = cur.info, o = showOrig();
+  $('title').textContent = `${c.recording}, chase ${c.k + 1} of ${S.chases.filter(x => x.recording === c.recording).length}`;
+  $('subtitle').textContent = `${pos + 1} of ${view.length} in this list · winner ${info.sex_win}, loser ${info.sex_lose} · ` +
+    `LED map ${info.led_map.method}, residual ${(info.led_map.resid_med_s * 1e3).toFixed(0)} ms`;
+  const b = [];
+  if (!inFig6(c)) b.push('<span class="warn">outside the first 3 h: not in Fig. 6</span>');
+  if (c.shares_offset_with.length && o)
+    b.push(`<span class="warn">BORIS offset shared with ${c.shares_offset_with.map(x => 'c' + x.split('_c')[1]).join(', ')}: an offset is missing in the BORIS file</span>`);
+  const st = chaseState(c.id);
+  if (st !== 'todo') b.push(`<span class="saved">saved: ${{same: 'same as BORIS', edited: 'edited', nochase: 'not a chase'}[st]}` +
+                            `${revs[c.id].blind ? ', blind' : ''}${revs[c.id].chirps_hidden ? ', no chirps' : ''}</span>`);
+  if (dirty) b.push('<span class="warn">unsaved changes</span>');
+  $('badges').innerHTML = b.join('');
+  $('onunsure').checked = rev.onUnsure; $('offunsure').checked = rev.offUnsure; $('nochase').checked = rev.notChase;
+  if (document.activeElement !== $('note')) $('note').value = rev.note;
+  const bon = c.onset_rec_s, boff = c.offset_rec_s;
+  $('b-on').textContent = o ? fmtRec(bon) : 'hidden'; $('b-off').textContent = o ? fmtRec(boff) : 'hidden';
+  $('b-dur').textContent = o ? (boff - bon).toFixed(2) : 'hidden';
+  const yon = rev.on != null ? recOf(rev.on) : null, yoff = rev.off != null ? recOf(rev.off) : null;
+  $('y-on').textContent = yon != null ? fmtRec(yon) : '–'; $('y-off').textContent = yoff != null ? fmtRec(yoff) : '–';
+  $('y-dur').textContent = yon != null && yoff != null ? (yoff - yon).toFixed(2) : '–';
+  $('d-on').textContent = o && yon != null ? fmtD(yon - bon, rev.on - c.onset_frame) : '';
+  $('d-off').textContent = o && yoff != null ? fmtD(yoff - boff, rev.off - c.offset_frame) : '';
+  for (const id of ['reset', 'j-bon', 'j-boff']) $(id).disabled = !o;
+  for (const opt of $('zero').options) opt.disabled = !o && opt.value.startsWith('boris');
+}
+function changed() { dirty = true; syncForm(); schedule(); }
+
+// ---------- timelines
+function zeroT() {
+  const z = $('zero').value, c = cur.chase;
+  if (z === 'boris_offset' && showOrig()) return c.offset_rec_s;
+  if (z === 'boris_onset' && showOrig()) return c.onset_rec_s;
+  if (z === 'your_offset' && rev.off != null) return recOf(rev.off);
+  if (z === 'your_onset' && rev.on != null) return recOf(rev.on);
+  return cur.recT[0];
+}
+function zeroName() {
+  const z = $('zero').value;
+  if (z.startsWith('boris') && !showOrig()) return 'window start';
+  if ((z === 'your_offset' && rev.off == null) || (z === 'your_onset' && rev.on == null)) return 'window start';
+  return $('zero').selectedOptions[0].textContent;
+}
+const LANES = [{k: 'axis', h: 20}, {k: 'boris', h: 20, label: 'BORIS'}, {k: 'yours', h: 24, label: 'yours'},
+               {k: 'loser', h: 18, label: 'loser chirps'}, {k: 'winner', h: 18, label: 'winner chirps'}];
+const LABEL_W = 92, RIGHT = 10, GAP = 4;
+function layout() { let y = 4; return LANES.map(l => { const o = {...l, y}; y += l.h + GAP; return o; }); }
+function tickStep(span) { for (const s of [0.04, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60]) if (span / s <= 12) return s; return 120; }
+
+function drawTimeline(cv, t0, t1, detail) {
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const x = t => LABEL_W + (t - t0) / (t1 - t0) * (W - LABEL_W - RIGHT);
+  cv._x = x; cv._t = px => t0 + (px - LABEL_W) / (W - LABEL_W - RIGHT) * (t1 - t0);
+  const L = Object.fromEntries(layout().map(l => [l.k, l])); cv._lanes = L;
+  const c = cur.chase, info = cur.info, o = showOrig(), ch = showChirps(), z = zeroT();
+  const clipT0 = cur.recT[0], clipT1 = cur.recT[cur.win.n - 1] + 1 / fps();
+  const top = L.boris.y, bot = L.winner.y + L.winner.h;
+  g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle';
+  // lane backgrounds and labels
+  for (const l of Object.values(L)) {
+    if (l.k === 'axis') continue;
+    g.fillStyle = COL.lane; g.fillRect(LABEL_W, l.y, W - LABEL_W - RIGHT, l.h);
+    g.fillStyle = COL.muted; g.textAlign = 'right'; g.fillText(l.label, LABEL_W - 6, l.y + l.h / 2);
+  }
+  // outside the clip
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  if (t0 < clipT0) g.fillRect(LABEL_W, top, x(clipT0) - LABEL_W, bot - top);
+  if (t1 > clipT1) g.fillRect(x(clipT1), top, W - RIGHT - x(clipT1), bot - top);
+  // axis
+  const step = tickStep(t1 - t0), A = L.axis;
+  g.strokeStyle = COL.muted; g.fillStyle = COL.muted; g.textAlign = 'center'; g.lineWidth = 1;
+  for (let m = Math.ceil((t0 - z) / step); z + m * step <= t1; m++) {
+    const xx = x(z + m * step), val = m * step;
+    g.beginPath(); g.moveTo(xx, A.y + A.h - 6); g.lineTo(xx, A.y + A.h); g.stroke();
+    const txt = (Math.abs(val) < 1e-9 ? '0' : (val < 0 ? '−' : '+') + Math.abs(val).toFixed(step < 0.1 ? 2 : step < 1 ? 1 : 0)) + (m === 0 ? '' : '');
+    g.fillText(txt + (Math.abs(val) < 1e-9 ? ' s' : ''), xx, A.y + 6);
+    g.strokeStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.moveTo(xx, top); g.lineTo(xx, bot); g.stroke(); g.strokeStyle = COL.muted;
+  }
+  if (detail) {  // one tick per video frame
+    const pxPerFrame = (W - LABEL_W - RIGHT) / ((t1 - t0) * fps());
+    if (pxPerFrame > 2.5) {
+      g.strokeStyle = 'rgba(255,255,255,.25)';
+      for (let i = 0; i < cur.win.n; i++) {
+        const t = cur.recT[i]; if (t < t0 || t > t1) continue;
+        g.beginPath(); g.moveTo(x(t), A.y + A.h - 3); g.lineTo(x(t), A.y + A.h); g.stroke();
+      }
+    }
+  }
+  g.save(); g.beginPath(); g.rect(LABEL_W, 0, W - LABEL_W - RIGHT, H); g.clip();
+  // BORIS lane: neighbouring chases, this chase, contacts
+  if (o) {
+    const B = L.boris;
+    for (const n of S.chases) {
+      if (n.recording !== c.recording || n.id === c.id || n.offset_rec_s < t0 || n.onset_rec_s > t1) continue;
+      g.fillStyle = COL['boris-dim']; g.fillRect(x(n.onset_rec_s), B.y + 4, Math.max(2, x(n.offset_rec_s) - x(n.onset_rec_s)), B.h - 8);
+    }
+    g.fillStyle = COL.boris; g.fillRect(x(c.onset_rec_s), B.y + 3, Math.max(2, x(c.offset_rec_s) - x(c.onset_rec_s)), B.h - 6);
+    g.fillStyle = COL.contact;
+    for (const ct of info.contacts) {
+      if (ct.rec_s < t0 || ct.rec_s > t1) continue;
+      const cx = x(ct.rec_s), cy = B.y + B.h / 2;
+      g.beginPath(); g.moveTo(cx, cy - 6); g.lineTo(cx + 5, cy); g.lineTo(cx, cy + 6); g.lineTo(cx - 5, cy); g.closePath(); g.fill();
+    }
+    g.setLineDash([4, 3]); g.strokeStyle = COL.boris; g.lineWidth = 1;
+    for (const t of [c.onset_rec_s, c.offset_rec_s]) { g.beginPath(); g.moveTo(x(t), L.yours.y); g.lineTo(x(t), bot); g.stroke(); }
+    g.setLineDash([]);
+  } else {
+    g.fillStyle = COL.muted; g.textAlign = 'left'; g.fillText('hidden (h)', LABEL_W + 6, L.boris.y + L.boris.h / 2);
+  }
+  // chirps
+  for (const [k, col] of [['loser', COL.loser], ['winner', COL.winner]]) {
+    const ln = L[k];
+    if (!ch) { g.fillStyle = COL.muted; g.textAlign = 'left'; g.fillText('hidden (c)', LABEL_W + 6, ln.y + ln.h / 2); continue; }
+    g.fillStyle = col;
+    for (const t of info.chirps[k]) if (t >= t0 && t <= t1) g.fillRect(x(t) - 1, ln.y + 1, 2.5, ln.h - 2);
+  }
+  // your marks
+  const Y = L.yours;
+  if (rev.notChase) {
+    g.fillStyle = COL.red; g.textAlign = 'left'; g.fillText('not a chase', LABEL_W + 6, Y.y + Y.h / 2);
+  }
+  const yon = rev.on != null ? recOf(rev.on) : null, yoff = rev.off != null ? recOf(rev.off) : null;
+  if (yon != null && yoff != null && !rev.notChase) {
+    g.fillStyle = 'rgba(230,130,14,.55)'; g.fillRect(x(yon), Y.y + 4, x(yoff) - x(yon), Y.h - 8);
+  }
+  g.strokeStyle = COL.yours; g.lineWidth = 1.5;
+  for (const t of [yon, yoff]) {
+    if (t == null) continue;
+    g.beginPath(); g.moveTo(x(t), top); g.lineTo(x(t), bot); g.stroke();
+    g.fillStyle = COL.yours; g.fillRect(x(t) - 4, Y.y + 1, 8, Y.h - 2);
+  }
+  // playhead
+  const tp = cur.recT[curClip()];
+  g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x(tp), A.y + A.h - 6); g.lineTo(x(tp), bot); g.stroke();
+  g.restore();
+}
+function redraw() {
+  if (!cur) return;
+  const tp = cur.recT[curClip()];
+  drawTimeline($('tl-over'), cur.recT[0], cur.recT[cur.win.n - 1] + 1 / fps(), false);
+  drawTimeline($('tl-detail'), tp - DETAIL_HALF_S, tp + DETAIL_HALF_S, true);
+  const i = curClip(), f = cur.win.frame0 + i, z = zeroT();
+  const rel = tp - z;
+  $('readout').innerHTML = `clip frame <b>${i}</b>/${cur.win.n - 1} · video frame <b>${f}</b> ` +
+    `(BORIS time ${(f / cur.info.boris_fps).toFixed(2)} s) · t = <b>${rel >= 0 ? '+' : '−'}${Math.abs(rel).toFixed(2)} s</b> ` +
+    `rel. ${zeroName()} · recording ${hms(tp)} (${tp.toFixed(2)} s)`;
+  $('zerolabel').textContent = `axis: s relative to ${zeroName()}`;
+  $('play').textContent = v.paused ? 'play' : 'pause';
+}
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; redraw(); }); }
+
+// timeline mouse: click = jump, drag an orange handle = move your mark
+function handleNear(cv, px, py) {
+  const L = cv._lanes, x = cv._x;
+  if (!L || rev.notChase) return null;
+  if (py < L.boris.y || py > L.winner.y + L.winner.h) return null;
+  let best = null, bd = 7;
+  for (const k of ['on', 'off']) {
+    if (rev[k] == null) continue;
+    const d = Math.abs(x(recOf(rev[k])) - px);
+    if (d < bd) { bd = d; best = k; }
+  }
+  return best;
+}
+for (const cv of [$('tl-over'), $('tl-detail')]) {
+  const pt = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('mousedown', e => {
+    if (!cur) return;
+    const [px, py] = pt(e); v.pause(); replayStop = null;
+    drag = handleNear(cv, px, py);
+    drag = drag ? {k: drag, cv} : null;
+    if (!drag) seekAbs(frameAt(cv._t(px)));
+    e.preventDefault();
+  });
+  cv.addEventListener('mousemove', e => {
+    if (!cur) return;
+    const [px, py] = pt(e);
+    cv.style.cursor = (drag && drag.cv === cv) || handleNear(cv, px, py) ? 'ew-resize' : 'pointer';
+  });
+}
+window.addEventListener('mousemove', e => {
+  if (!drag || !cur) return;
+  const r = drag.cv.getBoundingClientRect();
+  let f = frameAt(drag.cv._t(e.clientX - r.left));
+  if (drag.k === 'on' && rev.off != null) f = Math.min(f, rev.off - 1);
+  if (drag.k === 'off' && rev.on != null) f = Math.max(f, rev.on + 1);
+  if (f !== rev[drag.k]) { rev[drag.k] = f; seekAbs(f); changed(); }
+});
+window.addEventListener('mouseup', () => { drag = null; });
+window.addEventListener('resize', schedule);
+
+// ---------- video
+function onVideoFrame(now, meta) {
+  if (cur) {
+    shownFrame = clamp(Math.round(meta.mediaTime * fps()), 0, cur.win.n - 1);
+    if (replayStop !== null && cur.win.frame0 + shownFrame >= replayStop) { v.pause(); replayStop = null; }
+  }
+  schedule(); v.requestVideoFrameCallback(onVideoFrame);
+}
+if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) v.requestVideoFrameCallback(onVideoFrame);
+else (function loop() {
+  if (cur && !v.paused) {
+    shownFrame = clipFrameNow();
+    if (replayStop !== null && cur.win.frame0 + shownFrame >= replayStop) { v.pause(); replayStop = null; }
+    schedule();
+  }
+  requestAnimationFrame(loop);
+})();
+for (const ev of ['seeked', 'pause', 'play', 'timeupdate']) v.addEventListener(ev, () => { if (v.paused && cur) shownFrame = clipFrameNow(); schedule(); });
+function step(n) { v.pause(); replayStop = null; seekAbs(curAbs() + n); }
+function togglePlay() { replayStop = null; if (v.paused) v.play(); else v.pause(); }
+function setRate(dir) {
+  const sel = $('rate'), i = clamp(sel.selectedIndex + dir, 0, sel.options.length - 1);
+  sel.selectedIndex = i; v.playbackRate = parseFloat(sel.value); status(`speed ${sel.value}x`);
+}
+function replay() {
+  const f = rev.off ?? cur.chase.offset_frame, t = recOf(f);
+  const a = frameAt(t - 3), b = frameAt(t + 2);
+  seekAbs(a); replayStop = b; v.play();
+}
+
+// ---------- marking
+function markOn() {
+  const f = curAbs();
+  if (rev.off != null && f >= rev.off) { status('the onset must come before your offset', 'err'); return; }
+  rev.on = f; rev.notChase = false; changed(); status('');
+}
+function markOff() {
+  const f = curAbs();
+  if (rev.on != null && f <= rev.on) { status('the offset must come after your onset', 'err'); return; }
+  rev.off = f; rev.notChase = false; changed(); status('');
+}
+function resetToBoris() { if (!showOrig()) return; rev.on = cur.chase.onset_frame; rev.off = cur.chase.offset_frame; changed(); }
+function jump(k) {
+  if (k === 'bon' || k === 'boff') { if (!showOrig()) return; seekAbs(k === 'bon' ? cur.chase.onset_frame : cur.chase.offset_frame); }
+  else { const f = rev[k === 'yon' ? 'on' : 'off']; if (f != null) seekAbs(f); }
+  v.pause(); replayStop = null;
+}
+function toggle(id) { const el = $(id); el.checked = !el.checked; el.dispatchEvent(new Event('change')); }
+
+async function save(goNext) {
+  if (!rev.notChase && (rev.on == null || rev.off == null)) { status('mark the onset and the offset, or tick "not a chase"', 'err'); return; }
+  rev.note = $('note').value;
+  const body = {chase_id: cur.chase.id, onset_frame: rev.on, offset_frame: rev.off, not_a_chase: rev.notChase,
+                onset_unsure: rev.onUnsure, offset_unsure: rev.offUnsure, blind: !sawOrig, chirps_hidden: !sawChirps,
+                note: rev.note, window: cur.win};
+  let res;
+  try {
+    const r = await fetch('api/save', {method: 'POST', body: JSON.stringify(body)});
+    res = await r.json(); if (!r.ok) { status(res.error, 'err'); return; }
+  } catch (e) { status('save failed: ' + e, 'err'); return; }
+  revs[res.chase_id] = res; dirty = false;
+  status(`saved ${short(res.recording)} c${String(res.k).padStart(3, '0')}` +
+         (res.d_offset_s != null ? ` (offset ${fmtD(res.d_offset_s, res.offset_frame - res.boris_offset_frame)})` : ''), 'ok');
+  syncForm(); markList();
+  if (goNext) { const i = nextOpen(pos); if (i >= 0) go(i); else status('every chase in this list is reviewed', 'ok'); }
+}
+
+// ---------- wiring
+document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => step(+b.dataset.step));
+$('play').onclick = togglePlay;
+$('rate').onchange = e => { v.playbackRate = parseFloat(e.target.value); };
+$('zero').onchange = schedule;
+function setFilter() { v.style.filter = `brightness(${$('bright').value}) contrast(${$('contrast').value})`;
+  try { localStorage.setItem('chase-review-filter', JSON.stringify([$('bright').value, $('contrast').value])); } catch (e) { /* no storage */ } }
+try { const f = JSON.parse(localStorage.getItem('chase-review-filter')); if (f) { $('bright').value = f[0]; $('contrast').value = f[1]; } } catch (e) { /* no storage */ }
+$('bright').oninput = setFilter; $('contrast').oninput = setFilter; setFilter();
+$('morepre').onclick = () => { pad.pre += 10; openClip(cur.chase, cur.info, curAbs()); };
+$('morepost').onclick = () => { pad.post += 10; openClip(cur.chase, cur.info, curAbs()); };
+$('on').onclick = markOn; $('off').onclick = markOff; $('reset').onclick = resetToBoris;
+$('j-bon').onclick = () => jump('bon'); $('j-boff').onclick = () => jump('boff');
+$('j-yon').onclick = () => jump('yon'); $('j-yoff').onclick = () => jump('yoff');
+$('replay').onclick = replay;
+$('onunsure').onchange = e => { rev.onUnsure = e.target.checked; changed(); };
+$('offunsure').onchange = e => { rev.offUnsure = e.target.checked; changed(); };
+$('nochase').onchange = e => { rev.notChase = e.target.checked; changed(); };
+$('note').oninput = () => { rev.note = $('note').value; dirty = true; };
+$('showorig').onchange = () => { if (showOrig()) sawOrig = true; renderList(); syncForm(); schedule(); };
+$('showchirps').onchange = () => { if (showChirps()) sawChirps = true; syncForm(); schedule(); };
+$('save').onclick = () => save(true);
+$('prev').onclick = () => go(pos - 1);
+$('next').onclick = () => go(pos + 1);
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t.type === 'text')) { if (e.key === 'Escape') t.blur(); return; }
+  if (!cur || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key, s = e.shiftKey ? 10 : 1;
+  const act = {
+    ' ': togglePlay, ArrowLeft: () => step(-s), ArrowRight: () => step(s), '[': () => setRate(-1), ']': () => setRate(1),
+    o: markOn, f: markOff, r: resetToBoris, q: () => jump('bon'), w: () => jump('boff'), 1: () => jump('yon'), 2: () => jump('yoff'),
+    k: replay, u: () => toggle('onunsure'), i: () => toggle('offunsure'), x: () => toggle('nochase'),
+    h: () => toggle('showorig'), c: () => toggle('showchirps'), n: () => go(pos + 1), p: () => go(pos - 1),
+    Enter: () => save(true), Escape: () => { replayStop = null; v.pause(); },
+  }[k];
+  if (act) { e.preventDefault(); if (t.tagName === 'SELECT') t.blur(); act(); }
+});
+window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+(async () => {
+  S = await (await fetch('api/session')).json();
+  revs = await (await fetch('api/revisions')).json();
+  for (const c of S.chases) byId[c.id] = c;
+  buildViews(); setView('fig6');
+  const i = nextOpen(-1);
+  go(i < 0 ? 0 : i);
+})();
+</script>
+</body>
+</html>

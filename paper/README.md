@@ -96,6 +96,13 @@ shifted 2020-06-09 by 5-10 s and 2020-05-13 by 0-2.3 s in the first 3 h (all
 other trials by at most 24 ms). `plot_led_alignment.py` writes the diagnostic
 plots and a per-trial table to `paper/output/led_alignment/` (`README.txt` there).
 
+**Reviewing the chase annotations.** `chase_review/` is a browser tool that shows
+each BORIS chase of the Fig. 6 trials in the video (10 s before the onset to 10 s
+after the offset, frame-exact), with the winner's and loser's chirps on a timeline,
+and saves your own onset and offset next to the annotator's (never over them), to
+find out how the annotator defined onset and offset. See
+[`chase_review/README.md`](chase_review/README.md).
+
 **The window around chase offsets.** Several analyses count chirps from
 shortly before to some seconds after each chase offset (the "offset window";
 in names `offset_window`). Until 2026-11-19 every script had the constants
