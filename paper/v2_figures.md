@@ -12,7 +12,7 @@ redesign, 2026-11-14, before the author's second design round).
 | new figure | replaces | script | size |
 |---|---|---|---|
 | `plot_v2_pipeline_explainer` | `plot_assignment_feature_extraction.pdf` | `scripts/plot_v2_pipeline_explainer.py` | 17.4 x 15.3 cm |
-| `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 14.8 x 13.4 cm |
+| `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 17.4 x 15.05 cm (since 2026-11-24, placed at 100 %) |
 | `plot_v2_failure_modes` | `plot_pipeline_performances_manuscript_supplement.pdf` | `scripts/plot_v2_failure_modes.py` | 17.4 x 12.05 cm |
 
 ## Detections and output roots
@@ -43,8 +43,8 @@ never hard-coded. Everything that encodes the operating point follows it:
 which boxes are drawn as detections (the run's `operating` column) and which
 as "below threshold", the operating-point markers and their label in
 Fig. 2A and C, the model's recall and emitter in Fig. 2B, F (benchmark:
-kept and score >= threshold), the true positives of Fig. 2E (score >=
-threshold) and the boxes of Fig. 2G, H (score >= threshold), and the counts
+kept and score >= threshold), the true positives of Fig. 2E, G, H (score >=
+threshold) and the boxes of Fig. 2I-K (score >= threshold), and the counts
 printed for the captions.
 
 **What changes at 0.8 (`rtdetr_gapfill_t080`, 2026-11-16).**
@@ -85,6 +85,8 @@ printed for the captions.
    /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py snippets traces raw
    ~/wrk/analyses/chirp_competition_upgrade/scripts/guarded --name v2fig-assign --mem 16G --vram 0.2 -- \
      /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py assign-baseline
+   # the true positives' simulator truth for Fig. 2G, H (~2 min, ~1.3 GB, CPU)
+   /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_assign_params.py
    ```
 
    Writes `$PAPER_OUT/data/processed/v2_figures/` (default
@@ -300,11 +302,24 @@ simulated (test-set precision-recall; benchmark recall by SNR, expert vs
 detector), C, D real recordings (C drawn like A: one detector curve, share
 of the expert's chirps found against share of detections judged chirps,
 over the threshold; D by winner / loser, sharing C's y-axis, status colours
-`style.winner_color`, `style.loser_color`). Assignment: E (test set,
-predicted EOD$f$ vs box position) and F (benchmark, expert vs detector),
-sharing both axes, one ΔF label. Chirp parameters: G, H. The model key above
-the top row. 14.8 x 13.4 cm (placed at 85 % of the text width: printed
-at x0.92 like the full-width figures).
+`style.winner_color`, `style.loser_color`). Assignment: E (test set, by
+ΔF) and F (benchmark, expert vs detector, by ΔF), one ΔF label; G, H (the
+true positives of E by the chirp's true 10 % width and height); E-H share
+one y-axis. Chirp parameters: I (height), J (FWHM), K (10 % width). The
+model key above the top row.
+
+Redesign (author, 2026-11-24, binding): 17.4 cm wide, placed at 100 % of the
+text width (printed at x0.92); 8-pt labels, "small" (6.7 pt) legends,
+annotations and n; palette of Figs. 5-7 only: detector = indigo
+(`style.other_color`, filled markers), human expert = grey open markers,
+winner/loser in D, black references, mako densities (no coral/blue model
+colours any more). The box-position baseline is no longer drawn in E (the
+manuscript never assigns by box position); its numbers stay in the stats
+(`assignment.*.edge_*`). Added: G, H (assignment by true chirp size, from
+`assign_params.csv`, `scripts/v2_assign_params.py`) and K (decoder, 10 %
+width). Letters: A-F unchanged; old G, H (decoder height, FWHM) -> I, J.
+Where two neighbouring n labels would touch, every second one is lifted by
+a line (`n_row`).
 
 | panel | number | source |
 |---|---|---|
@@ -314,7 +329,8 @@ at x0.92 like the full-width figures).
 | D real, by assigned fish (winner / loser) and score bin 0.5-0.7, 0.7-0.9, >= 0.9 | judged chirps, winner: 0.066 [0.011, 0.145], 0.427 [0.157, 0.630], 0.972 [0.804, 0.995] (n 60, 60, 40); loser: 0.184 [0.016, 0.386], 0.698 [0.328, 0.885], 0.920 [0.731, 1.000] (n 30, 30, 30) | `labels/real_v1/report/precision_by_status.csv`, rows `dataset == 2019`, scores `0.5-0.7`, `0.7-0.9`, `0.9-1` (status from the gap-filled assignment) |
 | E correct emitter by the emitter's ΔF to the nearest other live track (true positives with score >= 0.8 and a known ΔF, n = 8,652) | predicted emitter EODf: 0-10 Hz 0.780 [0.763, 0.795] (n 2,571), 10-25 0.963 (2,154), 25-50 0.992 (1,713), 50-100 0.996 (1,107), >= 100 0.997 (1,107); box position only: 0.380, 0.552, 0.806, 0.880, 0.968. Overall 0.923 vs 0.646 (all 8,748 TPs >= 0.8: 0.924 / 0.650). Until 2026-11-16 this panel was binned by the evaluation's ΔF (closest pair of any two live tracks; most scenes have 3-7 fish), which put easy chirps into the 0-10 Hz bin (then 0.884 vs 0.577) | `data/processed/v2_figures/assign_baseline.csv` column `emitter_df_bin` (TPs of the evaluation at 0.5, filtered to score >= 0.8; regenerated 2026-11-16 in `rtdetr_gapfill_t080`) |
 | F benchmark, emitter among own detections, by the emitter's ΔF to the nearest other live fish (536 true chirps; 2 without ΔF left out) | expert (items called chirp, n 493) / detector (kept, score >= 0.8, n 499): 0-10 Hz 0.608 [0.520, 0.689] / 0.728 [0.648, 0.796] (n 125 / 136); 10-25 0.924 / 0.943; 25-50 0.986 / 0.986; 50-100 0.992 / 0.991; >= 100 0.986 / 1.000; overall 0.878 / 0.910. Chirps per bin 143, 114, 78, 124, 75 | `labels/benchmark/report_v2/items.csv` (`df_nearest_hz`, `human_emitter_ok`, `dualhead_emitter_ok`; unweighted, Wilson 95 % intervals) |
-| G, H decoder (boxes >= 0.8; simulated test chirps of unseen fish) | n 7,395: height median abs. error 9.17 Hz (6.5 %), median signed +0.53 Hz; FWHM 1.12 ms (9.4 %), median signed -0.07 ms | `params/runs/v4-dualhead-sim-v4-r2/bundle/eval/predictions.parquet` (score >= 0.8) |
+| G, H correct emitter by the chirp's true 10 % width / height (the true positives of E, n = 8,652; octave bins, outer bins open) | width < 10, 10-20, 20-40, 40-80, 80-160, >= 160 ms: 0.927 (n 627), 0.927 (4,273), 0.904 (1,714), 0.933 (565), 0.943 (547), 0.921 (926); height < 50, 50-100, 100-200, 200-400, >= 400 Hz: 0.934 (1,064), 0.922 (2,813), 0.918 (949), 0.924 (2,996), 0.913 (830). Flat: assignment is not coupled to chirp size. The same within ΔF strata (stats only): ΔF < 10 Hz 0.74-0.84 (width) / 0.76-0.82 (height), ΔF >= 10 Hz 0.98-0.99 in every bin | `data/processed/v2_figures/assign_params.csv` (`v2_assign_params.py`, root env: every true positive of `assign_baseline.csv` joined to `scene_truth` of its scene; 8,999 of 8,999 matched, identical to the decoder evaluation's truth on the 7,666 shared chirps) |
+| I-K decoder (boxes >= 0.8; simulated test chirps of unseen fish) | n 7,395: height median abs. error 9.17 Hz (6.5 %), median signed +0.53 Hz; FWHM 1.12 ms (9.4 %), median signed -0.07 ms; 10 % width 1.52 ms (6.8 %), median signed +0.01 ms | `params/runs/v4-dualhead-sim-v4-r2/bundle/eval/predictions.parquet` (score >= 0.8) |
 
 ### Fig. 3 (failure modes)
 
@@ -536,14 +552,14 @@ box. Display levels in B-D: from the 85th percentile of the crop to the
 baselines, so the baselines saturate.
 
 **Fig. 2, pipeline v2 performance (replaces the YOLOv8 cross-validation
-figure).** *Detection (A-D), assignment (E, F) and chirp parameters (G, H),
+figure; redesigned 2026-11-24).** *Detection (A-D), assignment (E-H) and chirp parameters (I-K),
 against the simulator's ground truth and, on real recordings, as agreement
 with a human expert.* On real recordings the expert's judgement is not
 ground truth, so C and D show agreement with the expert, which we used to
 choose the operating threshold; the simulator's ground truth gives absolute
-performance (A, B, E-H). Detector: RT-DETR dual-head, used for all analyses
+performance (A, B, E-K). Detector: RT-DETR dual-head, used for all analyses
 (an RT-DETR detector with a second head that predicts the emitter's
-baseline EOD$f$ for each box); expert: one human labelling blind, in the
+baseline EOD$f$ for each box; filled circles); expert (open circles): one human labelling blind, in the
 same display for simulated and real items (key). *A*, precision against
 recall over the score threshold on simulated test scenes after
 post-processing (300 one-minute hybrid scenes: real background recordings
@@ -571,24 +587,27 @@ often (0.5-0.7: 0.07 [0.01, 0.15]; 0.7-0.9: 0.43 [0.16, 0.63]) than
 loser-assigned ones (0.18 [0.02, 0.39]; 0.70 [0.33, 0.89]); at >= 0.9, 0.97
 and 0.92. *E*, fraction of detected simulated test chirps (true positives
 with score >= 0.8 and a known $\Delta f$; n = 8,652; numbers, chirps per
-bin) assigned to the emitting fish, by the difference between the
-emitter's baseline EOD$f$ and that of the nearest other fish ($\Delta f$),
-with the predicted emitter EOD$f$ (nearest track, as in the pipeline) and
-with the box position only (track nearest to the box's lower edge + 41 Hz,
-the median offset of the training chirps). Overall 0.923 vs 0.646;
-$\Delta f$ < 10 Hz, 0.780 [0.763, 0.795] vs 0.380 [0.362, 0.399]. *F*, the
+bin) assigned to the emitting fish by the predicted emitter EOD$f$ (nearest
+track, as in the pipeline), by the difference between the emitter's
+baseline EOD$f$ and that of the nearest other fish ($\Delta f$). Overall
+0.923; $\Delta f$ < 10 Hz, 0.780 [0.763, 0.795]. *F*, the
 benchmark of B: fraction of each one's own detections (expert: chirps
 called, n = 493; detector: score >= 0.8, n = 499) assigned to the emitting
 fish, by $\Delta f$ (numbers, true chirps per bin; two chirps without
 $\Delta f$ left out). Below 10 Hz the expert assigned 0.61 [0.52, 0.69] and
 the detector 0.73 [0.65, 0.80] correctly; above 25 Hz both $\geq$ 0.98.
 The expert gave the same emitter on repeated items in 0.80-0.81 of cases
-(16 and 56 repeated pairs). *G*, *H*, estimated (calibrated) chirp height
-and FWHM for detections with score >= 0.8 against the true values of 7,395
-simulated test chirps of fish never used in training (density; dashed,
-identity): median absolute error 9.2 Hz (6.5 %) and 1.12 ms (9.4 %). Error
-bars in B, E, F: Wilson 95 % confidence intervals. FWHM, full width at half
-maximum.
+(16 and 56 repeated pairs). *G*, *H*, the chirps of E by
+their true 10 % width (G; bins 10, 20, 40, 80, 160 ms) and true height (H;
+50, 100, 200, 400 Hz; outer bins open-ended; from the simulated emitter's
+noise-free per-period frequency): 0.90-0.94 and 0.91-0.93 assigned
+correctly in every bin, so assignment does not depend on chirp size.
+*I*-*K*, estimated (calibrated) chirp height, FWHM and 10 % width for
+detections with score >= 0.8 against the true values of 7,395 simulated
+test chirps of fish never used in training (density; dashed, identity):
+median absolute error 9.2 Hz (6.5 %), 1.12 ms (9.4 %) and 1.52 ms (6.8 %).
+Error bars in B, E-H: Wilson 95 % confidence intervals. FWHM, full width at
+half maximum.
 
 **Fig. 3, pipeline v2 failure modes (replaces the v1 failure-mode
 figure).** *Where the pipeline fails on real recordings.* Spectrograms

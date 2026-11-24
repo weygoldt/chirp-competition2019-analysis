@@ -41,7 +41,7 @@ make paper-test                      # loader tests (from the repository root)
 | `CHIRP_REC_2019` | `/mnt/data2/2019_tube_competition` | recordings, tracks, BORIS, LED files, `trial_summary.csv`, detections |
 | `PAPER_DETECTIONS` | `rtdetr` | which `chirp_{times,ids}_<x>.npy` the analysis reads (`rtdetr` = v2, `rcnn` = v1) |
 | `PAPER_OUT` | `paper/output/$PAPER_DETECTIONS` | intermediates (`data/processed/`), figures (`figures/`), logs (`logs/`), `report/` |
-| `CHIRP_ROOT_PY` | `<repo>/.venv/bin/python` | root environment (chirpdetector, gridtools) for `v2_fig_extract.py` |
+| `CHIRP_ROOT_PY` | `<repo>/.venv/bin/python` | root environment (chirpdetector, gridtools) for `v2_fig_extract.py` and `v2_assign_params.py` |
 | `PAPER_PRIMARY` | `rtdetr_gapfill_t080` | the primary run: its figures go into the manuscript, its loser chirp-rate peak sets the window around chase offsets for every run |
 | `PAPER_OFFSET_WINDOW` | unset | **testing only**: e.g. `-3,13` replaces the window around chase offsets (s); stats written with it are refused by `collect` |
 
@@ -73,7 +73,7 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:re_analysis` (`plot_re_analysis`) | gamma, receiver | plot | `…/gamma_glmm_binary/` |
 | `fig:hurdle_model` (`plot_hurdle_decomposition`) | hurdle | `summarize_chirp_event_correlation_around_chasing`, `stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets`, plot | `chirp_event_correlations_offset_window/` |
 | `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
-| `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline` (root env), plot | `v2_figures/`, evaluation outputs under `$CHIRP_DATA` |
+| `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline`, `v2_assign_params` (the true positives' simulator truth; both root env), plot | `v2_figures/`, evaluation outputs and simulated scenes under `$CHIRP_DATA` |
 | `fig:failure_modes` (`plot_v2_failure_modes`, Fig. S4; replaced `fig:performances_supp`) | v2figs | plot | `v2_figures/` |
 | `fig:chase_validation` (`plot_chase_validation`, supplement; new 2026-11-24) | validation | `chase_validation` (the author's re-labelled chases vs BORIS), `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset`, `chase_validation_motion` (reads the videos), plot | `chase_validation/`, `offset_chirp_start/` |
 | pipeline numbers of the Methods (no figure) | v2figs | `summarize_pipeline` (templates, scenes, expert benchmark, real-data session, production run, from their result files under `$CHIRP_DATA`) | — |
