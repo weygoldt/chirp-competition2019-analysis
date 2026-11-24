@@ -25,6 +25,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 from analyze_event_time_rates_trial import load_data
 from manuscript_stats import write_stats
@@ -76,7 +77,9 @@ C = SimpleNamespace(CM=_CM, INK="k", CORAL="#e2655c", MUTED="#6e6e6e", GREY="#a0
 NAME = "plot_chase_validation"
 BORIS_C, AUTHOR_C, ALL_C = C.INK, C.CORAL, C.MUTED
 LAG = np.arange(-6, 6.0001, 0.02)
+REF = {"color": C.INK, "lw": 0.5, "ls": ":", "zorder": 0}  # the event time (reference line)
 XLIM = (-6, 6)
+XTICKS = [-6, -4, -2, 0, 2, 4, 6]  # the same time ticks in B-E
 SEED = 42
 W_CM, H_CM = 17.4, 10.6
 
@@ -102,7 +105,7 @@ def curve(ax, x, M, color, label, lw=1.2, ls="-", band=True):
     m = np.nanmean(M, 0)
     if band:
         lo, hi = boot_band(M)
-        ax.fill_between(x, lo, hi, color=color, alpha=0.18, lw=0)
+        ax.fill_between(x, lo, hi, color=color, alpha=0.25, lw=0)
     ax.plot(x, m, color=color, lw=lw, ls=ls, label=label)
     return m
 
@@ -131,21 +134,22 @@ def main() -> None:
     stats: dict = {}
 
     fig = plt.figure(figsize=(W_CM * C.CM, H_CM * C.CM))
-    ax_a = C.axes_cm(fig, 1.6, 6.15, 4.3, 3.9)
-    ax_b = C.axes_cm(fig, 7.15, 6.15, 4.6, 3.9)
-    ax_c = C.axes_cm(fig, 12.6, 6.15, 4.6, 3.9)
-    ax_d = C.axes_cm(fig, 1.6, 0.95, 6.8, 3.9)
-    ax_e = C.axes_cm(fig, 10.4, 0.95, 6.8, 3.9)
+    ax_a = C.axes_cm(fig, 1.6, 6.45, 4.1, 3.6)
+    ax_b = C.axes_cm(fig, 7.25, 6.45, 4.4, 3.6)
+    ax_c = C.axes_cm(fig, 12.7, 6.45, 4.4, 3.6)
+    ax_d = C.axes_cm(fig, 1.6, 1.2, 6.8, 3.5)
+    ax_e = C.axes_cm(fig, 10.3, 1.2, 6.8, 3.5)
 
     # A: shifts
     rng = np.random.default_rng(SEED)
     stats["shifts"] = {"onset": strip(ax_a, pairs["d_onset_s"], 1, AUTHOR_C, rng),
                        "offset": strip(ax_a, pairs["d_offset_s"], 0, AUTHOR_C, rng)}
-    ax_a.axvline(0, color=C.GREY, lw=0.8, zorder=0)
+    ax_a.axvline(0, **REF)
     ax_a.set_yticks([1, 0], ["onset", "offset"])
     ax_a.set_xlim(-6.3, 3.3)
+    ax_a.set_xticks([-6, -4, -2, 0, 2])
     ax_a.set_ylim(-0.7, 1.5)
-    ax_a.set_xlabel("re-labeled $-$ annotated (s)")
+    ax_a.set_xlabel("Re-labeled $-$ annotated [s]")
 
     # B, C: video motion
     lags = mot["lags_s"]
@@ -155,33 +159,36 @@ def main() -> None:
               lw=0.9, ls="--", band=False)
         mb = curve(ax, lags[sel], mot[f"pair_boris_{end}"][:, sel], BORIS_C, "annotated, re-labeled chases")
         ma = curve(ax, lags[sel], mot[f"pair_author_{end}"][:, sel], AUTHOR_C, "re-labeled, same chases")
-        ax.axvline(0, color=C.GREY, lw=0.8, zorder=0)
+        ax.axvline(0, **REF)
         ax.set_xlim(*XLIM)
-        ax.set_xlabel(f"time relative to chase {end} (s)")
+        ax.set_xticks(XTICKS)
+        ax.set_xlabel(f"Time relative to chase {end} [s]")
         t = lags[sel]
         stats[f"motion_{end}"] = {
             "n_all": int(len(mot[f"all_boris_{end}"])), "n_pairs": int(len(mot[f"pair_author_{end}"])),
             "peak_s": {"boris_all": float(t[np.nanargmax(np.nanmean(mot[f"all_boris_{end}"][:, sel], 0))]),
                        "boris": float(t[np.nanargmax(mb)]), "author": float(t[np.nanargmax(ma)])}}
-    ax_b.set_ylabel("video motion (× chase median)")
+    ax_b.set_ylabel("Video motion\n" r"[$\times$ chase median]")
     for ax in (ax_b, ax_c):  # one scale for both, with room for the key above the curves
         ax.set_ylim(0.8, 2.45)
-    ax_c.legend(frameon=False, fontsize=6, loc="upper right")
+    ax_c.legend(frameon=False, loc="upper right")
 
     # D: loser chirps around offsets; E: loser rises around onsets (same re-labelled chases)
-    for ax, end, times, sigma, ylab, key in ((ax_d, "offset", chirps, 0.3, "loser chirp rate (1/min)", "chirps_offset"),
-                                             (ax_e, "onset", rises, 0.5, "loser rise rate (1/min)", "rises_onset")):
+    for ax, end, times, sigma, ylab, key in ((ax_d, "offset", chirps, 0.3, "Loser chirp rate [1/min]", "chirps_offset"),
+                                             (ax_e, "onset", rises, 0.5, "Loser rise rate [1/min]", "rises_onset")):
         ok = pairs[f"d_{end}_s"].notna()
         ev_b = list(zip(pairs.loc[ok, "recording"], pairs.loc[ok, f"boris_{end}_rec_s"]))
         ev_a = list(zip(pairs.loc[ok, "recording"], pairs.loc[ok, f"{end}_rec_s"]))
         Mb, Ma = kernel_rates(ev_b, times, sigma), kernel_rates(ev_a, times, sigma)
         curve(ax, LAG, Mb, BORIS_C, f"annotated {end}s")
         curve(ax, LAG, Ma, AUTHOR_C, f"re-labeled {end}s")
-        ax.axvline(0, color=C.GREY, lw=0.8, zorder=0)
+        ax.axvline(0, **REF)
         ax.set_xlim(*XLIM)
-        ax.set_xlabel(f"time relative to chase {end} (s)")
+        ax.set_xticks(XTICKS)
+        ax.set_xlabel(f"Time relative to chase {end} [s]")
         ax.set_ylabel(ylab)
-        ax.legend(frameon=False, fontsize=6, loc="upper left")
+        # the key in the panel's empty upper corner (D: left, E: right)
+        ax.legend(frameon=False, loc="upper left" if ax is ax_d else "upper right")
         pre = (LAG >= -2) & (LAG < 0)
         post = (LAG >= 0) & (LAG < 2)
         stats[key] = {"n": int(ok.sum()), "kernel_sigma_s": sigma,
@@ -189,8 +196,8 @@ def main() -> None:
                          for who, M in (("boris", Mb), ("author", Ma))}}
 
     for ax in (ax_a, ax_b, ax_c, ax_d, ax_e):
-        ax.spines[["top", "right"]].set_visible(False)
-    C.letters_cm(fig, [(ax_a, "A", 1.4, 0.3), (ax_b, "B", 1.0, 0.3), (ax_c, "C", 1.0, 0.3),
+        sns.despine(ax=ax, offset=4, trim=False)
+    C.letters_cm(fig, [(ax_a, "A", 1.4, 0.3), (ax_b, "B", 1.4, 0.3), (ax_c, "C", 0.85, 0.3),
                        (ax_d, "D", 1.4, 0.3), (ax_e, "E", 1.4, 0.3)])
     paths = C.save(fig, NAME)
     print(json.dumps(stats, indent=1))

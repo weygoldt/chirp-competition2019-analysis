@@ -75,7 +75,10 @@ from manuscript_stats import write_stats
 from style import loser_color, set_light_style, winner_color
 
 NAME = "plot_v2_performance"
-W, H = 17.4, 15.8  # figure size [cm]
+# figure size [cm]: the manuscript places this figure at 85 % of the text
+# width (13.6 cm). At 14.8 cm it is printed at x0.92 like the full-width
+# (17.4-cm) figures, so its 8-pt text prints at the same size as theirs.
+W, H = 14.8, 13.4
 THR = C.OPERATING
 REAL_V1 = C.CHIRP_DATA / "labels" / "real_v1" / "report"
 REAL_DATASET = "2019"  # the 2019/2020 tube competitions (the paper's data)
@@ -140,8 +143,9 @@ def agreement_panel(ax, report):
     k_op = int(np.flatnonzero(np.isclose(thr, THR))[0])
     C.annotate(ax, rf"score $\geq$ {fmt_thr(THR)}", xy=(x[k_op], y[k_op]),
                xytext=(0.55, 0.45), color="k", rad=0.2, shrink_b=4)
-    # the other marked thresholds: their value next to the point
-    for t, dxy in ((0.5, (-4, -9)), (0.9, (-5, 5))):
+    # the other marked thresholds: their value below the point, clear of the
+    # curve, the error bars and the arrow
+    for t, dxy in ((0.5, (-1, -13)), (0.9, (-6, -8))):
         k = int(np.flatnonzero(np.isclose(thr, t))[0])
         ax.annotate(fmt_thr(t), xy=(x[k], y[k]), xytext=dxy, textcoords="offset points",
                     ha="right", va="center", fontsize="small", color=C.MUTED)
@@ -151,7 +155,7 @@ def agreement_panel(ax, report):
     ax.set_yticks([0, 0.5, 1.0])
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:g}"))
     ax.set_xlabel("Expert's chirps found")
-    ax.set_ylabel("Detections judged chirps")
+    ax.set_ylabel("Detections\njudged chirps")  # two lines: the short axis
     sns.despine(ax=ax, offset=4, trim=False)
     report["agreement"] = {
         "thresholds": thr.tolist(), "marked": [*MARKED, THR],
@@ -261,6 +265,7 @@ def benchmark_panel(ax, report):
     n_row(ax, SNR_POS, n, 0.505, fmt="{}")
     ax.set_xlim(-30, 20)
     ax.set_xticks([-20, -10, 0, 10])
+    ax.set_xticklabels(["$-$20", "", "0", ""])  # labels of every tick would touch
     ax.set_xlabel("Chirp SNR [dB]")
     ax.set_ylabel("Recall")
     ax.set_ylim(0.5, 1.0)
@@ -426,16 +431,16 @@ def main() -> None:
     # layout [cm]: one row per pipeline stage: detection (A-D: simulated A, B;
     # real C, D sharing the agreement axis), assignment (E, F sharing both
     # axes), chirp parameters (G, H); the model key above the top row
-    ph, sq = 3.3, 3.4
-    y1, y2, y3 = 11.2, 6.35, 1.25
-    ax_a = C.axes_cm(fig, 1.45, y1, 2.9, ph)
-    ax_b = C.axes_cm(fig, 5.55, y1, 2.9, ph)
-    ax_c = C.axes_cm(fig, 9.75, y1, 3.7, ph)
-    ax_d = C.axes_cm(fig, 14.05, y1, 2.9, ph)
-    ax_e = C.axes_cm(fig, 1.45, y2, 7.1, ph)
-    ax_f = C.axes_cm(fig, 9.0, y2, 7.1, ph)
-    ax_g = C.axes_cm(fig, 1.75, y3, sq, sq)
-    ax_h = C.axes_cm(fig, 6.95, y3, sq, sq)
+    ph, sq = 2.65, 2.85
+    y1, y2, y3 = 9.55, 5.45, 1.1
+    ax_a = C.axes_cm(fig, 1.3, y1, 2.4, ph)
+    ax_b = C.axes_cm(fig, 4.85, y1, 2.4, ph)
+    ax_c = C.axes_cm(fig, 8.75, y1, 2.8, ph)
+    ax_d = C.axes_cm(fig, 12.05, y1, 2.4, ph)
+    ax_e = C.axes_cm(fig, 1.3, y2, 6.35, ph)
+    ax_f = C.axes_cm(fig, 8.1, y2, 6.35, ph)
+    ax_g = C.axes_cm(fig, 1.6, y3, sq, sq)
+    ax_h = C.axes_cm(fig, 6.1, y3, sq, sq)
 
     # --- detection -------------------------------------------------------------
     pr_panel(ax_a, ["dualhead"], lambda m: C.PP_EVAL[m] / "sim_test_after", report)
@@ -462,7 +467,7 @@ def main() -> None:
     sim = pd.read_parquet(C.DECODER_EVAL / "predictions.parquet")
     sim = sim[sim["score"] >= THR]
     decoder_panel(ax_g, sim, "height_hz", 1.0, "Hz", (15, 1000),
-                  [20, 50, 100, 200, 500], report)
+                  [30, 100, 300, 1000], report)
     decoder_panel(ax_h, sim, "fwhm_s", 1e3, "ms", (2, 500),
                   [3, 10, 30, 100, 300], report)
     ax_g.set_xlabel("True height [Hz]")
@@ -477,11 +482,11 @@ def main() -> None:
                for m in ("dualhead", "human")]
     fig.legend(handles=handles, loc="center", ncol=2, frameon=False, fontsize="small",
                handlelength=1.6, handletextpad=0.5, columnspacing=1.8,
-               bbox_to_anchor=(0.5, (y1 + ph + 0.95) / H))
-    C.letters_cm(fig, [(ax_a, "A", 1.15, 0.3), (ax_b, "B", 1.15, 0.3),
-                       (ax_c, "C", 1.15, 0.3), (ax_d, "D", 0.3, 0.3),
-                       (ax_e, "E", 1.15, 0.3), (ax_f, "F", 0.3, 0.3),
-                       (ax_g, "G", 1.45, 0.3), (ax_h, "H", 1.45, 0.3)])
+               bbox_to_anchor=(0.5, (y1 + ph + 0.85) / H))
+    C.letters_cm(fig, [(ax_a, "A", 1.1, 0.3), (ax_b, "B", 1.1, 0.3),
+                       (ax_c, "C", 1.4, 0.3), (ax_d, "D", 0.3, 0.3),
+                       (ax_e, "E", 1.1, 0.3), (ax_f, "F", 0.3, 0.3),
+                       (ax_g, "G", 1.4, 0.3), (ax_h, "H", 1.4, 0.3)])
 
     paths = C.save(fig, NAME)
     print(json.dumps(report, indent=1, default=float))

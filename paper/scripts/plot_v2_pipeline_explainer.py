@@ -441,9 +441,9 @@ def main() -> None:
     ax_e2 = C.axes_cm(fig, 13.35, yd, 3.85, hd)
     report["D_harmonic"] = panel_harmonic(ax_d1, snip, rows, colors)
     report["D_duplicate"] = panel_duplicate(ax_d2)
+    # panel titles at the 8-pt base, as the window titles of A
     for ax, title in ((ax_d1, "harmonic"), (ax_d2, "duplicate")):
-        ax.text(0.5, 1.03, title, transform=ax.transAxes, ha="center", va="bottom",
-                fontsize="small")
+        ax.text(0.5, 1.03, title, transform=ax.transAxes, ha="center", va="bottom")
     C.key_strip(fig, 1.55, 0.45, [("box", {"color": C.DROPPED_COLOR, "ls": C.DROPPED_LS},
                                    "removed")])
     ax_e1.set_ylim(-14, 86)

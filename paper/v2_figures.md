@@ -2,15 +2,17 @@
 
 Three figures replace the v1 pipeline figures of the manuscript. Outputs
 (PDF + 300-dpi PNG) in `paper/output/rtdetr/figures/`;
-all are 17.4 cm wide (the width of most manuscript figures; the template
-scales them to the 16-cm text width). Earlier versions for comparison:
-`figures/_draft1/` (first drafts, 2026-11-13) and `figures/_draft2/` (first
+the explainer and the failure modes are 17.4 cm wide (the width of most
+manuscript figures; the template scales them to the 16-cm text width); the
+performance figure, placed at 85 % of the text width, is 14.8 cm wide, so
+that it is printed at the same x0.92 and its text at the same size as in
+the other figures. Earlier versions for comparison: `figures/_draft1/` (first drafts, 2026-11-13) and `figures/_draft2/` (first
 redesign, 2026-11-14, before the author's second design round).
 
 | new figure | replaces | script | size |
 |---|---|---|---|
 | `plot_v2_pipeline_explainer` | `plot_assignment_feature_extraction.pdf` | `scripts/plot_v2_pipeline_explainer.py` | 17.4 x 15.3 cm |
-| `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 17.4 x 15.7 cm |
+| `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 14.8 x 13.4 cm |
 | `plot_v2_failure_modes` | `plot_pipeline_performances_manuscript_supplement.pdf` | `scripts/plot_v2_failure_modes.py` | 17.4 x 12.05 cm |
 
 ## Detections and output roots
@@ -299,7 +301,8 @@ over the threshold; D by winner / loser, sharing C's y-axis, status colours
 `style.winner_color`, `style.loser_color`). Assignment: E (test set,
 predicted EOD$f$ vs box position) and F (benchmark, expert vs detector),
 sharing both axes, one ΔF label. Chirp parameters: G, H. The model key above
-the top row. 17.4 x 15.8 cm.
+the top row. 14.8 x 13.4 cm (placed at 85 % of the text width: printed
+at x0.92 like the full-width figures).
 
 | panel | number | source |
 |---|---|---|
