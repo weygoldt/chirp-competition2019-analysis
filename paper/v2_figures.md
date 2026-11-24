@@ -2,11 +2,9 @@
 
 Three figures replace the v1 pipeline figures of the manuscript. Outputs
 (PDF + 300-dpi PNG) in `paper/output/rtdetr/figures/`;
-the explainer and the failure modes are 17.4 cm wide (the width of most
-manuscript figures; the template scales them to the 16-cm text width); the
-performance figure, placed at 85 % of the text width, is 14.8 cm wide, so
-that it is printed at the same x0.92 and its text at the same size as in
-the other figures. Earlier versions for comparison: `figures/_draft1/` (first drafts, 2026-11-13) and `figures/_draft2/` (first
+all three are 17.4 cm wide and placed at 100 % (the width of every
+full-width manuscript figure; the template scales them to the 16-cm text
+width, x0.92, so their text prints at the same size as in the other figures). Earlier versions for comparison: `figures/_draft1/` (first drafts, 2026-11-13) and `figures/_draft2/` (first
 redesign, 2026-11-14, before the author's second design round).
 
 | new figure | replaces | script | size |
