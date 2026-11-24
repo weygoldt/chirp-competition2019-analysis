@@ -171,7 +171,8 @@ def main() -> None:
     ax_b.set_ylabel("Video motion\n" r"[$\times$ chase median]")
     for ax in (ax_b, ax_c):  # one scale for both, with room for the key above the curves
         ax.set_ylim(0.8, 2.45)
-    ax_c.legend(frameon=False, loc="upper right")
+    # white, edgeless box: the key sits across the event line at 0
+    ax_c.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="none", framealpha=1)
 
     # D: loser chirps around offsets; E: loser rises around onsets (same re-labelled chases)
     for ax, end, times, sigma, ylab, key in ((ax_d, "offset", chirps, 0.3, "Loser chirp rate [1/min]", "chirps_offset"),

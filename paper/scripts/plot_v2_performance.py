@@ -433,7 +433,7 @@ def main() -> None:
     # axes), chirp parameters (G, H); the model key above the top row
     ph, sq = 2.65, 2.85
     y1, y2, y3 = 9.55, 5.45, 1.1
-    ax_a = C.axes_cm(fig, 1.3, y1, 2.4, ph)
+    ax_a = C.axes_cm(fig, 1.5, y1, 2.2, ph)  # its 4-digit ticks need the room
     ax_b = C.axes_cm(fig, 4.85, y1, 2.4, ph)
     ax_c = C.axes_cm(fig, 8.75, y1, 2.8, ph)
     ax_d = C.axes_cm(fig, 12.05, y1, 2.4, ph)
@@ -483,7 +483,7 @@ def main() -> None:
     fig.legend(handles=handles, loc="center", ncol=2, frameon=False, fontsize="small",
                handlelength=1.6, handletextpad=0.5, columnspacing=1.8,
                bbox_to_anchor=(0.5, (y1 + ph + 0.85) / H))
-    C.letters_cm(fig, [(ax_a, "A", 1.1, 0.3), (ax_b, "B", 1.1, 0.3),
+    C.letters_cm(fig, [(ax_a, "A", 1.3, 0.3), (ax_b, "B", 1.1, 0.3),
                        (ax_c, "C", 1.4, 0.3), (ax_d, "D", 0.3, 0.3),
                        (ax_e, "E", 1.1, 0.3), (ax_f, "F", 0.3, 0.3),
                        (ax_g, "G", 1.4, 0.3), (ax_h, "H", 1.4, 0.3)])
