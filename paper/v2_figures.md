@@ -9,7 +9,7 @@ redesign, 2026-11-14, before the author's second design round).
 
 | new figure | replaces | script | size |
 |---|---|---|---|
-| `plot_v2_pipeline_explainer` | `plot_assignment_feature_extraction.pdf` | `scripts/plot_v2_pipeline_explainer.py` | 17.4 x 15.3 cm |
+| `plot_v2_pipeline_explainer` | `plot_assignment_feature_extraction.pdf` | `scripts/plot_v2_pipeline_explainer.py` | 17.4 x 16.4 cm |
 | `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 17.4 x 15.05 cm (since 2026-11-24, placed at 100 %) |
 | `plot_v2_failure_modes` | `plot_pipeline_performances_manuscript_supplement.pdf` | `scripts/plot_v2_failure_modes.py` | 17.4 x 12.05 cm |
 
@@ -90,8 +90,10 @@ printed for the captions.
    Writes `$PAPER_OUT/data/processed/v2_figures/` (default
    `paper/output/rtdetr/data/processed/v2_figures/`).
    `raw` (new) caches 1.2 s of the raw voltage of one electrode for the
-   "Recording" thumbnail of Fig. 1. The snippet `g_missed_1208` is no
-   longer plotted.
+   "Recording" thumbnail of Fig. 1. `snippets` caches exactly the eight
+   snippets the two spectrogram figures draw (`SNIPPETS` in the script;
+   since 2026-11-24 each also holds the unclipped spectrogram in dB,
+   `power_db`, which the figures display; rerun `snippets` after updating).
    For the gap-filled dataset prefix both commands with
    `PAPER_DETECTIONS=rtdetr_gapfill PAPER_OUT=paper/output/rtdetr_gapfill`
    (`run_all.sh` exports both; its `v2figs` chain runs the same steps).
@@ -113,19 +115,19 @@ and drawing helpers (arrows, keys, thumbnails, zoom connectors, display
 levels) of all three figures (paper env). Spectrograms are the production
 front end (`span_spectrogram` with the released bundle: click removal on
 >= 9 electrodes, 205/51/13-ms Hann windows on one 4.88-Hz grid, 5-ms hop,
-500-1500 Hz, linear power summed over electrodes), normalised with the
-front end's rule (60-dB range ending 10 dB above the median per-frame peak
-of the 205-ms channel) over each snippet. Display levels: Fig. 1B-D and
-Fig. 3A, B and C left use `chirp_levels()`: from the 85th percentile of the
-crop (mostly background) to the 99th percentile of the pixels inside the
-crop's chirp boxes, excluding +-15 Hz around the tracks, so that the chirps
-fill the colour range and the baselines saturate (Fig. 1B and C share one
-set, 0.27-0.63 of the 0-1 range; the draft's fixed 0.30-0.95 left the
-chirps, at 0.26-0.62, in the dark half). Fig. 3A (main and zoom) uses
-`background_levels()` instead (floor from the background pixels only; see
-Fig. 3 below). Fig. 1A (single windows) and the 51-ms panel of Fig. 3C use
-per-crop percentiles (40th-99.8th); the RGB image of Fig. 1A is on the front
-end's own levels.
+500-1500 Hz, linear power summed over electrodes). Since 2026-11-24 (the
+author's decision after comparing unclipped, floor-only and symmetric
+percentile clipping) every spectrogram panel of both figures, and the
+thumbnails, shows this power in dB re 1 V^2 (`power_db`, unclipped in the
+cache), with display levels the 2nd and 98th percentile of the panel's own
+crop (`C.CLIP_PCT`, `C.show_power`) and a small colour bar per panel or row
+(`C.power_bar`); the zoom of Fig. 3A uses the levels of the main panel (it
+is a crop of it). Only the RGB "detector input" of Fig. 1A keeps the front
+end's own 0-1 levels (60-dB range ending 10 dB above the median per-frame
+peak of the 205-ms channel, clipped), because it is the image the detector
+receives. The earlier display rules (`chirp_levels`, `background_levels`:
+85th percentile of the crop to the 99th percentile of the chirp pixels, so
+the baselines saturated; about 7-20 dB of the image's range) were removed.
 
 ## Figure style
 
@@ -171,22 +173,24 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   (flare 0.30), rose `#c2456a` (flare ~0.5), grey `#a0a0a0`. Roles:
   spectrograms in mako capped at 0.93 (nothing in the image is white, so
   white marks stand out); densities in mako reversed (light mint -> blue);
-  the two fish warm on the cool spectrogram (EOD$f_1$ peach, EOD$f_2$ rose;
-  dataviz validator on the spectrogram's black: CVD separation 21 dE,
-  contrast >= 3:1); models on white: RT-DETR dual-head blue (thicker line),
+  no colour for the two fish since 2026-11-24 (see the symbols below);
+  models on white: RT-DETR dual-head blue (thicker line),
   human expert coral (validator: all checks pass); box-position-only
   assignment grey open circles. Fig. 2 uses the expert's colour only for the
   expert's own performance (B, F); the detector's agreement with the expert
   (C) is the detector's colour.
-- **Spectrogram symbols** (Figs. 1 and 3; one key in Fig. 3): box in the
-  colour of the fish it was assigned to (EOD$f_1$ = higher-frequency fish of
-  the panel); circle = predicted emitter EOD$f$ in the box colour, drawn
-  only if its centre is inside the image and never clipped; white box =
-  unassigned; dashed grey = removed by post-processing; dotted white =
-  below the operating threshold; black triangles above the image = hand
-  labels; "?" = detection without a hand label; numbers above boxes =
-  assignment confidence, in the box colour; tracks as thin lines in the
-  fish colour.
+- **Spectrogram symbols** (Figs. 1 and 3; a key in Fig. 1B and Fig. 3;
+  since 2026-11-24, the manuscript's figure standard: fish identity by line
+  style, never by colour): white box, solid for the fish EOD$f_1$ (the
+  higher-frequency fish of the panel), dashed for EOD$f_2$; white circle =
+  predicted emitter EOD$f$, drawn only if its centre is inside the image
+  and never clipped; light grey: solid = unassigned, dash-dot = removed by
+  post-processing, dotted = below the operating threshold; black triangles
+  above the image = hand labels; "?" = detection without a hand label;
+  numbers above boxes = assignment confidence (white); tracks as thin black
+  lines on their bands (dashed where interpolated), labelled EOD$f_1$ /
+  EOD$f_2$ in white; the assignment tolerance (+-20 Hz) as black brackets
+  right of Fig. 1B.
 - **Arrows**: one gentle curvature (`arc3`, rad +-0.2), small filled head,
   0.7 pt, a 2-pt gap at the text and a 2.5-4-pt gap at the target
   (`C.annotate`); connectors between thumbnails thin grey arcs.
@@ -225,10 +229,34 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   below the panels; Fig. 3 hand labels as black triangles above the image,
   labels next to the tracks they name, confidences in the box colour above
   the highest box.
+- **Round 3 (2026-11-24, the manuscript's figure standard).** Fish identity
+  by line style instead of colour (white boxes solid / dashed, white emitter
+  circles, black tracks on their bands, grey for boxes that are not output);
+  no coral, peach or rose; the parameter traces in the indigo of Figs. 5-7.
+  Fig. 1 (manuscript Fig. 9): the zoom panel C (assignment) dropped; B full
+  width on a longer snippet chosen by the author from three candidates
+  (`2020-06-02-10_00`, 2245.2-2253.4 s, 13 chirps of both fish, small and
+  big; 12 of the 13 boxes cover both baselines), showing detection and
+  assignment together with the +-20 Hz tolerance as brackets; letters A
+  spectrograms, B detection and assignment, C post-processing, D
+  parameters (old D -> C, old E -> D); the rail names both B stages. All
+  spectrograms in dB re 1 V^2, clipped at the 2nd / 98th percentile of
+  each panel's crop, with colour bars (see How to run). The candidates and
+  the display-level comparisons (unclipped, floor rules, percentile clips)
+  were rendered outside the repository for the author.
 
 ## Numbers and their sources
 
 ### Fig. 1 (explainer)
+
+Since 2026-11-24 (round 3) panel B is `2020-06-02-10_00`, 2245.2-2253.4 s
+(snippet `f1_detect`), 620-1270 Hz: tracks 819.5 Hz (track 7, EOD$f_1$) and
+754.2 Hz (track 8, EOD$f_2$); 13 chirps at the operating threshold, all
+assigned (confidence >= 0.99): EOD$f_1$ 5 (heights 80-386 Hz, one long chirp
+with a FWHM of 73 ms), EOD$f_2$ 8 (heights 49-518 Hz); 12 boxes cover both
+baselines. The bullets below describe the former tile (2020-05-29), which
+still provides C (harmonic, old D left) and D (decoder examples, old E);
+old C (chirps 2086/2087) is no longer drawn. Display levels: see How to run.
 
 Source: `detections/competition2019_v2_20261113/2020-05-29-10_00/chirps_rtdetr.parquet`
 (rows printed by the script), tracks of that recording, traces from
@@ -332,7 +360,9 @@ a line (`n_row`).
 
 ### Fig. 3 (failure modes)
 
-Display levels: A (main and zoom) 0.324-0.579 from `background_levels`
+Since 2026-11-24 the display levels below are replaced by the 2nd / 98th
+percentile rule on the dB spectrogram (see How to run; the zoom keeps the
+main panel's levels). Earlier display levels: A (main and zoom) 0.324-0.579 from `background_levels`
 (60th percentile of the background pixels only, i.e. outside every stored
 box with score >= 0.2 and > 15 Hz from the tracks -> 97th percentile of the
 pixels inside the chirp boxes away from the tracks). The earlier
@@ -496,6 +526,9 @@ ends", "$\Delta f$ = 2.7 Hz", "$\Delta f$ = 6.4 Hz, 51-ms window",
   CPU), not visibly.
 
 ## Caption drafts
+
+The Fig. 1 and Fig. 3 drafts below predate round 3 (2026-11-24); the
+current captions are in the manuscript.
 
 Note for the text: the multi-window front end is a design choice. The
 front-end ablation of 2026-11-14 (`$CHIRP_DATA/runs/ablation_frontend/report.md`)

@@ -8,14 +8,19 @@ three figures (see "Figure style" in ``paper/v2_figures.md``):
   densities) and its companion ``flare`` (warm: the two fish, the human
   expert), plus greys for references;
 - spectrograms in ``mako`` (capped below white, so that white annotations
-  stand out), display levels from the crop (background percentile ->
-  chirp-pixel percentile), a frequency axis offset from the image, no time
-  axis but white scale bars;
-- detections as boxes in the colour of the fish they were assigned to
-  (EOD$f_1$ = higher-frequency fish of the panel, peach; EOD$f_2$, rose),
-  the predicted emitter EOD$f$ as a circle; white boxes: unassigned; dashed
-  grey: removed by post-processing; dotted white: below the operating
-  threshold; black triangles above the image: hand labels;
+  stand out): power in dB re 1 V^2 (the snippets' unclipped ``power_db``),
+  display levels the 2nd and 98th percentile of each panel's crop
+  (``CLIP_PCT``) with a small colour bar; a frequency axis offset from the
+  image, no time axis but white scale bars; the detector's RGB input keeps
+  its own 0-1 levels;
+- on the spectrograms no colour for fish identity (the manuscript's figure
+  standard): the frequency tracks as thin black lines on their bands,
+  labelled EOD$f_1$ (higher-frequency fish of the panel) and EOD$f_2$;
+  detections as white boxes, solid for the fish EOD$f_1$, dashed for
+  EOD$f_2$, the predicted emitter EOD$f$ as a white circle; light grey:
+  unassigned (solid), removed by post-processing (dash-dot), below the
+  operating threshold (dotted); black triangles above the image: hand
+  labels;
 - annotation arrows with one gentle curvature and a gap at both ends.
 
 Environment: ``paper/.venv`` (imports ``style``, which needs seaborn).
@@ -75,6 +80,16 @@ def _operating_threshold() -> float:
 
 
 OPERATING = _operating_threshold()  # the run's operating threshold
+
+
+def tile_duration_s() -> float:
+    """The detector's tile length of the run (meta.json of its recordings; one value)."""
+    values = {json.loads(m.read_text())["models"]["detector"]["tiling"]["tile_duration_s"]
+              for m in sorted(RUN.glob("*/meta.json"))}
+    if len(values) != 1:
+        msg = f"{RUN}: tile durations {sorted(values)}"
+        raise ValueError(msg)
+    return float(values.pop())
 REAL_EVAL = CHIRP_DATA / "eval" / "real_labels_365"
 REAL_LABELS = REAL_EVAL / "labels"
 PP_EVAL = {
@@ -107,18 +122,28 @@ MUTED = "#6e6e6e"  # secondary text
 # spectrograms: mako without its near-white top, so that white marks stand out
 SPEC_CMAP = LinearSegmentedColormap.from_list("mako_capped", _MAKO(np.linspace(0, 0.93, 256)))
 SPEC_BG = SPEC_CMAP(0.0)  # the spectrogram's black, for key swatches
+# display levels of every spectrogram panel (power in dB re 1 V^2): the
+# CLIP_PCT-th and (100 - CLIP_PCT)-th percentile of the panel's crop
+CLIP_PCT = 2.0
 # densities: light mint -> the detector blue (the same mako, reversed)
 DENSITY_CMAP = LinearSegmentedColormap.from_list(
     "mako_density", _MAKO(np.linspace(0.92, 0.35, 256)))
 
-# the two fish of a panel (warm, distinct from the cool spectrogram; checked
-# with the dataviz validator on the spectrogram's black: CVD separation
-# 21 dE, contrast >= 3:1)
-FISH_COLORS = (PEACH, ROSE)
-DROPPED_COLOR = "#c8c8c8"  # boxes removed by post-processing (dashed)
-DROPPED_LS = (0, (3, 1.6))
-UNASSIGNED_COLOR = "white"
-MISSED_LS = (0, (1, 1.2))  # detections below the operating threshold (dotted)
+# the two fish of a panel: identity by line style, never by colour. Boxes and
+# emitter markers white (contrast on mako), EOD$f_1$ solid, EOD$f_2$ dashed;
+# the tracks thin black lines on their (saturated) bands
+BOX_COLOR = "white"
+FISH_LS = ("-", (0, (3.0, 1.5)))  # EOD$f_1$, EOD$f_2$
+TRACK_COLOR = "k"
+TRACK_LW = 0.6
+FILLED_LS = (0, (2.5, 1.5))  # interpolated track samples (gap-filled run)
+# boxes that are not assigned output: light grey, no fish line style
+GREY_BOX = "#c8c8c8"
+UNASSIGNED_COLOR = GREY_BOX  # solid, with its emitter marker
+DROPPED_COLOR = GREY_BOX  # removed by post-processing (dash-dot)
+DROPPED_LS = (0, (4.0, 1.3, 1.0, 1.3))
+MISSED_COLOR = GREY_BOX  # below the operating threshold (dotted)
+MISSED_LS = (0, (1, 1.2))
 BOX_LW = 0.9
 ANNOT_FS = "small"  # 6.7 pt at the 8-pt base; nothing in the figures is smaller
 ANNOT = {"color": "white", "fontsize": ANNOT_FS}
@@ -272,129 +297,106 @@ def fish_order(snip: dict, t0: float, t1: float) -> list[int]:
     return sorted(med, key=lambda k: -med[k])
 
 
-def fish_colors(snip: dict, t0: float, t1: float) -> tuple[dict, list[int]]:
-    """{track id: colour} (EOD$f_1$ peach, EOD$f_2$ rose) and the order."""
+def fish_styles(snip: dict, t0: float, t1: float) -> tuple[dict, list[int]]:
+    """{track id: box line style} (EOD$f_1$ solid, EOD$f_2$ dashed) and the order."""
     order = fish_order(snip, t0, t1)
-    return {tid: FISH_COLORS[i % 2] for i, tid in enumerate(order)}, order
+    return {tid: FISH_LS[i % 2] for i, tid in enumerate(order)}, order
 
 
 # ---------------------------------------------------------------------------
 # spectrograms and detections
 # ---------------------------------------------------------------------------
-def spec_crop(snip: dict, t0: float, t1: float, f0: float, f1: float, channel):
+def spec_crop(snip: dict, t0: float, t1: float, f0: float, f1: float, channel,
+              key: str = "img"):
+    """Crop of ``snip[key]`` (``img``: the detector's 0-1 image; ``power_db``:
+    the unclipped spectrogram in dB), with a margin of 50 ms and 10 Hz."""
     t, f = snip["times_s"], snip["freqs_hz"]
     it = (t >= t0 - 0.05) & (t <= t1 + 0.05)
     jf = (f >= f0 - 10) & (f <= f1 + 10)
     dt, df = t[1] - t[0], f[1] - f[0]
     ext = (t[it][0] - dt / 2, t[it][-1] + dt / 2, f[jf][0] - df / 2, f[jf][-1] + df / 2)
     if channel == "rgb":
-        img = np.stack([snip["img"][c][np.ix_(jf, it)].astype(float) for c in range(3)], -1)
+        img = np.stack([snip[key][c][np.ix_(jf, it)].astype(float) for c in range(3)], -1)
     else:
-        img = snip["img"][channel][np.ix_(jf, it)].astype(float)
+        img = snip[key][channel][np.ix_(jf, it)].astype(float)
     return img, ext
 
 
-def chirp_levels(snip: dict, t0: float, t1: float, f0: float, f1: float,
-                 rows: pd.DataFrame, *, channel: int = 0, q_bg: float = 85,
-                 q_chirp: float = 99, guard_hz: float = 15.0) -> tuple[float, float]:
-    """Display levels that make the chirps visible.
-
-    vmin: the ``q_bg`` percentile of the whole crop (mostly background);
-    vmax: the ``q_chirp`` percentile of the pixels inside the crop's
-    operating chirp boxes, excluding rows within ``guard_hz`` of a live
-    track (the baselines, which then saturate). Falls back to (0.3, 0.95).
-    """
-    img, _ = spec_crop(snip, t0, t1, f0, f1, channel)
-    t, f = snip["times_s"], snip["freqs_hz"]
-    lo = float(np.percentile(img, q_bg))
-    vals = []
-    tracks = [track_median(snip, tid, t0 - 5, t1 + 5) for tid in fish_order(snip, t0 - 5, t1 + 5)]
-    for r in rows[rows.operating & rows.chirp].itertuples():
-        it = (t >= max(r.t_start_s, t0)) & (t <= min(r.t_end_s, t1))
-        jf = (f >= max(r.f_low_hz, f0)) & (f <= min(r.f_high_hz, f1))
-        for hz in tracks:
-            jf &= np.abs(f - hz) > guard_hz
-        if it.any() and jf.any():
-            vals.append(snip["img"][channel][np.ix_(jf, it)].astype(float).ravel())
-    if not vals:
-        return 0.3, 0.95
-    hi = float(np.percentile(np.concatenate(vals), q_chirp))
-    return lo, max(hi, lo + 0.1)
-
-
-def background_levels(snip: dict, t0: float, t1: float, f0: float, f1: float,
-                      rows: pd.DataFrame, *, channel: int = 0, q_bg: float = 60,
-                      q_chirp: float = 97, guard_hz: float = 15.0) -> tuple[float, float]:
-    """Display levels for crops where the baselines fill much of the image.
-
-    vmin: the ``q_bg`` percentile of the background pixels only (outside every
-    stored box with score >= 0.2 and farther than ``guard_hz`` from a live
-    track); vmax: the ``q_chirp`` percentile of the pixels inside the
-    operating chirp boxes away from the tracks. Unlike ``chirp_levels`` the
-    floor is not pulled up by the baselines' glow (in a 300-Hz crop around two
-    close fish the glow fills > 15 % of the pixels).
-    """
+def power_crop_db(snip: dict, t0: float, t1: float, f0: float, f1: float,
+                  channel: int = 0) -> np.ndarray:
+    """The unclipped power [dB re 1 V^2] inside [t0, t1] x [f0, f1] (no margin)."""
+    if "power_db" not in snip:
+        msg = (f"{snip['meta']['recording']}: snippet has no power_db; "
+               "rerun scripts/v2_fig_extract.py snippets")
+        raise KeyError(msg)
     t, f = snip["times_s"], snip["freqs_hz"]
     it, jf = (t >= t0) & (t <= t1), (f >= f0) & (f <= f1)
-    tt, ff = t[it], f[jf]
-    crop = snip["img"][channel][np.ix_(jf, it)].astype(float)
-    tracks = [track_median(snip, tid, t0 - 5, t1 + 5) for tid in fish_order(snip, t0 - 5, t1 + 5)]
-    off_track = np.ones(len(ff), bool)
-    for hz in tracks:
-        off_track &= np.abs(ff - hz) > guard_hz
-    bg = np.repeat(off_track[:, None], len(tt), axis=1)
-    vals = []
-    for r in rows.itertuples():
-        mt = (tt >= r.t_start_s) & (tt <= r.t_end_s)
-        mf = (ff >= r.f_low_hz) & (ff <= r.f_high_hz)
-        if r.score >= 0.2:
-            bg[np.ix_(mf, mt)] = False
-        if r.operating and r.chirp and mt.any() and (mf & off_track).any():
-            vals.append(crop[np.ix_(mf & off_track, mt)].ravel())
-    lo = float(np.percentile(crop[bg], q_bg))
-    hi = float(np.percentile(np.concatenate(vals), q_chirp)) if vals else lo + 0.3
-    return lo, max(hi, lo + 0.1)
+    return snip["power_db"][channel][np.ix_(jf, it)].astype(float)
 
 
-def show_spec(
-    ax,
-    snip: dict,
-    t0: float,
-    t1: float,
-    f0: float,
-    f1: float,
-    *,
-    channel: int = 0,
-    vmin: float | None = 0.3,
-    vmax: float | None = 0.95,
-    t_ref: float | None = None,
-) -> tuple[float, float]:
-    """Draw one channel of a snippet, time relative to ``t_ref`` (default t0).
+def clip_levels(values: np.ndarray, q: float = CLIP_PCT) -> tuple[float, float]:
+    """Display levels: the q-th and (100 - q)-th percentile of ``values``."""
+    if not 0 <= q < 50:
+        msg = f"clip percentile {q} not in [0, 50)"
+        raise ValueError(msg)
+    lo, hi = (float(v) for v in np.percentile(values, [q, 100 - q]))
+    if not lo < hi:
+        msg = f"display levels {lo:.2f}..{hi:.2f}: the crop is flat"
+        raise ValueError(msg)
+    return lo, hi
 
-    ``vmin``/``vmax`` are levels of the normalised image (0-1 = the front
-    end's 60-dB range); None: the 40th / 99.8th percentile of the crop.
-    Returns the levels used.
+
+def show_power(ax, snip: dict, t0: float, t1: float, f0: float, f1: float, *,
+               channel: int = 0, levels: tuple[float, float] | None = None,
+               q: float = CLIP_PCT, t_ref: float | None = None):
+    """Draw one channel's power [dB re 1 V^2], time relative to ``t_ref`` (default t0).
+
+    ``levels`` (dB); None: the q-th / (100 - q)-th percentile of this crop
+    (``clip_levels``). Returns the image (for a colour bar) and the levels.
     """
     t_ref = t0 if t_ref is None else t_ref
-    img, ext = spec_crop(snip, t0, t1, f0, f1, channel)
-    if vmin is None:
-        vmin = float(np.percentile(img, 40))
-    if vmax is None:
-        vmax = float(np.percentile(img, 99.8))
-    ax.imshow(
-        img,
-        extent=(ext[0] - t_ref, ext[1] - t_ref, ext[2], ext[3]),
-        aspect="auto",
-        origin="lower",
-        cmap=SPEC_CMAP,
-        vmin=vmin,
-        vmax=vmax,
-        interpolation="antialiased",
-        rasterized=True,
-    )
+    if levels is None:
+        levels = clip_levels(power_crop_db(snip, t0, t1, f0, f1, channel), q)
+    img, ext = spec_crop(snip, t0, t1, f0, f1, channel, key="power_db")
+    im = ax.imshow(img, extent=(ext[0] - t_ref, ext[1] - t_ref, ext[2], ext[3]),
+                   aspect="auto", origin="lower", cmap=SPEC_CMAP, vmin=levels[0],
+                   vmax=levels[1], interpolation="antialiased", rasterized=True)
     ax.set_xlim(t0 - t_ref, t1 - t_ref)
     ax.set_ylim(f0, f1)
-    return vmin, vmax
+    return im, levels
+
+
+def power_bar(fig, im, x: float, y: float, length: float, *, vertical: bool = False,
+              thickness: float = 0.13, label: str = "dB", ticks_before: bool = False):
+    """A small colour bar of a ``show_power`` image at (x, y) cm (lower left corner).
+
+    Horizontal (default): tick labels below (``ticks_before``: above), the
+    unit ``label`` right of the bar. Vertical: tick labels right, the unit
+    above the bar. Ticks every 5, 10, 20 or 40 dB: the finest step that
+    leaves at least 0.8 cm (horizontal) or 0.7 cm (vertical) per tick.
+    """
+    w, h = (thickness, length) if vertical else (length, thickness)
+    cax = axes_cm(fig, x, y, w, h)
+    cb = fig.colorbar(im, cax=cax, orientation="vertical" if vertical else "horizontal")
+    cb.outline.set_linewidth(0.5)
+    lo, hi = im.get_clim()
+    max_ticks = max(2, int(length / (0.7 if vertical else 0.8)) + 1)
+    for step in (5, 10, 20, 40):
+        ticks = np.arange(np.ceil(lo / step) * step, hi + 1e-9, step)
+        if len(ticks) <= max_ticks:
+            break
+    cb.set_ticks(ticks)
+    cax.tick_params(labelsize=ANNOT_FS, length=2, width=0.5, pad=1)
+    W, H = fig.get_size_inches() / CM
+    if vertical:
+        fig.text((x + thickness / 2) / W, (y + length + 0.08) / H, label, ha="center",
+                 va="bottom", fontsize=ANNOT_FS)
+    else:
+        if ticks_before:
+            cax.xaxis.set_ticks_position("top")
+        fig.text((x + length + 0.1) / W, (y + thickness / 2) / H, label, ha="left",
+                 va="center_baseline", fontsize=ANNOT_FS)
+    return cb
 
 
 def show_rgb(ax, snip: dict, t0: float, t1: float, f0: float, f1: float,
@@ -409,12 +411,13 @@ def show_rgb(ax, snip: dict, t0: float, t1: float, f0: float, f1: float,
 
 
 def draw_tracks(
-    ax, snip: dict, colors: dict, t0: float, t1: float, *, t_ref: float | None = None,
-    lw: float = 0.6, alpha: float = 0.95,
+    ax, snip: dict, fish: dict, t0: float, t1: float, *, t_ref: float | None = None,
+    lw: float = TRACK_LW, color=TRACK_COLOR, alpha: float = 1.0,
 ) -> None:
+    """The tracks of the fish in ``fish`` (track ids), thin black lines."""
     t_ref = t0 if t_ref is None else t_ref
     for tid, (tt, ff) in snip["tracks"].items():
-        if tid not in colors:
+        if tid not in fish:
             continue
         m = (tt >= t0 - 0.5) & (tt <= t1 + 0.5)
         if m.sum() < 2:
@@ -426,30 +429,38 @@ def draw_tracks(
         gaps = np.flatnonzero(np.diff(tm) > 1.0)
         td = np.insert(td, gaps + 1, np.nan)
         fd = np.insert(fd, gaps + 1, np.nan)
-        ax.plot(td - t_ref, fd, color=colors[tid], lw=lw, alpha=alpha, zorder=2,
+        ax.plot(td - t_ref, fd, color=color, lw=lw, alpha=alpha, zorder=2,
                 solid_capstyle="butt")
         if fl.any():
             # interpolated samples (gap-filled tracks): dashed, joined to the
             # neighbouring detections
             keep = fl | np.r_[fl[1:], False] | np.r_[False, fl[:-1]]
             ti, fi = np.where(keep, tm, np.nan), np.where(keep, fm, np.nan)
-            ax.plot(ti - t_ref, fi, color=colors[tid], lw=lw, alpha=alpha, zorder=2,
-                    ls=(0, (2.5, 1.5)), dash_capstyle="butt")
+            ax.plot(ti - t_ref, fi, color=color, lw=lw, alpha=alpha, zorder=2,
+                    ls=FILLED_LS, dash_capstyle="butt")
 
 
-def box_style(row: pd.Series, colors: dict) -> dict | None:
-    """Edge colour and line style of a detection (None: not drawn)."""
+def box_style(row: pd.Series, fish: dict) -> dict | None:
+    """Edge colour and line style of a detection (None: not drawn).
+
+    ``fish``: {track id: line style} of the panel's fish (``fish_styles``).
+    """
     if row.pp_drop_reason in ("harmonic", "duplicate") and row.operating:
         return {"ec": DROPPED_COLOR, "ls": DROPPED_LS, "kind": row.pp_drop_reason}
     if not row.operating:
         return None
     tid = row.track_id
-    if np.isfinite(tid) and int(tid) in colors:
-        return {"ec": colors[int(tid)], "ls": "-", "kind": "assigned"}
+    if np.isfinite(tid) and int(tid) in fish:
+        return {"ec": BOX_COLOR, "ls": fish[int(tid)], "kind": "assigned"}
     return {"ec": UNASSIGNED_COLOR, "ls": "-", "kind": "unassigned"}
 
 
-def draw_box(ax, row: pd.Series, t_ref: float, ec, ls="-", lw: float = BOX_LW,
+def fish_box(ax, row: pd.Series, t_ref: float, fish: dict, **kw) -> None:
+    """A detection assigned to one of ``fish``: white box in that fish's line style."""
+    draw_box(ax, row, t_ref, BOX_COLOR, ls=fish[int(row.track_id)], **kw)
+
+
+def draw_box(ax, row: pd.Series, t_ref: float, ec=BOX_COLOR, ls="-", lw: float = BOX_LW,
              marker: bool = True, zorder: int = 5, ms: float = 2.8) -> None:
     ax.add_patch(
         Rectangle(
@@ -471,19 +482,20 @@ def draw_box(ax, row: pd.Series, t_ref: float, ec, ls="-", lw: float = BOX_LW,
 
 def draw_missed(ax, row: pd.Series, t_ref: float, lw: float = BOX_LW) -> None:
     """A detection below the operating threshold (not part of the output)."""
-    draw_box(ax, row, t_ref, "white", ls=MISSED_LS, lw=lw, marker=False)
+    draw_box(ax, row, t_ref, MISSED_COLOR, ls=MISSED_LS, lw=lw, marker=False)
 
 
-def draw_detections(ax, rows: pd.DataFrame, colors: dict, t_ref: float, *,
-                    lw: float = BOX_LW, show_dropped: bool = True) -> pd.DataFrame:
+def draw_detections(ax, rows: pd.DataFrame, fish: dict, t_ref: float, *,
+                    lw: float = BOX_LW, show_dropped: bool = True,
+                    ms: float = 2.8) -> pd.DataFrame:
     """Draw every operating detection; returns the rows with their style kind."""
     kinds = []
     for _, row in rows.sort_values("score").iterrows():
-        st = box_style(row, colors)
+        st = box_style(row, fish)
         if st is None or (not show_dropped and st["kind"] in ("harmonic", "duplicate")):
             kinds.append(None)
             continue
-        draw_box(ax, row, t_ref, st["ec"], st["ls"], lw=lw,
+        draw_box(ax, row, t_ref, st["ec"], st["ls"], lw=lw, ms=ms,
                  marker=st["kind"] not in ("harmonic", "duplicate"))
         kinds.append(st["kind"])
     out = rows.sort_values("score").copy()
@@ -598,7 +610,11 @@ def key_strip(fig, x: float, y: float, items: list[tuple[str, dict, str]], *,
             elif kind == "dot":
                 ax.plot(0.5, 0.5, "o", ms=2.8, mfc=c, mec="k", mew=0.45)
             elif kind == "track":
-                ax.plot([0.08, 0.92], [0.5, 0.5], color=c, lw=0.8)
+                # a black track on its band (the band's saturated colour);
+                # st["ls"]: dashed for interpolated samples
+                ax.axhspan(0.3, 0.7, color=SPEC_CMAP(1.0), lw=0)
+                ax.plot([0.0, 1.0], [0.5, 0.5], color=st.get("color", TRACK_COLOR),
+                        lw=TRACK_LW, ls=st.get("ls", "-"), dash_capstyle="butt")
             elif kind == "label":
                 ax.plot(0.5, 0.5, "v", ms=3.4, mfc="k", mec="k", mew=0.4)
             elif kind == "qmark":

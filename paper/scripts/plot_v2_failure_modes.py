@@ -4,17 +4,20 @@ Replaces ``plot_pipeline_performances_manuscript_supplement.pdf`` (two v1
 snippets with annotated failures). Real spectrograms (detector's 205-ms
 channel unless stated, click-cleaned, power summed over electrodes) of the
 production run ``competition2019_v2_20261113`` with its boxes at the
-operating threshold, coloured by the fish they were assigned to, and the
-wavetracker tracks; one key for all panels (the symbols of the pipeline
-figure); display levels from ``chirp_levels`` (85th percentile of the crop
--> 99th percentile of the chirp pixels away from the baselines). Only
-failures that can be checked by eye, or against hand labels, are marked:
+operating threshold and the wavetracker tracks, drawn as in the pipeline
+figure (no colour for fish identity: white boxes, solid for the fish
+EOD$f_1$, dashed for EOD$f_2$; tracks thin black lines; dotted light grey,
+below the operating threshold); one key for all panels (only the symbols
+drawn). Power in dB re 1 V^2, display levels the 2nd and 98th percentile of
+each panel's crop (``C.CLIP_PCT``; the zoom in A uses A's levels), with a
+small colour bar right of each row (C: of each panel). Only failures that
+can be checked by eye, or against hand labels, are marked:
 
 A   2019-12-09-10_00, 4312-4328 s, inside a hand-labelled test region:
     hand labels (triangles above the image) against detections. One faint
     labelled chirp scored 0.33 and is below the operating threshold (zoom at
-    right, with the crop's own display contrast); two detections have no
-    label ("?").
+    right, with the levels of the main panel); if any, detections without a
+    label get a "?".
 B   2019-12-04-10_00, 7468-7488 s: the wavetracker track of the lower fish
     has a 140-s gap while the fish keeps chirping. With PAPER_DETECTIONS=
     rtdetr_gapfill (the paper's dataset) the gap is bridged by linear
@@ -87,10 +90,11 @@ def match_labels(labels: pd.DataFrame, kept: pd.DataFrame):
     return lab_c, unmatched_lab, unmatched_det
 
 
-def fish_labels(ax, snip, colors, order, t0, t1, x, dy):
+def fish_labels(ax, snip, order, t0, t1, x, dy):
+    """EOD$f_1$ / EOD$f_2$ in white just above / below their bands."""
     for k, tid in enumerate(order):
         y = C.track_median(snip, tid, t0, t1) + dy[min(k, 1)]
-        C.eod_label(ax, x, y, k + 1, color=colors[tid])
+        C.eod_label(ax, x, y, k + 1)
 
 
 # ---------------------------------------------------------------------------
@@ -101,15 +105,11 @@ def panel_labelled(ax, ax_zoom, fig, report, stats):
     m = snip["meta"]
     t0, t1 = m["t_start_s"], m["t_end_s"]
     f0, f1 = 650, 960
-    colors, order = C.fish_colors(snip, t0, t1)
+    fish, order = C.fish_styles(snip, t0, t1)
     rows = C.window(snip, t0, t1)
-    # floor from the background only: in this 310-Hz crop the glow of the two
-    # baselines 20 Hz apart fills > 15 % of the pixels (chirp_levels' floor
-    # landed above the median chirp pixel)
-    lv = C.background_levels(snip, t0, t1, f0, f1, rows)
-    C.show_spec(ax, snip, t0, t1, f0, f1, vmin=lv[0], vmax=lv[1])
-    C.draw_tracks(ax, snip, colors, t0, t1)
-    drawn = C.draw_detections(ax, rows, colors, t0)
+    im, lv = C.show_power(ax, snip, t0, t1, f0, f1)
+    C.draw_tracks(ax, snip, fish, t0, t1)
+    drawn = C.draw_detections(ax, rows, fish, t0)
     DRAWN.update(drawn.drawn_as.dropna())
     labels = hand_labels(m["recording"])
     labels = labels[(labels.t_end_s > t0) & (labels.t_start_s < t1)]
@@ -128,20 +128,20 @@ def panel_labelled(ax, ax_zoom, fig, report, stats):
         near = kept[(kept.t_start_s < r.t_center_s + 0.06) & (kept.t_end_s > r.t_center_s - 0.06)]
         ax.text(r.t_center_s - t0, float(near.f_high_hz.max()) + 6, "?", ha="center",
                 va="bottom", fontweight="bold", **C.ANNOT)
-    fish_labels(ax, snip, colors, order, t0, t1, 0.1, dy=(29, -29))
+    fish_labels(ax, snip, order, t0, t1, 0.1, dy=(29, -29))
     C.scalebar(ax, t1 - t0 - 0.15, 668, 1.0, "1 s")
     C.spec_yaxis(ax, ticks=[700, 800, 900])
     n_lab = len(labels)
     n_found = n_lab - len(unmatched_lab)
 
-    # zoom on the missed chirp with the levels of the main panel: the missed
-    # chirp keeps its brightness relative to the detected chirps (its pixels
-    # do not exceed the background of the same rows; not stretched)
+    # zoom on the missed chirp with the levels of the main panel (it is a crop
+    # of it): the missed chirp keeps its brightness relative to the detected
+    # chirps (not stretched)
     zt0, zt1 = miss.t_center_s - 0.4, miss.t_center_s + 0.4
     zf0, zf1 = 685, 845
-    C.show_spec(ax_zoom, snip, zt0, zt1, zf0, zf1, vmin=lv[0], vmax=lv[1])
-    C.draw_tracks(ax_zoom, snip, colors, zt0, zt1)
-    DRAWN.update(C.draw_detections(ax_zoom, rows, colors, zt0).drawn_as.dropna())
+    C.show_power(ax_zoom, snip, zt0, zt1, zf0, zf1, levels=lv)
+    C.draw_tracks(ax_zoom, snip, fish, zt0, zt1)
+    DRAWN.update(C.draw_detections(ax_zoom, rows, fish, zt0).drawn_as.dropna())
     C.draw_missed(ax_zoom, miss, zt0)
     zl = lab_c[(lab_c > zt0) & (lab_c < zt1)]
     C.label_marks(ax_zoom, zl - zt0)
@@ -152,7 +152,7 @@ def panel_labelled(ax, ax_zoom, fig, report, stats):
     C.zoom_connect(fig, ax, (zt0 - t0, zf0, zt1 - t0, zf1), ax_zoom)
 
     report["A"] = {
-        "recording": m["recording"], "window_s": [t0, t1], "levels": lv,
+        "recording": m["recording"], "window_s": [t0, t1], "levels_db": lv,
         "n_hand_labels": int(n_lab), "n_found": int(n_found),
         "n_detections_kept": int(len(kept)),
         "labels_without_detection": [round(t, 3) for t in unmatched_lab],
@@ -167,6 +167,7 @@ def panel_labelled(ax, ax_zoom, fig, report, stats):
     stats["labelled"] = {"n_hand_labels": n_lab, "n_found": n_found,
                          "n_detections_kept": len(kept), "missed_score": miss.score,
                          "fish_hz": hz, "fish_df_hz": hz[0] - hz[1]}
+    return im
 
 
 # ---------------------------------------------------------------------------
@@ -184,12 +185,11 @@ def panel_trackgap(ax, report, stats):
     t0, t1 = m["t_start_s"], m["t_end_s"]
     f0, f1 = 640, 880
     # both fish, ordered by frequency over a longer stretch (one track ends)
-    colors, order = C.fish_colors(snip, t0 - 15, t1)
+    fish, order = C.fish_styles(snip, t0 - 15, t1)
     rows = C.window(snip, t0, t1)
-    lv = C.chirp_levels(snip, t0, t1, f0, f1, rows)
-    C.show_spec(ax, snip, t0, t1, f0, f1, vmin=lv[0], vmax=lv[1])
-    C.draw_tracks(ax, snip, colors, t0, t1, lw=0.8)
-    drawn = C.draw_detections(ax, rows, colors, t0)
+    im, lv = C.show_power(ax, snip, t0, t1, f0, f1)
+    C.draw_tracks(ax, snip, fish, t0, t1)
+    drawn = C.draw_detections(ax, rows, fish, t0)
     DRAWN.update(drawn.drawn_as.dropna())
     lower = order[-1]
     tt, ff = snip["tracks"][lower]
@@ -217,18 +217,18 @@ def panel_trackgap(ax, report, stats):
                  & ((gaps.start_s - end).abs() < 0.01)].iloc[0]
         gap = g[["fish", "kind", "start_s", "end_s", "duration_s", "chirps_in_gap",
                  "chirps_unassigned", "rescuable_by_interp"]].to_dict()
-        ax.plot(end - t0, f_end, "|", ms=6, mew=1.0, color=colors[lower], zorder=6)
+        ax.plot(end - t0, f_end, "|", ms=6, mew=1.0, color=C.TRACK_COLOR, zorder=6)
         # label below the band, left of the track's end; dark backing over
         # the faint noise line there
         C.annotate(ax, "track ends", xy=(end - t0, f_end - 4), xytext=(end - t0 - 0.9, 655),
                    rad=0.2, ha="right", shrink_b=3, **C.DARK_BACK)
     in_gap = drawn[(drawn.t_center_s > gap["start_s"]) & (drawn.t_center_s < gap["end_s"])
                    & drawn.drawn_as.isin(["assigned", "unassigned"])]
-    fish_labels(ax, snip, colors, order, t0 - 15, t1, 1.15, dy=(22, -22))
+    fish_labels(ax, snip, order, t0 - 15, t1, 1.15, dy=(22, -22))
     C.scalebar(ax, t1 - t0 - 0.15, 662, 1.0, "1 s")
     C.spec_yaxis(ax, ticks=[700, 800])
     report["B"] = {
-        "recording": m["recording"], "window_s": [t0, t1], "levels": lv,
+        "recording": m["recording"], "window_s": [t0, t1], "levels_db": lv,
         "detections": C.DETECTIONS,
         "track_id": int(lower), "track_last_detection_s": end,
         "gap": gap, "gap_s": float(gap["end_s"] - gap["start_s"]),
@@ -249,7 +249,7 @@ def panel_trackgap(ax, report, stats):
         "recording_chirps": report["B"]["recording_chirps"],
         "recording_chirps_beyond_tolerance": report["B"]["recording_chirps_beyond_tolerance"],
     }
-    return report["B"]
+    return im
 
 
 # ---------------------------------------------------------------------------
@@ -264,32 +264,26 @@ def panel_close(ax, name, ids, half, channel, report, stats, key, *, word: bool)
     t0, t1 = tc - half, tc + half
     f0, f1 = 640, 890
     # fish identity over the snippet's surroundings (tracks are sparse in 1 s)
-    colors, order = C.fish_colors(snip, t0 - 5, t1 + 5)
+    fish, order = C.fish_styles(snip, t0 - 5, t1 + 5)
     win = rows[(rows.t_end_s > t0) & (rows.t_start_s < t1)]
-    if channel == 0:
-        lv = C.chirp_levels(snip, t0, t1, f0, f1, win, channel=channel)
-    else:  # 51-ms window: the merged bands dominate; per-crop percentiles
-        lv = (None, None)
-    lv = C.show_spec(ax, snip, t0, t1, f0, f1, channel=channel, vmin=lv[0], vmax=lv[1])
-    C.draw_tracks(ax, snip, colors, t0, t1, lw=0.7)
-    DRAWN.update(C.draw_detections(ax, win, colors, t0).drawn_as.dropna())
-    # confidences above the highest of the boxes, in the colour of their box
+    im, lv = C.show_power(ax, snip, t0, t1, f0, f1, channel=channel)
+    C.draw_tracks(ax, snip, fish, t0, t1)
+    DRAWN.update(C.draw_detections(ax, win, fish, t0).drawn_as.dropna())
+    # confidences above the highest of the boxes (the box's line style tells
+    # the fish)
     ytxt = float(sel.f_high_hz.max()) + 6
     for r in sel.itertuples():
         txt = f"{r.assign_confidence:.2f}"
         if word:
             txt = "confidence " + txt
-        ax.text(r.t_center_s - t0, ytxt, txt, ha="center", va="bottom",
-                color=colors.get(int(r.track_id), "white"), fontsize=C.ANNOT_FS,
+        ax.text(r.t_center_s - t0, ytxt, txt, ha="center", va="bottom", **C.ANNOT,
                 **C.DARK_BACK)
     hz = [C.track_median(snip, t, t0 - 5, t1 + 5) for t in order]
     # labels just above / below the pair of tracks; a dark backing where the
     # 51-ms window merges the two bands into one bright band
     off, back = (25, {}) if channel == 0 else (17, C.DARK_BACK)
-    C.eod_label(ax, 0.012, max(hz) + off, None, color=colors[order[0]], text=r"EOD$f_1$",
-                **back)
-    C.eod_label(ax, 0.012, min(hz) - off, None, color=colors[order[1]], text=r"EOD$f_2$",
-                **back)
+    C.eod_label(ax, 0.012, max(hz) + off, 1, **back)
+    C.eod_label(ax, 0.012, min(hz) - off, 2, **back)
     df_onset = float(sel.track_df_other_hz.iloc[0])
     lab = rf"$\Delta f$ = {df_onset:.1f} Hz"
     if channel != 0:
@@ -297,7 +291,7 @@ def panel_close(ax, name, ids, half, channel, report, stats, key, *, word: bool)
     ax.text(0.012 * (t1 - t0), f1 - 5, lab, ha="left", va="top", **C.ANNOT)
     C.scalebar(ax, t1 - t0 - 0.02, 862, 0.1, "100 ms")
     report[key] = {
-        "recording": rec, "levels": lv,
+        "recording": rec, "levels_db": lv,
         "rows": sel.reset_index()[["chirp_id", "t_center_s", "score", "emitter_hz",
                                    "track_id", "track_hz", "second_track_hz",
                                    "track_df_other_hz", "assign_confidence"]]
@@ -316,7 +310,7 @@ def panel_close(ax, name, ids, half, channel, report, stats, key, *, word: bool)
     }
     stats[key] = {"df_hz": df_onset, "confidence": sel.assign_confidence.tolist(),
                   "chirp_gap_ms": report[key]["chirp_gap_ms"]}
-    return report[key]
+    return im
 
 
 def track_gaps(stats):
@@ -377,25 +371,35 @@ def main() -> None:
     stats: dict = {"operating_threshold": C.OPERATING}
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
 
-    ax_a = C.axes_cm(fig, 1.45, 7.9, 11.55, 3.25)
-    ax_az = C.axes_cm(fig, 13.75, 7.9, 3.45, 3.25)
-    ax_b = C.axes_cm(fig, 1.45, 4.25, 15.75, 3.05)
-    ax_c1 = C.axes_cm(fig, 1.45, 0.25, 7.6, 3.45)
-    ax_c2 = C.axes_cm(fig, 9.6, 0.25, 7.6, 3.45)
+    # panels end at 16.25 cm; a vertical colour bar [dB] right of each row
+    # (of each panel in C, whose two crops have their own levels)
+    ax_a = C.axes_cm(fig, 1.45, 7.9, 10.85, 3.25)
+    ax_az = C.axes_cm(fig, 12.95, 7.9, 3.3, 3.25)
+    ax_b = C.axes_cm(fig, 1.45, 4.25, 14.8, 3.05)
+    ax_c1 = C.axes_cm(fig, 1.45, 0.25, 6.8, 3.45)
+    ax_c2 = C.axes_cm(fig, 9.45, 0.25, 6.8, 3.45)
 
-    panel_labelled(ax_a, ax_az, fig, report, stats)
-    panel_trackgap(ax_b, report, stats)
-    panel_close(ax_c1, "g_close_15388", [CLOSE_1], 0.45, 0, report, stats, "C1", word=True)
-    panel_close(ax_c2, "g_close_9394", CLOSE_2, 0.45, 1, report, stats, "C2", word=False)
+    images = [
+        (panel_labelled(ax_a, ax_az, fig, report, stats), ax_az),
+        (panel_trackgap(ax_b, report, stats), ax_b),
+        (panel_close(ax_c1, "g_close_15388", [CLOSE_1], 0.45, 0, report, stats, "C1",
+                     word=True), ax_c1),
+        (panel_close(ax_c2, "g_close_9394", CLOSE_2, 0.45, 1, report, stats, "C2",
+                     word=False), ax_c2),
+    ]
+    for im, ax in images:
+        bb = ax.get_position()
+        C.power_bar(fig, im, bb.x1 * W + 0.15, bb.y0 * H, bb.height * H - 0.35, vertical=True)
     C.spec_yaxis(ax_c1, ticks=[700, 800])
     C.no_yaxis(ax_c2)  # same frequency range as C left
 
     # key (the symbols of the pipeline figure, only those drawn), centred
     items = [
-        ("boxdot", {"color": C.FISH_COLORS[0]}, r"EOD$f_1$"),
-        ("boxdot", {"color": C.FISH_COLORS[1]}, r"EOD$f_2$"),
-        ("boxdot", {"color": "white"}, "unassigned"),
-        ("box", {"color": "white", "ls": C.MISSED_LS}, "below threshold"),
+        ("boxdot", {"ls": C.FISH_LS[0]}, r"EOD$f_1$"),
+        ("boxdot", {"ls": C.FISH_LS[1]}, r"EOD$f_2$"),
+        ("boxdot", {"color": C.UNASSIGNED_COLOR}, "unassigned"),
+        ("track", {}, "track"),
+        ("box", {"color": C.MISSED_COLOR, "ls": C.MISSED_LS}, "below threshold"),
         ("label", {}, "hand label"),
         ("qmark", {}, "no hand label"),
     ]

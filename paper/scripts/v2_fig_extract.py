@@ -12,18 +12,23 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     51 and 13 ms Hann windows on one 4.88-Hz grid, 5-ms hop, 500-1500 Hz,
     power summed over electrodes), normalised to [0, 1] over the snippet
     with the front end's own rule (60 dB range ending 10 dB above the median
-    per-frame peak of the reference channel), plus the wavetracker tracks
-    around the snippet. One ``<name>.npz`` per snippet.
+    per-frame peak of the reference channel; ``img``, clipped to [0, 1] as
+    the detector sees it), the same spectrogram unclipped in dB
+    (``power_db``: 10 log10 of the calibrated linear power summed over the
+    electrodes, dB re 1 V^2; a sinusoid of amplitude A on a bin reads
+    A^2 / 2 per electrode; float16, steps <= 0.125 dB), plus the
+    wavetracker tracks around the snippet. One ``<name>.npz`` per snippet.
 ``traces``
-    Instantaneous-frequency traces of the example chirps of Fig. 1E,
+    Instantaneous-frequency traces of the example chirps of the pipeline
+    figure (panel D),
     extracted from the raw recording with gridtools' harvest extraction
     (emitter's field pattern, other fish projected out, pulse-pair estimator
     with a 1-ms adaptive window) and per-EOD-period frequencies from the
     upward zero crossings of the same combined signal. ``traces.npz``.
 ``raw``
     The raw voltage of the electrode with the largest RMS during the
-    front-end example (``f1_fe_e``), for the "recording" thumbnail of
-    Fig. 1. ``raw.npz``.
+    front-end example (``f1_fe_e``), for the "recording" thumbnail of the
+    pipeline figure. ``raw.npz``.
 ``assign-baseline``
     Emitter assignment on the simulated test scenes after post-processing,
     per true positive at score >= 0.5: the emitter head (as evaluated) and
@@ -86,37 +91,45 @@ REC_2019 = paper_config.DATA_ROOT
 SIM_V4 = Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser() / "datasets" / "sim_v4"
 PP_EVAL = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess"
 
-OUT = paper_config.processed("v2_figures", "x").parent
+OUT = paper_config.PROCESSED / "v2_figures"  # created by main(), not at import
 
 # name -> (recording, t_start_s, t_end_s); times in seconds from the
 # recording's first sample (the clock of chirps_rtdetr.parquet)
 SNIPPETS: dict[str, tuple[str, float, float]] = {
-    # Fig. 1A: front end; two fish 29 Hz apart, a small and a big chirp
+    # pipeline figure A: front end; two fish 29 Hz apart, a small and a big chirp
     "f1_fe_e": ("2020-06-05-10_00", 89.9, 91.1),
-    # Fig. 1B-E: one detector tile (tile 4932: 3.2 s from 4932 * 2.2 s)
+    # pipeline figure B: detection and assignment, 8.2 s (2245.2-2253.4 s)
+    # with 13 chirps of both fish (author's choice of three candidates,
+    # 2026-11-24); the extraction keeps a margin for the crop
+    "f1_detect": ("2020-06-02-10_00", 2244.8, 2254.0),
+    # pipeline figure C (harmonic) and D (decoder examples): one detector tile
+    # (tile 4932: 3.2 s from 4932 * 2.2 s)
     "f1_tile": ("2020-05-29-10_00", 10850.4, 10853.6),
-    # Fig. 1D: a duplicate box on one chirp
-    "f1_dup": ("2020-03-18-10_34", 16980.9, 16982.1),
-    # Fig. 3A: hand-labelled test region (2019-12-09, region 4260-4423 s)
+    # pipeline figure C: a duplicate box on one chirp, both boxes >= 0.8
+    # (author's choice 2026-11-16)
+    "f1_dup": ("2019-12-02-10_00", 1196.5, 1197.7),
+    # failure-mode figure A: hand-labelled test region (2019-12-09, region
+    # 4260-4423 s)
     "f3_labelled": ("2019-12-09-10_00", 4312.0, 4328.0),
-    # Fig. 3B: the track of one fish ends while it keeps chirping
+    # failure-mode figure B: the track of one fish ends while it keeps chirping
     "f3_trackgap": ("2019-12-04-10_00", 7468.0, 7488.0),
-    # Fig. 3C crops
+    # failure-mode figure C: assignments between close fish
     "g_close_15388": ("2019-12-09-10_00", 15387.9, 15389.1),
     "g_close_9394": ("2020-03-13-10_00", 9393.9, 9395.1),
-    "g_missed_1208": ("2019-12-09-10_00", 1207.9, 1209.1),
-    # candidates for Fig. 1D (duplicate) at operating threshold 0.8: both
-    # boxes >= 0.8, in the analysed trials (proposals, not plotted)
-    "f1_dup_c1": ("2019-12-09-10_00", 9953.6, 9954.8),
-    "f1_dup_c2": ("2019-12-02-10_00", 1196.5, 1197.7),
-    "f1_dup_c3": ("2019-11-27-10_00", 4553.5, 4554.7),
 }
 
-# Fig. 1E: chirps of the f1_tile recording whose traces are extracted
+# pipeline figure D: chirps of the f1_tile recording whose traces are extracted
 TRACE_CHIRPS: dict[str, tuple[str, int]] = {
     "small": ("2020-05-29-10_00", 2085),
     "big": ("2020-05-29-10_00", 2086),
 }
+
+
+def to_db(power: np.ndarray) -> np.ndarray:
+    """Linear power -> dB (10 log10), float16; zeros at the float32 floor, as
+    chirpdetector's ``normalize`` does before it clips."""
+    tiny = np.finfo(np.float32).tiny
+    return (10.0 * np.log10(np.maximum(np.asarray(power, np.float64), tiny))).astype(np.float16)
 
 
 def _run_tracks(rec_name: str) -> list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]:
@@ -180,6 +193,7 @@ def snippets(names: list[str] | None = None) -> None:
         start, stop = span_bounds(bundle, fs, recording.n_samples, t0, t1)
         spec = span_spectrogram(bundle, recording, start, stop, device="cpu")
         img = normalize(spec, config).cpu().numpy().astype(np.float16)
+        power_db = to_db(spec.power.cpu().numpy())
         if rec_name not in track_cache:
             track_cache[rec_name] = _run_tracks(rec_name)
         tw = _tracks_window(track_cache[rec_name], t0 - 15.0, t1 + 15.0)
@@ -190,6 +204,9 @@ def snippets(names: list[str] | None = None) -> None:
             "n_electrodes": int(recording.n_channels),
             "samplerate_hz": float(fs),
             "reference_db": reference_level_db(spec),
+            "dynamic_range_db": float(config.dynamic_range_db),
+            "headroom_db": float(config.headroom_db),
+            "power_db_unit": "dB re 1 V^2 (calibrated one-sided power, summed over electrodes)",
             "windows_s": list(config.window_durations_s),
             "click_removal": bundle.preprocessing.get("click_removal") is not None
             and int(recording.n_channels) >= 9,
@@ -202,6 +219,7 @@ def snippets(names: list[str] | None = None) -> None:
         np.savez_compressed(
             OUT / f"{name}.npz",
             img=img,
+            power_db=power_db,
             times_s=spec.times_s,
             freqs_hz=spec.freqs_hz,
             meta=json.dumps(meta),
