@@ -145,16 +145,16 @@ def main() -> None:
     ax_a.set_yticks([1, 0], ["onset", "offset"])
     ax_a.set_xlim(-6.3, 3.3)
     ax_a.set_ylim(-0.7, 1.5)
-    ax_a.set_xlabel("author $-$ BORIS (s)")
+    ax_a.set_xlabel("re-labeled $-$ annotated (s)")
 
     # B, C: video motion
     lags = mot["lags_s"]
     sel = (lags >= XLIM[0]) & (lags <= XLIM[1])
     for ax, end in ((ax_b, "onset"), (ax_c, "offset")):
-        curve(ax, lags[sel], mot[f"all_boris_{end}"][:, sel], ALL_C, f"BORIS, all chases (n = {len(mot[f'all_boris_{end}'])})",
+        curve(ax, lags[sel], mot[f"all_boris_{end}"][:, sel], ALL_C, f"annotated, all chases (n = {len(mot[f'all_boris_{end}'])})",
               lw=0.9, ls="--", band=False)
-        mb = curve(ax, lags[sel], mot[f"pair_boris_{end}"][:, sel], BORIS_C, "BORIS, re-labelled chases")
-        ma = curve(ax, lags[sel], mot[f"pair_author_{end}"][:, sel], AUTHOR_C, "author, same chases")
+        mb = curve(ax, lags[sel], mot[f"pair_boris_{end}"][:, sel], BORIS_C, "annotated, re-labeled chases")
+        ma = curve(ax, lags[sel], mot[f"pair_author_{end}"][:, sel], AUTHOR_C, "re-labeled, same chases")
         ax.axvline(0, color=C.GREY, lw=0.8, zorder=0)
         ax.set_xlim(*XLIM)
         ax.set_xlabel(f"time relative to chase {end} (s)")
@@ -175,8 +175,8 @@ def main() -> None:
         ev_b = list(zip(pairs.loc[ok, "recording"], pairs.loc[ok, f"boris_{end}_rec_s"]))
         ev_a = list(zip(pairs.loc[ok, "recording"], pairs.loc[ok, f"{end}_rec_s"]))
         Mb, Ma = kernel_rates(ev_b, times, sigma), kernel_rates(ev_a, times, sigma)
-        curve(ax, LAG, Mb, BORIS_C, f"BORIS {end}s")
-        curve(ax, LAG, Ma, AUTHOR_C, f"author {end}s")
+        curve(ax, LAG, Mb, BORIS_C, f"annotated {end}s")
+        curve(ax, LAG, Ma, AUTHOR_C, f"re-labeled {end}s")
         ax.axvline(0, color=C.GREY, lw=0.8, zorder=0)
         ax.set_xlim(*XLIM)
         ax.set_xlabel(f"time relative to chase {end} (s)")
