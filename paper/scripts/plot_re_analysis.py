@@ -878,7 +878,7 @@ def draw_fixed_forest(ax: plt.Axes, slope_df: pd.DataFrame) -> None:
         transform=label_trans,
         ha="left",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_NEUTRAL,
         family="monospace",
     )
@@ -889,7 +889,7 @@ def draw_fixed_forest(ax: plt.Axes, slope_df: pd.DataFrame) -> None:
         transform=label_trans,
         ha="left",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_STRUCTURE,
         family="monospace",
     )
@@ -917,7 +917,7 @@ def draw_fixed_forest(ax: plt.Axes, slope_df: pd.DataFrame) -> None:
             transform=label_trans,
             ha="right",
             va="center",
-            fontsize=8.5,
+            fontsize=8,  # row labels: 8 pt, as tick labels
             color=C_TEXT,
         )
         rr_text = f"{r['rr']:>4.2f}   [{r['rr_lo']:>4.2f}, {r['rr_hi']:>4.2f}]"
@@ -939,7 +939,7 @@ def draw_fixed_forest(ax: plt.Axes, slope_df: pd.DataFrame) -> None:
             transform=label_trans,
             ha="left",
             va="center",
-            fontsize=7.5,
+            fontsize="small",
             color=C_STRUCTURE,
             family="monospace",
         )
@@ -1032,7 +1032,7 @@ def draw_variance_forest(ax: plt.Axes, var_df: pd.DataFrame) -> None:
         transform=label_trans,
         ha="left",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_NEUTRAL,
         family="monospace",
     )
@@ -1043,7 +1043,7 @@ def draw_variance_forest(ax: plt.Axes, var_df: pd.DataFrame) -> None:
         transform=label_trans,
         ha="left",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_STRUCTURE,
         family="monospace",
     )
@@ -1094,7 +1094,7 @@ def draw_variance_forest(ax: plt.Axes, var_df: pd.DataFrame) -> None:
             transform=label_trans,
             ha="right",
             va="center",
-            fontsize=8.5,
+            fontsize=8,  # row labels: 8 pt, as tick labels
             color=C_TEXT,
         )
         sigma_text = f"{r['med']:>4.2f}   [{r['lo']:>4.2f}, {r['hi']:>4.2f}]"
@@ -1121,7 +1121,7 @@ def draw_variance_forest(ax: plt.Axes, var_df: pd.DataFrame) -> None:
             transform=label_trans,
             ha="left",
             va="center",
-            fontsize=7.5,
+            fontsize="small",
             color=diag_color,
             family="monospace",
         )

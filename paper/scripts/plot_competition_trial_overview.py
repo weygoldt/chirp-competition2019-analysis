@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/plot_competition_trial_overview.py).
 # Changes: input JSON from PROCESSED (rebuilt by make_competition_overview.py, chirps from
-# PAPER_DETECTIONS); figures via paper_config.figure().
+# PAPER_DETECTIONS); figures via paper_config.figure(); 17.4 cm wide (no tight bounding box, which
+# cut it to 17.0 cm), row labels 8 pt, annotations 'small' (were 7 pt and 'x-small').
 import json
 from pathlib import Path
 
@@ -52,7 +53,7 @@ def setup_plot():
         a.set_ylim(0, 1)
         a.set_yticks([0, 1])
         a.tick_params(pad=50)
-        a.set_yticklabels(ticklabels[i], fontsize="small", ha="left")
+        a.set_yticklabels(ticklabels[i], ha="left")  # tick labels: 8 pt
 
     axes[-1].set_xlabel("Time [h]")
     axes[-1].spines["left"].set_visible(False)
@@ -62,13 +63,14 @@ def setup_plot():
     axes[0].spines["bottom"].set_visible(False)
     axes[0].set_xticks([])
 
+    # fixed margins, no tight bounding box: the figure stays 17.4 cm wide
     plt.subplots_adjust(
         hspace=0.3,
         wspace=0.1,
-        top=0.97,
-        bottom=0.12,
+        top=0.96,
+        bottom=0.135,
         left=0.13,
-        right=0.98,
+        right=0.99,
     )
     return fig, axes
 
@@ -209,7 +211,7 @@ def main():
         0.99,
         0.98,
         "\\textit{" + f"{rec}" + "}",
-        fontsize="x-small",
+        fontsize="small",
         color="grey",
         transform=axes[0].transAxes,
         verticalalignment="top",
@@ -221,7 +223,7 @@ def main():
         0.75,
         0.925,
         "\\textit{Inactive period (light on)}",
-        fontsize=7,
+        fontsize="small",
         color="white",
         transform=axes[0].transAxes,
         verticalalignment="center",
@@ -232,7 +234,7 @@ def main():
         0.25,
         0.925,
         "\\textit{Active period (light off)}",
-        fontsize=7,
+        fontsize="small",
         color="white",
         transform=axes[0].transAxes,
         verticalalignment="center",
@@ -244,7 +246,7 @@ def main():
         0.01,
         0.19,
         "Winner EOD$f$",
-        fontsize=7,
+        fontsize="small",
         color=adjust_alpha(Wc, 0.5),
         transform=axes[0].transAxes,
         verticalalignment="center",
@@ -255,7 +257,7 @@ def main():
         0.01,
         0.61,
         "Loser EOD$f$",
-        fontsize=7,
+        fontsize="small",
         color=adjust_alpha(Lc, 0.5),
         transform=axes[0].transAxes,
         verticalalignment="center",
@@ -271,7 +273,6 @@ def main():
         plt.savefig(
             targetpath.with_suffix(f".{fmt}"),
             dpi=300,
-            bbox_inches="tight",
         )
 
     plt.show()

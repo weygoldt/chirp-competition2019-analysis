@@ -138,10 +138,10 @@ def setup_supplement_plot():
     fig.subplots_adjust(
         hspace=0.5,
         wspace=0.5,
-        top=0.91,
+        top=0.89,  # letters and x-labels inside the page
         right=0.98,
         left=0.1,
-        bottom=0.25,
+        bottom=0.27,
     )
 
     return fig, axes
@@ -331,7 +331,9 @@ def plot_timing_pdfs(axes, timing_data):
         "Inter-chirp\ninterval [s]",
     )
     for i, ax in enumerate(axes):
-        ax.set_xlim(-0.1 * maxx[i], xticks[i][-1])
+        # pad left of 0: a tenth of the shown range (H's data reach far beyond its axis, and
+        # a tenth of their maximum pushed its density under the annotation)
+        ax.set_xlim(-0.1 * min(maxx[i], xticks[i][-1]), xticks[i][-1])
         ax.set_xticks(xticks[i])
         ax.set_xlabel(xlabels[i])
         if i == 0:

@@ -341,8 +341,8 @@ def draw_conditional_effect(
         zorder=1,
     )
 
-    ax.set_xlabel(xlabel, fontsize=9, color=C_TEXT)
-    ax.set_ylabel(r"chirp rate ($\times$ grid mean)", fontsize=9, color=C_TEXT)
+    ax.set_xlabel(xlabel, color=C_TEXT)  # axis labels: 8 pt
+    ax.set_ylabel(r"chirp rate ($\times$ grid mean)", color=C_TEXT)  # axis labels: 8 pt
     ax.tick_params(axis="both", length=3, width=0.5, color=C_STRUCTURE, labelsize=8)
 
 
@@ -412,7 +412,7 @@ def draw_ridge_inset(
         transform=ax.transAxes,
         ha="right",
         va="top",
-        fontsize=6.5,
+        fontsize="small",  # the inset's text: 'small', as in-panel annotations
         color=C_TEXT,
         family="monospace",
     )
@@ -422,12 +422,12 @@ def draw_ridge_inset(
     ax.set_yticks([])
     ax.set_xlabel(
         "rate multiplier per doubling",
-        fontsize=7,
+        fontsize="small",
         color=C_TEXT,
         labelpad=2,
     )
     ax.tick_params(
-        axis="x", length=2, width=0.4, color=C_STRUCTURE, labelsize=6.5, pad=1
+        axis="x", length=2, width=0.4, color=C_STRUCTURE, labelsize="small", pad=1
     )
     ax.set_facecolor("white")
 
@@ -475,18 +475,17 @@ def draw_model_heatmap(
 
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
-    ax.set_xlabel("previous inter-chase interval (s)", fontsize=9, color=C_TEXT)
-    ax.set_ylabel("chase duration (s)", fontsize=9, color=C_TEXT)
+    ax.set_xlabel("previous inter-chase interval (s)", color=C_TEXT)  # axis labels: 8 pt
+    ax.set_ylabel("chase duration (s)", color=C_TEXT)  # axis labels: 8 pt
     ax.tick_params(axis="both", length=3, width=0.5, color=C_STRUCTURE, labelsize=8)
 
     cbar = fig.colorbar(mesh, cax=cax, orientation="vertical")
     cbar.set_label(
         r"predicted chirp rate ($\times$ grid mean)",
-        fontsize=7.5,
-        color=C_TEXT,
+        color=C_TEXT,  # colour-bar labels: 8 pt, as the axis labels
         labelpad=5,
     )
-    cbar.ax.tick_params(length=2, width=0.4, color=C_STRUCTURE, labelsize=7)
+    cbar.ax.tick_params(length=2, width=0.4, color=C_STRUCTURE, labelsize=8)
     cbar.outline.set_visible(False)
 
 
@@ -521,18 +520,17 @@ def draw_raw_heatmap(
 
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
-    ax.set_xlabel("previous inter-chase interval (s)", fontsize=9, color=C_TEXT)
-    ax.set_ylabel("chase duration (s)", fontsize=9, color=C_TEXT)
+    ax.set_xlabel("previous inter-chase interval (s)", color=C_TEXT)  # axis labels: 8 pt
+    ax.set_ylabel("chase duration (s)", color=C_TEXT)  # axis labels: 8 pt
     ax.tick_params(axis="both", length=3, width=0.5, color=C_STRUCTURE, labelsize=8)
 
     cbar = fig.colorbar(mesh, cax=cax, orientation="vertical")
     cbar.set_label(
         f"mean chirp count per {WINDOW_WIDTH_S:.0f}s window",
-        fontsize=7.5,
-        color=C_TEXT,
+        color=C_TEXT,  # colour-bar labels: 8 pt, as the axis labels
         labelpad=5,
     )
-    cbar.ax.tick_params(length=2, width=0.4, color=C_STRUCTURE, labelsize=7)
+    cbar.ax.tick_params(length=2, width=0.4, color=C_STRUCTURE, labelsize=8)
     cbar.outline.set_visible(False)
 
 
@@ -803,7 +801,7 @@ def main() -> None:
 
     letter_axes = [axes["prev"], axes["d"], axes["model"], axes["raw"]]
     xoffsets = [-0.2, -0.15] * 2
-    yoffsets = [1.1, 1.1, 1.0, 1.0]
+    yoffsets = [1.08, 1.08, 1.0, 1.0]
     letter_subplots(axes=letter_axes, xoffset=xoffsets, yoffset=yoffsets)
 
     for fmt in formats:

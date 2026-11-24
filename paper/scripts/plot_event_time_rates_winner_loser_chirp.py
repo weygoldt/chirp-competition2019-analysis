@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/plot_event_time_rates_winner_loser_chirp.py; made the paper PDF, 16 x 11 cm).
 # Changes: JSONs from $PAPER_OUT/data/processed/event_time_rates, figures via paper_config.figure (png, pdf, svg as before);
-# rate-axis limits extended (loser 10 -> 15, winner 4 -> 6 /min) because the v2 rates would be clipped.
+# rate-axis limits extended (loser 10 -> 15, winner 4 -> 6 /min) because the v2 rates would be clipped;
+# 17.4 x 12 cm (full width; was 16 x 11 cm), the n annotations 'small' (were 'x-small').
 import json
 from pathlib import Path
 
@@ -61,13 +62,13 @@ signifindicatorkwargs = dict(
 def setup_plot():
     cm = 1 / 2.54
     dpi = 300
-    figsize = (16 * cm, 11 * cm)
+    figsize = (17.4 * cm, 12 * cm)  # full width; the aspect of the former 16 x 11 cm
     fig = plt.figure(figsize=figsize, dpi=dpi)
     meta_spacings = {
         "left": 0.09,
-        "right": 0.98,
+        "right": 0.99,
         "top": 0.92,
-        "bottom": 0.13,
+        "bottom": 0.12,
         "hspace": 0.35,
         "wspace": 0.2,
     }
@@ -414,7 +415,7 @@ def plot_conv_rates_heatmap(ax, data):
         ha="right",
         transform=ax.transAxes,
         color="grey",
-        fontsize="x-small",
+        fontsize="small",
     )
 
     ax.imshow(

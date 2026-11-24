@@ -138,7 +138,7 @@ def setup_plot():
 
     plt.subplots_adjust(
         top=0.99,
-        bottom=0.12,
+        bottom=0.13,  # the x-labels' descenders inside the page
         left=0.09,
         right=0.99,
         wspace=0.2,
@@ -362,6 +362,7 @@ def plot_scatter(axes, limits, width, height, undershoot, examples):
     cbar = plt.colorbar(points, cax=cb_ax, orientation="horizontal", extend="min")
     cbar.set_label("Undershoot [Hz]", fontsize="small")
     cbar.set_ticks([-limits["undershoot"], 0])
+    cbar.ax.tick_params(labelsize="small")  # an in-panel key: 'small', as its label
     cbar.ax.xaxis.set_ticks_position("bottom")
     cbar.ax.xaxis.set_label_position("bottom")
 
@@ -380,6 +381,7 @@ def plot_hexbin(axes, limits, width, height):
     cbar.ax.xaxis.set_ticks_position("bottom")
     cbar.ax.xaxis.set_label_position("bottom")
     cbar.set_ticks([1, 10, 100], labels=["1", "10", "100"])
+    cbar.ax.tick_params(labelsize="small")  # an in-panel key: 'small', as its label
     cbar.ax.minorticks_off()
 
 

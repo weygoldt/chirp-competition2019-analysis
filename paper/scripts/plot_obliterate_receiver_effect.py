@@ -396,7 +396,7 @@ def draw_schematic(ax: plt.Axes) -> None:
         f"({contamination_pct():.1f} \\% of rows affected)",
         ha="center",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_NEGATIVE,
         style="italic",
     )
@@ -565,7 +565,7 @@ def draw_forest(ax: plt.Axes, df: pd.DataFrame) -> None:
         transform=label_trans,
         ha="left",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_STRUCTURE,
         fontweight="medium",
         family="monospace",
@@ -579,7 +579,7 @@ def draw_forest(ax: plt.Axes, df: pd.DataFrame) -> None:
         transform=label_trans,
         ha="left",
         va="bottom",
-        fontsize=7,
+        fontsize="small",
         color=C_NEUTRAL,
         fontweight="medium",
         family="monospace",
@@ -612,7 +612,7 @@ def draw_forest(ax: plt.Axes, df: pd.DataFrame) -> None:
             transform=label_trans,
             ha="right",
             va="center",
-            fontsize=8.5,
+            fontsize=8,  # row labels: 8 pt, as tick labels
             color=C_TEXT,
         )
         # Model identifier (light grey, monospace; underscores escaped for
@@ -625,7 +625,7 @@ def draw_forest(ax: plt.Axes, df: pd.DataFrame) -> None:
             transform=label_trans,
             ha="left",
             va="center",
-            fontsize=7.5,
+            fontsize="small",
             color=C_STRUCTURE,
             family="monospace",
         )

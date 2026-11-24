@@ -390,13 +390,13 @@ def draw_paired_panel(
                 float(np.median(sub["obs"])),
                 "losers" if status == 0 else "winners",
                 color=color,
-                fontsize=8,
+                fontsize="small",
                 va="center",
                 ha="left",
             )
         ax.set_xlim(right=1.6)
 
-    ax.set_ylabel(ylabel, fontsize=8.5, color=C_TEXT)
+    ax.set_ylabel(ylabel, color=C_TEXT)  # axis labels: 8 pt
     if yscale == "log":
         ax.set_yscale("log")
 
@@ -479,7 +479,7 @@ def draw_forest_panel(
     else:
         ax.set_yticks([])
 
-    ax.set_xlabel(xlabel, fontsize=8.5, color=C_TEXT)
+    ax.set_xlabel(xlabel, color=C_TEXT)  # axis labels: 8 pt
     sns.despine(ax=ax, left=not show_yticks, trim=True, offset=3)
     return drawn
 
@@ -552,7 +552,7 @@ def add_legend(fig: plt.Figure) -> None:
         bbox_to_anchor=(0.5, 0.08),
         ncol=4,
         frameon=False,
-        fontsize=8,
+        fontsize="small",
         handlelength=1.2,
         columnspacing=1.4,
         handletextpad=0.5,
@@ -623,7 +623,7 @@ def main() -> None:
         "Presence",
         loc="center",
         pad=title_pad,
-        fontsize=9.5,
+        fontsize=8,  # panel titles: 8 pt
         color=C_TEXT,
         fontweight="medium",
     )
@@ -631,7 +631,7 @@ def main() -> None:
         "Intensity",
         loc="center",
         pad=title_pad,
-        fontsize=9.5,
+        fontsize=8,  # panel titles: 8 pt
         color=C_TEXT,
         fontweight="medium",
     )
@@ -639,7 +639,7 @@ def main() -> None:
         "Combined",
         loc="center",
         pad=title_pad,
-        fontsize=9.5,
+        fontsize=8,  # panel titles: 8 pt
         color=C_TEXT,
         fontweight="medium",
     )
@@ -655,6 +655,10 @@ def main() -> None:
             axes["comb_bot"],
         ],
         letters=["A1", "B1", "C1", "A2", "B2", "C2"],
+        # left of the y-labels (B1's reaches the top of its axes); top row at the
+        # height of the column titles
+        xoffset=-0.25,
+        yoffset=[1.1] * 3 + [1.0] * 3,
     )
 
     add_legend(fig)

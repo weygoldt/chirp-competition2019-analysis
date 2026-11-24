@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/plot_chirp_winner_loser_trial_summary.py).
 # Changes: inputs from $PAPER_OUT/data/processed, figure to paper_config.figure(); seeded jitter;
-# the printed per-trial medians also go to write_stats ("status_figure").
+# the printed per-trial medians also go to write_stats ("status_figure"); 8.7 cm wide, half the
+# full width (no tight bounding box, which cut it to 8.3 cm); legends and the n 'small'.
 import os
 import json
 from pathlib import Path
@@ -59,7 +60,7 @@ def setup_plot():
     fig, axes = plt.subplots(
         2,
         1,
-        figsize=(8.5 * cm, 10 * cm),
+        figsize=(8.7 * cm, 10 * cm),  # half width (placed at 50 %)
         dpi=300,
         height_ratios=[1, 0.25],
     )
@@ -173,7 +174,7 @@ def plot_data(ax):
         f"n = {n_pairs} competitions",
         ha="left",
         va="top",
-        fontsize=8,
+        fontsize="small",
         transform=ax.transAxes,
     )
 
@@ -224,7 +225,7 @@ def plot_data(ax):
             male_kde,
         ],
         loc="upper left",
-        fontsize=6,
+        fontsize="small",
         frameon=False,
         handlelength=1,
         handleheight=1,
@@ -305,7 +306,7 @@ def plot_forest(ax):
     ax.set_ylim(-0.5, len(ypos) - 1 + scaler)
     ax.legend(
         loc="upper right",
-        fontsize=6,
+        fontsize="small",
         frameon=False,
         handlelength=1,
         bbox_to_anchor=(0.9, 1.1),
@@ -324,10 +325,11 @@ def main():
     letter_subplots(xoffset=[-0.3, -0.3], yoffset=[0.98, 0.95])
 
     sns.despine(trim=True, offset=5)
-    plt.subplots_adjust(left=0.28, right=1, top=0.99, bottom=0.13, hspace=0.3)
+    # fixed margins, no tight bounding box: the figure stays 8.7 cm wide
+    plt.subplots_adjust(left=0.245, right=0.975, top=0.98, bottom=0.12, hspace=0.3)
 
     for fmt in formats:
-        fig.savefig(targetpath.with_suffix(f".{fmt}"), dpi=300, bbox_inches="tight")
+        fig.savefig(targetpath.with_suffix(f".{fmt}"), dpi=300)
     write_stats("status_figure", stats)
 
     plt.show()

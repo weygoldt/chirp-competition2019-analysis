@@ -136,8 +136,10 @@ Written down from the paper's figures (`manuscript/figures/`:
 pipeline figures) and `scripts/style.py`; the v2 figures follow it, with
 the author's second-round rules on top (below).
 
-- **Size.** Full width 17.4 cm (printed at 16 cm, x0.92), heights 8-13 cm;
-  half width 8.5 cm. 16-cm figures exist (what-is-a-chirp, event-time rates).
+- **Size.** Full width 17.4 cm, placed at `width: 100%` (printed at 16 cm,
+  x0.92), heights 8-13 cm; half width 8.7 cm, placed at `width: 50%` (the
+  same x0.92, so text prints at one size everywhere). No tight bounding
+  box: the width set in the script is the width of the PDF.
 - **Type.** Noto Sans through LaTeX (`set_light_style`), 8-pt base: tick
   labels, axis labels and the few titles 8 pt; annotations, legends, keys
   and per-bin n "small" = 6.7 pt (6.1 pt printed); nothing smaller (checked

@@ -334,7 +334,7 @@ def plot_cumulative(axes, data):
     axes[0].legend(
         frameon=False,
         fontsize="small",
-        bbox_to_anchor=(-0.05, 1.08),
+        bbox_to_anchor=(-0.05, 1.2),  # above the observed curve ("Observed" touched its band)
         loc="upper left",
         handlelength=1,
         handleheight=1,

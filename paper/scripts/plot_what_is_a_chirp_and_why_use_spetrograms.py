@@ -1,6 +1,7 @@
 # Ported from chirp_competition d040123 (src/plot_what_is_a_chirp_and_why_use_spetrograms.py).
 # Changes: spectrogram helpers from legacy_spectrogram (NumPy copy of gridtools v1/torchaudio);
-# input from PROCESSED; figure via paper_config.figure(); EOD noise seeded with SEED.
+# input from PROCESSED; figure via paper_config.figure(); EOD noise seeded with SEED;
+# 17.4 x 10.9 cm (was 16 x 10 cm): full width, like the other figures.
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -251,7 +252,7 @@ def main():
     S_longchirp = Image.fromarray(S_longchirp).resize((nsamples, S_longchirp.shape[0]))
 
     cm = 1 / 2.54
-    figsize = (16 * cm, 10 * cm)
+    figsize = (17.4 * cm, 10.9 * cm)  # full width; the aspect of the former 16 x 10 cm
     fig, ax = plt.subplots(
         4,
         2,
