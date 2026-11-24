@@ -22,3 +22,12 @@ ac6ac98e49da9542ae18499eaf7e7cc8d7cecf96c279ad1790dc640a4fe602e4  flattened_chir
 f4d9f5d0fe9ee9349cf74aba47a9357389e6b58daf287aa8557fd989dc122dac  flattened_heights.npy
 e54c06b958fbeadbd90204464bfa915ba686d2a16c6a867838c24fa2fbf69da7  flattened_widths.npy
 ```
+
+# chase_validation (the author's re-labelled chases)
+
+`paper/inputs/chase_validation/` (git-ignored): a frozen copy of the chase review session `offsets_v1`
+(`/mnt/data1/chirp_v2/labels/chase_review_2019/offsets_v1/`): `session.json` (the BORIS chases, LED maps
+and video facts the review tool was built from) and `revisions.jsonl` (every save of the author's review;
+the latest save of a chase counts). Read by `paper/scripts/chase_validation.py` (chain `validation`).
+
+Frozen: NOT YET (the author is still labelling; the copy and its sha256 follow when the set is closed).

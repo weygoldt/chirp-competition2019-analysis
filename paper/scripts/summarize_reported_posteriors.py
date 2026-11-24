@@ -99,13 +99,21 @@ def main() -> None:
          "stats_bayesian_logreg_loser_chirps_around_chasing_offset_loser_trace.nc"),
         ("offset.winner", f"offset: P(winner chirp in {window})",
          "stats_bayesian_logreg_loser_chirps_around_chasing_offset_winner_trace.nc"),
-        ("before_offset.loser", "before offset: P(loser chirps before offset)",
-         "stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset_trace.nc"),
     ]:
         if not (PROC / file).exists():
             print(f"missing {PROC / file}")
             continue
         rows.append(summary(key, name, invlogit(draws(PROC / file, "Intercept")), "probability"))
+
+    # Loser chirping starts before chasing offset (stats_bayesian_logreg_loser_chirping_starts_before_
+    # chasing_offset.py): odds ratio relative to symmetric timing, primary window, three offset timings.
+    for timing in ("boris", "author", "shifted"):
+        nc = PROC / "offset_chirp_start" / f"{timing}_w2_trace.nc"
+        if not nc.exists():
+            print(f"missing {nc}")
+            continue
+        rows.append(summary(f"offset_chirp_start.{timing}", f"chirping starts before offset (+-2 s), {timing}: "
+                            "odds ratio vs symmetric timing", np.exp(draws(nc, "Intercept")), "x"))
 
     # Inter-chase interval Gamma GLMMs: factor on the expected interval when the
     # loser chirped.

@@ -71,6 +71,9 @@ RESULTS = OUT / "results"
 FIGURES = _env("PAPER_FIGURE_DIR", OUT / "figures")
 PRIMARY = os.environ.get("PAPER_PRIMARY", "rtdetr_gapfill_t080")
 PRIMARY_OUT = PAPER / "output" / PRIMARY
+# The author's blind re-labelling of chase onsets / offsets (paper/chase_review): a frozen copy of the
+# session (session.json) and the saves (revisions.jsonl), with their sha256 in paper/inputs/README.md.
+CHASE_VALIDATION = _env("CHASE_VALIDATION", PAPER / "inputs" / "chase_validation")
 
 # Seed for scripts that were unseeded in the old analysis (seeded ones keep theirs).
 SEED = 42

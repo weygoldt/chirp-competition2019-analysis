@@ -90,7 +90,14 @@ chain_hurdle() {       # Fig. hurdle_decomposition (+ offset logistic regression
   step plot_hurdle_decomposition.py
   heavy offset-logreg 24G stats_bayesian_logreg_loser_chirps_around_chasing_offset.py
   step make_chirps_around_chasing_obs.py   # reconstructed writer (audit O5)
-  heavy before-after 16G stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset.py
+}
+
+chain_validation() {   # timing validation of the BORIS chases (author's re-labelling) and the
+                       # chirping-starts-before-offset test (replaced the 10-s before/after regression)
+  step chase_validation.py
+  heavy chirp-start 16G stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset.py
+  heavy validation-motion 16G chase_validation_motion.py   # reads the videos
+  step plot_chase_validation.py
 }
 
 chain_echo() {         # echo-response numbers (no figure)
@@ -146,7 +153,7 @@ check_window() { tagged check step offset_window.py --check; }
 # v2figs last: its extraction knows only the runs in v2_fig_extract.RUNS (the
 # pipeline figures belong to the primary run), so on a sensitivity run such as
 # rtdetr_gapfill_t090 it stops the script after all analyses are done.
-ALL=(counts status agonistic rates interchase coupling gamma receiver hurdle echo descriptive allocation posteriors v2figs)
+ALL=(counts status agonistic rates interchase coupling gamma receiver hurdle validation echo descriptive allocation posteriors v2figs)
 chains=("$@")
 (( ${#chains[@]} )) || chains=("${ALL[@]}")
 for c in "${chains[@]}"; do

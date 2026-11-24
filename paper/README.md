@@ -75,8 +75,9 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
 | `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline` (root env), plot | `v2_figures/`, evaluation outputs under `$CHIRP_DATA` |
 | `fig:failure_modes` (`plot_v2_failure_modes`, Fig. S4; replaced `fig:performances_supp`) | v2figs | plot | `v2_figures/` |
+| `fig:chase_validation` (`plot_chase_validation`, supplement; new 2026-11-24) | validation | `chase_validation` (the author's re-labelled chases vs BORIS), `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset`, `chase_validation_motion` (reads the videos), plot | `chase_validation/`, `offset_chirp_start/` |
 | pipeline numbers of the Methods (no figure) | v2figs | `summarize_pipeline` (templates, scenes, expert benchmark, real-data session, production run, from their result files under `$CHIRP_DATA`) | — |
-| reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `make_chirps_around_chasing_obs` (reconstructed writer, audit O5), `stats_bayesian_logreg_loser_chirps_before_vs_after_chasing_offset`, `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
+| reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `make_chirps_around_chasing_obs` (reconstructed writer, audit O5; its only reader, the 10-s before/after regression, was replaced on 2026-11-24 by the chirping-starts-before-offset test of chain validation), `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
 
 The sources and every plotted number of the three new v2 figures, with
 caption drafts, are in `v2_figures.md`. `compare_detection_counts.py`
@@ -102,6 +103,19 @@ after the offset, frame-exact), with the winner's and loser's chirps on a timeli
 and saves your own onset and offset next to the annotator's (never over them), to
 find out how the annotator defined onset and offset. See
 [`chase_review/README.md`](chase_review/README.md).
+
+**Timing validation of the chases (chain `validation`, 2026-11-24).** The BORIS onsets and offsets
+were set by another annotator; on video, the BORIS onsets fall on the peak of the fishes' motion and the
+offsets on its return to rest. The author re-labelled a random sample in the review tool
+(`paper/chase_review`, blind to the BORIS marks and the chirps) with a dominant-centred criterion: onset =
+the dominant accelerates towards the subordinate, offset = the dominant decelerates and/or changes its
+trajectory. `chase_validation.py` reads a frozen copy of those labels (`paper/inputs/chase_validation/`,
+sha256 in `paper/inputs/README.md`; `CHASE_VALIDATION` overrides the place), checks the BORIS times of the
+review session against `load_and_convert_boris_events`, matches the author's chases to BORIS by overlap
+and reports the shifts. `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset.py` replaces the
+10-s before/after regression: it asks whether loser chirping starts before the offset more or less often
+than symmetric timing predicts (1 - 0.5^k for k chirps in the window, a GLMM offset term), with the BORIS,
+the author's and the median-shifted BORIS offsets.
 
 **The window around chase offsets.** Several analyses count chirps from
 shortly before to some seconds after each chase offset (the "offset window";
@@ -184,7 +198,10 @@ script owns each namespace:
 | `offset_window` | `offset_window` | the window around chase offsets (the primary's, in every run), its width, the unrounded region, the rule |
 | `echo` | `stats_bayesian_logreg_echo_responses_new` | observed, chance and model echo fractions, diagnostics |
 | `chase_windows` | `summarize_chirp_event_correlation_around_chasing` | chases, merged chases, overlap of the offset windows |
-| `offset_logreg`, `before_offset_logreg` | the two offset logistic regressions | events, observed fractions, model estimates |
+| `offset_logreg` | the offset logistic regression | events, observed fractions, model estimates |
+| `chase_validation` | `chase_validation` | the author's re-labelling of BORIS chases: reviews, matched chases, onset / offset shifts (median, IQR, share earlier, dependence on duration and recording), segmentation |
+| `offset_chirp_start` | `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset` | loser chirping starts before chasing offset vs symmetric timing: BORIS, author and shifted offsets, windows 1-10 s (replaced `before_offset_logreg`) |
+| `chase_validation_figure` | `plot_chase_validation` | the numbers of the validation figure's panels |
 | `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers |
 | `coupling` | `stats_chirp_coupling` | data anchors, overdispersion, LOO, Pareto k |
 | `receiver_effect_fits`, `receiver_effect_figure` | `stats_chirp_affects_chasing`, `plot_obliterate_receiver_effect` | n and divergences per fit; window disagreement |
