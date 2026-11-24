@@ -30,4 +30,12 @@ e54c06b958fbeadbd90204464bfa915ba686d2a16c6a867838c24fa2fbf69da7  flattened_widt
 and video facts the review tool was built from) and `revisions.jsonl` (every save of the author's review;
 the latest save of a chase counts). Read by `paper/scripts/chase_validation.py` (chain `validation`).
 
-Frozen: NOT YET (the author is still labelling; the copy and its sha256 follow when the set is closed).
+Frozen 2026-11-24 (last save 10:15:53 UTC; 116 saves of 100 reviewed chases, 85 of them whole-window
+reviews). Read-only snapshot beside the labels: `offsets_v1/frozen_2026-11-24/`.
+
+sha256:
+
+```
+eacf1f8129cf0d8d24b3230f61e04035530494f454eb528e3b0bcaffef8b74cf  session.json
+1c000006918e5d97538fcc7a2f509fbc45351d1765fc06eb740204644ac6fbab  revisions.jsonl
+```
