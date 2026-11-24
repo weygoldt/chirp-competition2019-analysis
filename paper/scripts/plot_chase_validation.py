@@ -1,18 +1,19 @@
-"""Figure (supplement): timing of the BORIS chase annotations against the author's re-labelling.
+"""Figure (supplement): timing of the BORIS chase annotations against the author's re-labeling.
 
-A   shifts of the author's onsets and offsets relative to BORIS (author - BORIS), one dot per chase,
-    median and interquartile range
-B   video motion around onsets: BORIS onsets of all analysed chases, and BORIS vs author onsets of the
-    re-labelled chases (mean, 95 % bootstrap band over chases)
+A   shifts of the re-labeled onsets and offsets relative to BORIS (re-labeled - annotated): kernel density
+    (Gaussian, bandwidth KDE_BW_S), interquartile range shaded, median as a line
+B   video motion around onsets: BORIS onsets of all analysed chases (dashed), BORIS (black) and re-labeled
+    (indigo) onsets of the matched chases (mean, 95 % bootstrap band over chases)
 C   the same around offsets
-D   loser chirp rate around offsets, BORIS vs author offsets of the same re-labelled chases
-E   loser rise rate around onsets, BORIS vs author onsets of the same re-labelled chases
+D   loser chirp rate around chase onsets: Fig. 6's panel B1 (identical numbers: the JSON it draws), zoomed to
+    RATE_XLIM; the same rate for every chase shifted by the median re-labeling shift (dashed) and for the
+    re-labeled onsets of the matched chases (indigo); Fig. 6's jittered null in grey
+E   the same around chase offsets (Fig. 6, C1)
 
-Rates: Gaussian kernel per event (sigma 0.3 s for chirps, 0.5 s for the sparser rises), averaged over
-chases; bands are 95 % bootstrap intervals over chases. Inputs: ``chase_validation/pairs.csv``,
-``chase_validation/motion.npz``, the run's chirps (``chirps.load_chirps``) and the loser's rises
-(``analyze_event_time_rates_trial.load_data``). The numbers the caption cites go to write_stats
-("chase_validation_figure").
+D, E: medians and 2.5th-97.5th percentiles of the leave-out resamples, as in Fig. 6 (``chase_event_rates``);
+the shifted and re-labeled rates come from ``chase_validation_rates.py``. Inputs: ``chase_validation/pairs.csv``,
+``motion.npz``, ``event_rates.npz`` and ``event_time_rates/lchirps@agon.json``, ``lchirps@agoff.json``. The
+numbers the caption cites go to write_stats ("chase_validation_figure").
 """
 
 from __future__ import annotations
@@ -26,14 +27,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
-from analyze_event_time_rates_trial import load_data
+import chase_event_rates as cer
 from manuscript_stats import write_stats
-from paper_config import DATA_ROOT, FIGURES, PROCESSED
-from style import letter_subplots, set_light_style
+from paper_config import FIGURES, PROCESSED
+from style import letter_subplots, loser_color, other_color, set_light_style
 
-# The figure helpers and palette of v2_fig_common, copied: importing that module needs the run to be one
-# of its pipeline runs (v2_fig_common.RUNS), so the figure failed in the sensitivity run at threshold 0.9.
+# The figure helpers of v2_fig_common, copied: importing that module needs the run to be one of its pipeline
+# runs (v2_fig_common.RUNS), so the figure failed in the sensitivity run at threshold 0.9.
 _CM = 1 / 2.54
 _ANNOT_FS = "small"
 
@@ -41,7 +44,7 @@ _ANNOT_FS = "small"
 def _rc_tweaks() -> None:
     mpl.rcParams.update({"lines.markeredgewidth": 0.5, "xtick.major.size": 3, "ytick.major.size": 3,
                          "xtick.minor.size": 1.8, "ytick.minor.size": 1.8, "xtick.major.width": 0.8,
-                         "ytick.major.width": 0.8, "axes.linewidth": 0.8, "legend.handlelength": 1.4,
+                         "ytick.major.width": 0.8, "axes.linewidth": 0.8, "legend.handlelength": 1.8,
                          "legend.fontsize": _ANNOT_FS, "axes.titlesize": "medium", "axes.titlepad": 3})
 
 
@@ -71,17 +74,26 @@ def _save(fig, name):
     return paths
 
 
-C = SimpleNamespace(CM=_CM, INK="k", CORAL="#e2655c", MUTED="#6e6e6e", GREY="#a0a0a0", rc_tweaks=_rc_tweaks,
-                    axes_cm=_axes_cm, letters_cm=_letters_cm, save=_save)
+C = SimpleNamespace(CM=_CM, INK="k", MUTED="#6e6e6e", rc_tweaks=_rc_tweaks, axes_cm=_axes_cm,
+                    letters_cm=_letters_cm, save=_save)
 
 NAME = "plot_chase_validation"
-BORIS_C, AUTHOR_C, ALL_C = C.INK, C.CORAL, C.MUTED
-LAG = np.arange(-6, 6.0001, 0.02)
+# Palette of Figs. 5-7: the re-labeled chases in the chasing indigo, everywhere; the annotated chases in black
+# (video motion) or, for the loser's chirp rate, in Fig. 6's loser teal; Fig. 6's grey null.
+RELABEL_C, ANNOT_C, ALL_C, LOSER_C, NULL_C = other_color, C.INK, C.MUTED, loser_color, "grey"
 REF = {"color": C.INK, "lw": 0.5, "ls": ":", "zorder": 0}  # the event time (reference line)
-XLIM = (-6, 6)
-XTICKS = [-6, -4, -2, 0, 2, 4, 6]  # the same time ticks in B-E
 SEED = 42
-W_CM, H_CM = 17.4, 10.6
+W_CM, H_CM = 17.4, 10.8
+SHIFT_XLIM = (-6, 3)  # A; the shifts outside are counted in the stats
+KDE_BW_S = 0.25
+MOTION_XLIM, MOTION_XTICKS = (-6, 6), [-6, -4, -2, 0, 2, 4, 6]
+# D, E: Fig. 6 shows +-30 s; +-10 s keeps the loser's modulations around the chase ends that a shift of about
+# 1 s can move (the dip before onsets, the rise and plateau after them, the peak at offsets), at a
+# scale where a shift of 1 s is visible
+RATE_XLIM, RATE_XTICKS = (-10, 10), [-10, -5, 0, 5, 10]
+RATE_YLIM, RATE_YTICKS = (0, 15), [0, 5, 10, 15]  # Fig. 6's loser rate axis
+WIN_S = 2.0  # the stats' mean rates before / after the event
+TROUGH_S = 3.0  # the stats' lowest rate within +-TROUGH_S of the event (Fig. 6's dip before onsets)
 
 
 def boot_band(M: np.ndarray, n: int = 2000) -> tuple[np.ndarray, np.ndarray]:
@@ -91,33 +103,110 @@ def boot_band(M: np.ndarray, n: int = 2000) -> tuple[np.ndarray, np.ndarray]:
     return np.nanpercentile(bs, 2.5, 0), np.nanpercentile(bs, 97.5, 0)
 
 
-def kernel_rates(events: list[tuple[str, float]], times: dict[str, np.ndarray], sigma: float) -> np.ndarray:
-    """Per event: events of `times` around it, kernel-smoothed, per minute, on LAG."""
-    out = []
-    for rec, t0 in events:
-        x = times[rec] - t0
-        x = x[np.abs(x) <= LAG[-1] + 4 * sigma]
-        out.append(60 * np.exp(-0.5 * ((LAG[:, None] - x[None, :]) / sigma) ** 2).sum(1) / (sigma * np.sqrt(2 * np.pi)))
-    return np.array(out)
-
-
-def curve(ax, x, M, color, label, lw=1.2, ls="-", band=True):
+def motion_curve(ax, x, M, color, lw=1.0, ls="-", band=True):
     m = np.nanmean(M, 0)
     if band:
         lo, hi = boot_band(M)
-        ax.fill_between(x, lo, hi, color=color, alpha=0.25, lw=0)
-    ax.plot(x, m, color=color, lw=lw, ls=ls, label=label)
+        ax.fill_between(x, lo, hi, color=color, alpha=0.2, lw=0)
+    ax.plot(x, m, color=color, lw=lw, ls=ls)
     return m
 
 
-def strip(ax, d: pd.Series, y: float, color, rng):
-    d = d.dropna().to_numpy()
-    shown = np.clip(d, -6, 3)
-    ax.scatter(shown, y + rng.uniform(-0.18, 0.18, len(d)), s=5, color=color, alpha=0.6, lw=0)
-    q25, q50, q75 = np.percentile(d, [25, 50, 75])
-    ax.plot([q25, q75], [y - 0.32, y - 0.32], color=C.INK, lw=2.2, solid_capstyle="butt")
-    ax.plot([q50, q50], [y - 0.42, y - 0.22], color=C.INK, lw=1.2)
-    return {"n": int(len(d)), "n_clipped": int(np.sum((d < -6) | (d > 3)))}
+def kde(d: np.ndarray, x: np.ndarray, bw: float) -> np.ndarray:
+    """Gaussian kernel density of ``d`` on ``x`` (integrates to 1 over the real line)."""
+    return np.exp(-0.5 * ((x[:, None] - d[None, :]) / bw) ** 2).sum(1) / (len(d) * bw * np.sqrt(2 * np.pi))
+
+
+def shift_ridges(ax, pairs: pd.DataFrame) -> dict:
+    """A: density of the shifts (one scale for both ends), IQR shaded darker, median line and value."""
+    x = np.linspace(*SHIFT_XLIM, 901)
+    dens = {end: kde(pairs[f"d_{end}_s"].dropna().to_numpy(), x, KDE_BW_S) for end in cer.ENDS}
+    scale = 0.72 / max(d.max() for d in dens.values())  # one scale for both ridges
+    out = {}
+    for y0, end in ((1.0, "onset"), (0.0, "offset")):
+        d = pairs[f"d_{end}_s"].dropna().to_numpy()
+        q25, q50, q75 = np.percentile(d, [25, 50, 75])
+        y = y0 + scale * dens[end]
+        iqr = (x >= q25) & (x <= q75)
+        ax.fill_between(x, y0, y, color=RELABEL_C, alpha=0.18, lw=0)
+        ax.fill_between(x[iqr], y0, y[iqr], color=RELABEL_C, alpha=0.4, lw=0)
+        ax.plot(x, y, color=RELABEL_C, lw=1.0)
+        ax.plot(SHIFT_XLIM, [y0, y0], color=RELABEL_C, lw=0.5)
+        ax.plot([q50, q50], [y0, y0 + scale * np.interp(q50, x, dens[end])], color=C.INK, lw=1.0)
+        ax.text(SHIFT_XLIM[0], y0 + 0.12, f"{end}\nn = {len(d)}", fontsize=_ANNOT_FS, ha="left", va="bottom")
+        ax.text(q50 - 0.15, y0 + scale * np.interp(q50, x, dens[end]) + 0.04, f"{q50:.2f} s".replace("-", "$-$"),
+                fontsize=_ANNOT_FS, ha="right", va="bottom")
+        out[end] = {"n": int(len(d)), "n_outside": int(np.sum((d < SHIFT_XLIM[0]) | (d > SHIFT_XLIM[1]))),
+                    "median_s": float(q50), "iqr_s": [float(q25), float(q75)]}
+    ax.axvline(0, **REF)
+    ax.set_xlim(SHIFT_XLIM[0] - 0.2, SHIFT_XLIM[1] + 0.2)
+    ax.set_xticks([-6, -4, -2, 0, 2])
+    ax.set_ylim(-0.08, 1.98)
+    ax.set_yticks([])
+    ax.spines["left"].set_visible(False)
+    ax.set_xlabel("Re-labeled $-$ annotated [s]")
+    return {"x_range_s": list(SHIFT_XLIM), "kde_bandwidth_s": KDE_BW_S, **out}
+
+
+def window_means(t: np.ndarray, rate: np.ndarray) -> dict:
+    t = np.round(t, 6)
+    return {"rate_2s_before": float(rate[(t >= -WIN_S) & (t < 0)].mean()),
+            "rate_2s_after": float(rate[(t >= 0) & (t < WIN_S)].mean())}
+
+
+def rate_panel(ax, end: str, fig6: dict, rates) -> dict:
+    """Fig. 6's loser rate around ``end`` (its JSON, its percentiles) and the shifted and re-labeled rates."""
+    t = np.asarray(fig6["conv_time"])
+    if not np.array_equal(t, rates["conv_time"]):
+        raise ValueError("event_rates.npz is on another time grid than Fig. 6; rerun chase_validation_rates.py")
+    null = cer.per_minute_band(fig6["bootstrapped_baseline_jittered"])
+    annotated = cer.per_minute_band(fig6["jackknifed_eventrate"])
+    shifted = cer.per_minute_band(rates[f"{end}_shifted_resamples"])
+    relabeled = cer.per_minute_band(rates[f"{end}_relabeled_resamples"])
+    subset = cer.per_minute_band(rates[f"{end}_annotated_subset_resamples"])
+    sel = (t >= RATE_XLIM[0] - 0.5) & (t <= RATE_XLIM[1] + 0.5)
+    ax.fill_between(t[sel], null[0][sel], null[2][sel], color=NULL_C, alpha=0.5, lw=0)
+    ax.plot(t[sel], null[1][sel], color=NULL_C, lw=1)
+    ax.fill_between(t[sel], annotated[0][sel], annotated[2][sel], color=LOSER_C, alpha=0.5, lw=0)
+    ax.plot(t[sel], annotated[1][sel], color=LOSER_C, lw=1)
+    ax.fill_between(t[sel], relabeled[0][sel], relabeled[2][sel], color=RELABEL_C, alpha=0.2, lw=0)
+    ax.plot(t[sel], relabeled[1][sel], color=RELABEL_C, lw=1)
+    ax.plot(t[sel], shifted[1][sel], color=LOSER_C, lw=1, ls=(0, (3, 1.5)))
+    ax.axvline(0, **REF)
+    ax.set_xlim(*RATE_XLIM)
+    ax.set_xticks(RATE_XTICKS)
+    ax.set_ylim(*RATE_YLIM)
+    ax.set_yticks(RATE_YTICKS)
+    ax.set_xlabel(f"Time relative to chase {end} [s]")
+
+    shift = float(rates[f"{end}_shift_s"])
+    in_x = (np.round(t, 6) >= RATE_XLIM[0]) & (np.round(t, 6) <= RATE_XLIM[1])  # the plotted range
+    # the shifted curve is Fig. 6's moved by -shift (same resampling draws); it differs only by interpolation
+    moved = np.interp(t[in_x] + shift, t, annotated[1])
+
+    near = np.abs(np.round(t, 6)) <= TROUGH_S
+
+    def curve_stats(band, n_chases, trials):
+        return {"n_chases": int(np.sum(n_chases)), "n_trials": int(len(trials)), **window_means(t, band[1]),
+                "peak_per_min": float(band[1][in_x].max()), "peak_s": float(t[in_x][np.argmax(band[1][in_x])]),
+                "trough_per_min": float(band[1][near].min()), "trough_s": float(t[near][np.argmin(band[1][near])])}
+
+    if list(rates[f"{end}_shifted_trials"]) != fig6["trial_identifiers"]:
+        raise ValueError(f"event_rates.npz ({end}) has other trials than Fig. 6; rerun chase_validation_rates.py")
+    return {
+        "n": int(np.sum(rates[f"{end}_relabeled_n_chases"])),
+        "x_range_s": list(RATE_XLIM), "kernel_sigma_s": cer.KERNEL_SIGMA_S, "shift_s": shift,
+        # the shifted chases are Fig. 6's (chase_validation_rates checks them against its JSON)
+        "annotated": curve_stats(annotated, rates[f"{end}_shifted_n_chases"], fig6["trial_identifiers"]),
+        "shifted": curve_stats(shifted, rates[f"{end}_shifted_n_chases"], rates[f"{end}_shifted_trials"]),
+        "relabeled": curve_stats(relabeled, rates[f"{end}_relabeled_n_chases"], rates[f"{end}_relabeled_trials"]),
+        "annotated_subset": curve_stats(subset, rates[f"{end}_annotated_subset_n_chases"],
+                                        rates[f"{end}_annotated_subset_trials"]),
+        "null_per_min": float(null[1][in_x].mean()),
+        "null_band_per_min": [float(null[0][in_x].mean()), float(null[2][in_x].mean())],
+        "relabeled_null_per_min": float(cer.per_minute_band(rates[f"{end}_relabeled_null_resamples"])[1][in_x].mean()),
+        "shifted_minus_moved_annotated_max_abs": float(np.max(np.abs(shifted[1][in_x] - moved))),
+    }
 
 
 def main() -> None:
@@ -126,42 +215,32 @@ def main() -> None:
     C.rc_tweaks()
     pairs = pd.read_csv(PROCESSED / "chase_validation" / "pairs.csv")
     mot = np.load(PROCESSED / "chase_validation" / "motion.npz")
-    summary = pd.read_csv(DATA_ROOT / "trial_summary.csv", index_col=0).set_index("recording", drop=False)
-    chirps, rises = {}, {}
-    for rec in pairs["recording"].unique():
-        out = load_data(DATA_ROOT / rec, summary.loc[rec], skip_ag_events=True)
-        chirps[rec], rises[rec] = np.sort(out[3]), np.sort(out[5])  # loser chirps, loser rises
+    path = PROCESSED / "chase_validation" / "event_rates.npz"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} missing: run chase_validation_rates.py (chain validation)")
+    rates = np.load(path)
     stats: dict = {}
 
     fig = plt.figure(figsize=(W_CM * C.CM, H_CM * C.CM))
-    ax_a = C.axes_cm(fig, 1.6, 6.45, 4.1, 3.6)
-    ax_b = C.axes_cm(fig, 7.25, 6.45, 4.4, 3.6)
-    ax_c = C.axes_cm(fig, 12.7, 6.45, 4.4, 3.6)
-    ax_d = C.axes_cm(fig, 1.6, 1.2, 6.8, 3.5)
-    ax_e = C.axes_cm(fig, 10.3, 1.2, 6.8, 3.5)
+    ax_a = C.axes_cm(fig, 0.6, 6.55, 4.6, 3.6)
+    ax_b = C.axes_cm(fig, 6.85, 6.55, 4.6, 3.6)
+    ax_c = C.axes_cm(fig, 12.5, 6.55, 4.6, 3.6)
+    ax_d = C.axes_cm(fig, 1.4, 1.2, 7.0, 3.6)
+    ax_e = C.axes_cm(fig, 10.1, 1.2, 7.0, 3.6)
 
     # A: shifts
-    rng = np.random.default_rng(SEED)
-    stats["shifts"] = {"onset": strip(ax_a, pairs["d_onset_s"], 1, AUTHOR_C, rng),
-                       "offset": strip(ax_a, pairs["d_offset_s"], 0, AUTHOR_C, rng)}
-    ax_a.axvline(0, **REF)
-    ax_a.set_yticks([1, 0], ["onset", "offset"])
-    ax_a.set_xlim(-6.3, 3.3)
-    ax_a.set_xticks([-6, -4, -2, 0, 2])
-    ax_a.set_ylim(-0.7, 1.5)
-    ax_a.set_xlabel("Re-labeled $-$ annotated [s]")
+    stats["shifts"] = shift_ridges(ax_a, pairs)
 
     # B, C: video motion
     lags = mot["lags_s"]
-    sel = (lags >= XLIM[0]) & (lags <= XLIM[1])
+    sel = (lags >= MOTION_XLIM[0]) & (lags <= MOTION_XLIM[1])
     for ax, end in ((ax_b, "onset"), (ax_c, "offset")):
-        curve(ax, lags[sel], mot[f"all_boris_{end}"][:, sel], ALL_C, f"annotated, all chases (n = {len(mot[f'all_boris_{end}'])})",
-              lw=0.9, ls="--", band=False)
-        mb = curve(ax, lags[sel], mot[f"pair_boris_{end}"][:, sel], BORIS_C, "annotated, re-labeled chases")
-        ma = curve(ax, lags[sel], mot[f"pair_author_{end}"][:, sel], AUTHOR_C, "re-labeled, same chases")
+        motion_curve(ax, lags[sel], mot[f"all_boris_{end}"][:, sel], ALL_C, lw=0.9, ls=(0, (3, 1.5)), band=False)
+        mb = motion_curve(ax, lags[sel], mot[f"pair_boris_{end}"][:, sel], ANNOT_C)
+        ma = motion_curve(ax, lags[sel], mot[f"pair_author_{end}"][:, sel], RELABEL_C)
         ax.axvline(0, **REF)
-        ax.set_xlim(*XLIM)
-        ax.set_xticks(XTICKS)
+        ax.set_xlim(*MOTION_XLIM)
+        ax.set_xticks(MOTION_XTICKS)
         ax.set_xlabel(f"Time relative to chase {end} [s]")
         t = lags[sel]
         stats[f"motion_{end}"] = {
@@ -171,35 +250,26 @@ def main() -> None:
     ax_b.set_ylabel("Video motion\n" r"[$\times$ chase median]")
     for ax in (ax_b, ax_c):  # one scale for both, with room for the key above the curves
         ax.set_ylim(0.8, 2.45)
+    keys = [Line2D([], [], color=ALL_C, lw=0.9, ls=(0, (3, 1.5))), Line2D([], [], color=ANNOT_C, lw=1.0),
+            Line2D([], [], color=RELABEL_C, lw=1.0)]
     # white, edgeless box: the key sits across the event line at 0
-    ax_c.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="none", framealpha=1)
+    ax_c.legend(keys, ["annotated, all chases", "annotated, subset", "re-labeled, subset"], loc="upper right",
+                frameon=True, facecolor="white", edgecolor="none", framealpha=1, borderaxespad=0.2)
 
-    # D: loser chirps around offsets; E: loser rises around onsets (same re-labelled chases)
-    for ax, end, times, sigma, ylab, key in ((ax_d, "offset", chirps, 0.3, "Loser chirp rate [1/min]", "chirps_offset"),
-                                             (ax_e, "onset", rises, 0.5, "Loser rise rate [1/min]", "rises_onset")):
-        ok = pairs[f"d_{end}_s"].notna()
-        ev_b = list(zip(pairs.loc[ok, "recording"], pairs.loc[ok, f"boris_{end}_rec_s"]))
-        ev_a = list(zip(pairs.loc[ok, "recording"], pairs.loc[ok, f"{end}_rec_s"]))
-        Mb, Ma = kernel_rates(ev_b, times, sigma), kernel_rates(ev_a, times, sigma)
-        curve(ax, LAG, Mb, BORIS_C, f"annotated {end}s")
-        curve(ax, LAG, Ma, AUTHOR_C, f"re-labeled {end}s")
-        ax.axvline(0, **REF)
-        ax.set_xlim(*XLIM)
-        ax.set_xticks(XTICKS)
-        ax.set_xlabel(f"Time relative to chase {end} [s]")
-        ax.set_ylabel(ylab)
-        # the key in the panel's empty upper corner (D: left, E: right)
-        ax.legend(frameon=False, loc="upper left" if ax is ax_d else "upper right")
-        pre = (LAG >= -2) & (LAG < 0)
-        post = (LAG >= 0) & (LAG < 2)
-        stats[key] = {"n": int(ok.sum()), "kernel_sigma_s": sigma,
-                      **{who: {"rate_2s_before": float(M[:, pre].mean()), "rate_2s_after": float(M[:, post].mean())}
-                         for who, M in (("boris", Mb), ("author", Ma))}}
+    # D, E: loser chirp rate, Fig. 6 B1 / C1 zoomed, with the shifted and re-labeled chases
+    for ax, end in ((ax_d, "onset"), (ax_e, "offset")):
+        stats[f"chirps_{end}"] = rate_panel(ax, end, cer.fig6_json(end), rates)
+    ax_d.set_ylabel("Loser chirp rate [1/min]")
+    keys = [Line2D([], [], color=LOSER_C, lw=1), Line2D([], [], color=LOSER_C, lw=1, ls=(0, (3, 1.5))),
+            Line2D([], [], color=RELABEL_C, lw=1), Patch(color=NULL_C, alpha=0.5, lw=0)]
+    ax_d.legend(keys, ["annotated, all chases", "shifted, all chases", "re-labeled, subset", "null"],
+                loc="upper left", frameon=False, borderaxespad=0.2)
 
-    for ax in (ax_a, ax_b, ax_c, ax_d, ax_e):
+    for ax in (ax_b, ax_c, ax_d, ax_e):
         sns.despine(ax=ax, offset=4, trim=False)
-    C.letters_cm(fig, [(ax_a, "A", 1.4, 0.3), (ax_b, "B", 1.4, 0.3), (ax_c, "C", 0.85, 0.3),
-                       (ax_d, "D", 1.4, 0.3), (ax_e, "E", 1.4, 0.3)])
+    sns.despine(ax=ax_a, left=True, offset=4, trim=False)
+    C.letters_cm(fig, [(ax_a, "A", 0.3, 0.3), (ax_b, "B", 1.4, 0.3), (ax_c, "C", 0.85, 0.3),
+                       (ax_d, "D", 1.1, 0.3), (ax_e, "E", 0.85, 0.3)])
     paths = C.save(fig, NAME)
     print(json.dumps(stats, indent=1))
     print("\n".join(map(str, paths)))

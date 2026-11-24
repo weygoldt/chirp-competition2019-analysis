@@ -97,6 +97,7 @@ chain_validation() {   # timing validation of the BORIS chases (author's re-labe
   step chase_validation.py
   heavy chirp-start 16G stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset.py
   heavy validation-motion 16G chase_validation_motion.py   # reads the videos
+  heavy validation-rates 8G chase_validation_rates.py      # Fig. 6's loser rates for shifted / re-labeled chases (needs chain rates)
   step plot_chase_validation.py
 }
 

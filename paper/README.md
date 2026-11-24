@@ -75,7 +75,7 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
 | `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline`, `v2_assign_params` (the true positives' simulator truth; both root env), plot | `v2_figures/`, evaluation outputs and simulated scenes under `$CHIRP_DATA` |
 | `fig:failure_modes` (`plot_v2_failure_modes`, Fig. S4; replaced `fig:performances_supp`) | v2figs | plot | `v2_figures/` |
-| `fig:chase_validation` (`plot_chase_validation`, supplement; new 2026-11-24) | validation | `chase_validation` (the author's re-labelled chases vs BORIS), `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset`, `chase_validation_motion` (reads the videos), plot | `chase_validation/`, `offset_chirp_start/` |
+| `fig:chase_validation` (`plot_chase_validation`, supplement; new 2026-11-24) | validation | `chase_validation` (the author's re-labelled chases vs BORIS), `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset`, `chase_validation_motion` (reads the videos), `chase_validation_rates` (Fig. 6's loser rates, `chase_event_rates`, for the median-shifted and the re-labelled chases; needs chain rates), plot | `chase_validation/`, `offset_chirp_start/` |
 | pipeline numbers of the Methods (no figure) | v2figs | `summarize_pipeline` (templates, scenes, expert benchmark, real-data session, production run, from their result files under `$CHIRP_DATA`) | — |
 | reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `make_chirps_around_chasing_obs` (reconstructed writer, audit O5; its only reader, the 10-s before/after regression, was replaced on 2026-11-24 by the chirping-starts-before-offset test of chain validation), `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
 
@@ -115,7 +115,10 @@ review session against `load_and_convert_boris_events`, matches the author's cha
 and reports the shifts. `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset.py` replaces the
 10-s before/after regression: it asks whether loser chirping starts before the offset more or less often
 than symmetric timing predicts (1 - 0.5^k for k chirps in the window, a GLMM offset term), with the BORIS,
-the author's and the median-shifted BORIS offsets.
+the author's and the median-shifted BORIS offsets. `chase_validation_rates.py` computes the loser chirp rate of
+Fig. 6 (B1, C1) for every chase shifted by the median shift and for the author's onsets / offsets, with the same
+functions (`chase_event_rates.py`: trials, kernel, weighting, leave-out resamples; it first checks that it
+reproduces Fig. 6's JSONs number for number); the validation figure shows them over Fig. 6's own curves.
 
 **The window around chase offsets.** Several analyses count chirps from
 shortly before to some seconds after each chase offset (the "offset window";
