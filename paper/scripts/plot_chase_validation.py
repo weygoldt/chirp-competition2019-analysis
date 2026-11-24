@@ -19,16 +19,59 @@ from __future__ import annotations
 
 import json
 import logging
+from types import SimpleNamespace
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import v2_fig_common as C
 from analyze_event_time_rates_trial import load_data
 from manuscript_stats import write_stats
-from paper_config import DATA_ROOT, PROCESSED
-from style import set_light_style
+from paper_config import DATA_ROOT, FIGURES, PROCESSED
+from style import letter_subplots, set_light_style
+
+# The figure helpers and palette of v2_fig_common, copied: importing that module needs the run to be one
+# of its pipeline runs (v2_fig_common.RUNS), so the figure failed in the sensitivity run at threshold 0.9.
+_CM = 1 / 2.54
+_ANNOT_FS = "small"
+
+
+def _rc_tweaks() -> None:
+    mpl.rcParams.update({"lines.markeredgewidth": 0.5, "xtick.major.size": 3, "ytick.major.size": 3,
+                         "xtick.minor.size": 1.8, "ytick.minor.size": 1.8, "xtick.major.width": 0.8,
+                         "ytick.major.width": 0.8, "axes.linewidth": 0.8, "legend.handlelength": 1.4,
+                         "legend.fontsize": _ANNOT_FS, "axes.titlesize": "medium", "axes.titlepad": 3})
+
+
+def _axes_cm(fig, x, y, w, h):
+    W, H = fig.get_size_inches() / _CM
+    return fig.add_axes((x / W, y / H, w / W, h / H))
+
+
+def _letters_cm(fig, axes_and_offsets):
+    W, H = fig.get_size_inches() / _CM
+    axs, xo, yo, lets = [], [], [], []
+    for ax, let, dx, dy in axes_and_offsets:
+        bb = ax.get_position()
+        axs.append(ax)
+        lets.append(let)
+        xo.append(-dx / (bb.width * W))
+        yo.append(1 + dy / (bb.height * H))
+    letter_subplots(axs, letters=lets, xoffset=xo, yoffset=yo)
+
+
+def _save(fig, name):
+    FIGURES.mkdir(parents=True, exist_ok=True)
+    paths = [FIGURES / f"{name}.pdf", FIGURES / f"{name}.png"]
+    for p in paths:
+        fig.savefig(p, dpi=300)
+    plt.close(fig)
+    return paths
+
+
+C = SimpleNamespace(CM=_CM, INK="k", CORAL="#e2655c", MUTED="#6e6e6e", GREY="#a0a0a0", rc_tweaks=_rc_tweaks,
+                    axes_cm=_axes_cm, letters_cm=_letters_cm, save=_save)
 
 NAME = "plot_chase_validation"
 BORIS_C, AUTHOR_C, ALL_C = C.INK, C.CORAL, C.MUTED
