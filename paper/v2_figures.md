@@ -42,7 +42,8 @@ which boxes are drawn as detections (the run's `operating` column) and which
 as "below threshold", the operating-point markers and their label in
 Fig. 2A and C, the model's recall and emitter in Fig. 2B, F (benchmark:
 kept and score >= threshold), the true positives of Fig. 2E, G, H (score >=
-threshold) and the boxes of Fig. 2I-K (score >= threshold), and the counts
+threshold), the recall of Fig. 2G, H (`v2_assign_params.py` matches at the
+run's threshold) and the boxes of Fig. 2I-K (score >= threshold), and the counts
 printed for the captions.
 
 **What changes at 0.8 (`rtdetr_gapfill_t080`, 2026-11-16).**
@@ -83,7 +84,8 @@ printed for the captions.
    /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py snippets traces raw case-heights
    ~/wrk/analyses/chirp_competition_upgrade/scripts/guarded --name v2fig-assign --mem 16G --vram 0.2 -- \
      /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py assign-baseline
-   # the true positives' simulator truth for Fig. 2G, H (~2 min, ~1.3 GB, CPU)
+   # simulator truth of the simulated test chirps for Fig. 2G, H: the true positives and
+   # every chirp label, detected or not at the run's threshold (~9 min, ~1.7 GB, CPU)
    /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_assign_params.py
    ```
 
@@ -402,6 +404,23 @@ width). Letters: A-F unchanged; old G, H (decoder height, FWHM) -> I, J.
 Where two neighbouring n labels would touch, every second one is lifted by
 a line (`n_row`).
 
+Third round (author, 2026-11-25, binding): every position in explicit cm
+(`scripts/v2_performance_layout.py`, tested in
+`tests/test_v2_performance_layout.py`; the plot prints every axes' extent
+in cm). Each row spans 1.62-17.3 cm; the panels of a row share top and
+bottom and are equally wide (A-D 2.68 cm, E-H 3.05 cm, I-K 3.35 cm
+squares); 0.7 cm of whitespace between one row's x-axis labels and the next
+row's letters. Detection: a wider gap between B and C (0.75 cm more than
+the label space), and the pairs under the group headings "Simulated" and
+"Real recordings" on a thin grey rule (the text starts at the pair's first
+axes, so that no letter sits under it). Assignment: E, F (by ΔF) share
+E's y-axis; G, H (by true chirp size) share G's, labelled "Fraction"
+(same range); a wider gap between F and G. G, H now also show detection
+by chirp size (the author: chirp-parameter dependent detection was
+missing): recall among the 9,401 chirp labels of A at the operating
+threshold (squares, dashed) next to the correct assignment of E's true
+positives (circles, solid); n: chirp labels per bin. Letters unchanged.
+
 | panel | number | source |
 |---|---|---|
 | A sim test after post-processing, 9,401 chirps | at 0.8: RT-DETR dual-head P 0.995, R 0.931 (TP 8,757, FP 44, FN 644) | `runs/dualhead_r18_sim_v4_r1/eval_postprocess/sim_test_after/pr_curve.csv` (level "all"; the row at the first threshold >= 0.8; the evaluation re-matches at each threshold) |
@@ -411,6 +430,7 @@ a line (`n_row`).
 | E correct emitter by the emitter's ΔF to the nearest other live track (true positives with score >= 0.8 and a known ΔF, n = 8,652) | predicted emitter EODf: 0-10 Hz 0.780 [0.763, 0.795] (n 2,571), 10-25 0.963 (2,154), 25-50 0.992 (1,713), 50-100 0.996 (1,107), >= 100 0.997 (1,107); box position only: 0.380, 0.552, 0.806, 0.880, 0.968. Overall 0.923 vs 0.646 (all 8,748 TPs >= 0.8: 0.924 / 0.650). Until 2026-11-16 this panel was binned by the evaluation's ΔF (closest pair of any two live tracks; most scenes have 3-7 fish), which put easy chirps into the 0-10 Hz bin (then 0.884 vs 0.577) | `data/processed/v2_figures/assign_baseline.csv` column `emitter_df_bin` (TPs of the evaluation at 0.5, filtered to score >= 0.8; regenerated 2026-11-16 in `rtdetr_gapfill_t080`) |
 | F benchmark, emitter among own detections, by the emitter's ΔF to the nearest other live fish (536 true chirps; 2 without ΔF left out) | expert (items called chirp, n 493) / detector (kept, score >= 0.8, n 499): 0-10 Hz 0.608 [0.520, 0.689] / 0.728 [0.648, 0.796] (n 125 / 136); 10-25 0.924 / 0.943; 25-50 0.986 / 0.986; 50-100 0.992 / 0.991; >= 100 0.986 / 1.000; overall 0.878 / 0.910. Chirps per bin 143, 114, 78, 124, 75 | `labels/benchmark/report_v2/items.csv` (`df_nearest_hz`, `human_emitter_ok`, `dualhead_emitter_ok`; unweighted, Wilson 95 % intervals) |
 | G, H correct emitter by the chirp's true 10 % width / height (the true positives of E, n = 8,652; octave bins, outer bins open) | width < 10, 10-20, 20-40, 40-80, 80-160, >= 160 ms: 0.927 (n 627), 0.927 (4,273), 0.904 (1,714), 0.933 (565), 0.943 (547), 0.921 (926); height < 50, 50-100, 100-200, 200-400, >= 400 Hz: 0.934 (1,064), 0.922 (2,813), 0.918 (949), 0.924 (2,996), 0.913 (830). Flat: assignment is not coupled to chirp size. The same within ΔF strata (stats only): ΔF < 10 Hz 0.74-0.84 (width) / 0.76-0.82 (height), ΔF >= 10 Hz 0.98-0.99 in every bin | `data/processed/v2_figures/assign_params.csv` (`v2_assign_params.py`, root env: every true positive of `assign_baseline.csv` joined to `scene_truth` of its scene; 8,999 of 8,999 matched, identical to the decoder evaluation's truth on the 7,666 shared chirps) |
+| G, H recall by the chirp's true 10 % width / height (the 9,401 chirp labels of A; same bins; since 2026-11-25) | at 0.8, 8,757 detected (A's operating point). Width < 10, 10-20, 20-40, 40-80, 80-160, >= 160 ms: 0.904 [0.880, 0.924] (n 697), 0.936 (4,618), 0.913 (1,904), 0.935 (613), 0.962 (572), 0.946 (997); height < 50, 50-100, 100-200, 200-400, >= 400 Hz: 0.920 [0.903, 0.934] (1,178), 0.946 (3,002), 0.932 (1,027), 0.924 (3,288), 0.925 (906). Flat like the assignment | `data/processed/v2_figures/detect_params.csv` (`v2_assign_params.py`: the evaluation's matching re-run on its kept post-processed predictions with the boxes of score >= 0.8 (reproduces `items.csv` exactly at 0.5); every chirp label joined to `scene_truth`, 9,401 of 9,401, 6,749 chirps in 289 scenes, 1 width edge-clipped. Filtering the 0.5 matches by score instead would give 8,748: 9 labels are matched to another box at 0.8) |
 | I-K decoder (boxes >= 0.8; simulated test chirps of unseen fish) | n 7,395: height median abs. error 9.17 Hz (6.5 %), median signed +0.53 Hz; FWHM 1.12 ms (9.4 %), median signed -0.07 ms; 10 % width 1.52 ms (6.8 %), median signed +0.01 ms | `params/runs/v4-dualhead-sim-v4-r2/bundle/eval/predictions.parquet` (score >= 0.8) |
 
 ### Fig. 3 (failure modes)

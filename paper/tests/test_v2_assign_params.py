@@ -122,3 +122,94 @@ def test_check_decoder_counts_shared_chirps_and_refuses_a_different_definition()
     off.loc[off.index[0], "true_width10_s"] += 1e-3
     with pytest.raises(ValueError, match="width10_s"):
         ap.check_decoder(truth, off)
+
+
+# ---------------------------------------------------------------------------
+# detection: every chirp label, re-matched at the operating threshold
+# ---------------------------------------------------------------------------
+def _eval_items(outcomes=("tp", "tp", "fn"), pred_rows=(5.0, 6.0, np.nan),
+                scores=(0.95, 0.6, np.nan)) -> pd.DataFrame:
+    """Item rows of an evaluation: the three chirp labels (rows 0, 2, 3), the
+    ignore label (row 1) and a false positive without a label."""
+    return pd.DataFrame({
+        "recording": ["s1_f0", "s1_f0", "s1_f440", "s2_f0", "s2_f0"],
+        "outcome": [outcomes[0], "ignored", outcomes[1], outcomes[2], "fp"],
+        "label_row": [0, 1, 2, 3, np.nan],
+        "pred_row": [pred_rows[0], 4.0, pred_rows[1], pred_rows[2], 9.0],
+        "label": ["chirp", "ignore", "chirp", "chirp", None],
+        "score": [scores[0], 0.7, scores[1], scores[2], 0.55],
+    })
+
+
+def test_visible_chirps_gives_every_chirp_label_its_outcome_scene_and_chirp():
+    out = ap.visible_chirps(_eval_items(), _labels(), SOURCES)
+    assert out["label_row"].tolist() == [0, 2, 3]
+    assert out["outcome"].tolist() == ["tp", "tp", "fn"]
+    assert out["source_id"].tolist() == ["s1", "s1", "s2"]
+    assert out["chirp_id"].tolist() == [7, 7, 3]
+    assert out["pred_row"].isna().tolist() == [False, False, True]
+
+
+def test_visible_chirps_refuses_a_missing_or_doubled_chirp_label():
+    items = _eval_items()
+    with pytest.raises(ValueError, match="miss 1 chirp labels"):
+        ap.visible_chirps(items.drop(index=3), _labels(), SOURCES)
+    with pytest.raises(ValueError, match="more than one item row"):
+        ap.visible_chirps(pd.concat([items, items.iloc[[0]]]), _labels(), SOURCES)
+    items.loc[0, "recording"] = "s1_f440"
+    with pytest.raises(ValueError, match="tile"):
+        ap.visible_chirps(items, _labels(), SOURCES)
+
+
+def test_check_rematch_accepts_a_reproduction_and_refuses_a_different_match():
+    ref = ap.visible_chirps(_eval_items(), _labels(), SOURCES)
+    assert ap.check_rematch(ref, ref.copy()) == 3
+    # the evaluation's own item table (Int64 rows, as in memory) against items.csv (floats)
+    in_memory = _eval_items()
+    in_memory["label_row"] = pd.array([0, 1, 2, 3, pd.NA], dtype="Int64")
+    in_memory["pred_row"] = pd.array([5, 4, 6, pd.NA, 9], dtype="Int64")
+    assert ap.check_rematch(ref, ap.visible_chirps(in_memory, _labels(), SOURCES)) == 3
+    other = ap.visible_chirps(_eval_items(pred_rows=(5.0, 7.0, np.nan)), _labels(), SOURCES)
+    with pytest.raises(ValueError, match="pred_row of 1"):
+        ap.check_rematch(ref, other)
+    other = ap.visible_chirps(_eval_items(outcomes=("tp", "fn", "fn"),
+                                          pred_rows=(5.0, np.nan, np.nan)), _labels(), SOURCES)
+    with pytest.raises(ValueError, match="outcome of 1"):
+        ap.check_rematch(ref, other)
+
+
+def test_detection_table_takes_the_outcome_of_the_rematch_not_the_filtered_reference():
+    ref = ap.visible_chirps(_eval_items(), _labels(), SOURCES)
+    # at 0.8 the label of row 2 (matched at 0.5 to a box of score 0.6) is
+    # matched to another box of score 0.85: detected, although its
+    # reference match scores below the threshold
+    at_op = ap.visible_chirps(_eval_items(pred_rows=(5.0, 8.0, np.nan),
+                                          scores=(0.95, 0.85, np.nan)), _labels(), SOURCES)
+    out = ap.detection_table(ref, at_op, 0.8)
+    assert out["detected"].tolist() == [True, True, False]
+    assert out["outcome_ref"].tolist() == ["tp", "tp", "fn"]
+    assert out["pred_row"].tolist()[:2] == [5, 8]
+    assert out["source_id"].tolist() == ["s1", "s1", "s2"]
+
+
+def test_detection_table_refuses_a_box_below_the_threshold_or_swapped_thresholds():
+    ref = ap.visible_chirps(_eval_items(), _labels(), SOURCES)
+    with pytest.raises(ValueError, match="score below"):
+        ap.detection_table(ref, ref, 0.8)  # row 2's box scores 0.6
+    found = ap.visible_chirps(_eval_items(outcomes=("tp", "fn", "tp"),
+                                          pred_rows=(5.0, np.nan, 9.0),
+                                          scores=(0.95, np.nan, 0.9)), _labels(), SOURCES)
+    with pytest.raises(ValueError, match="swapped"):
+        ap.detection_table(ref, found, 0.8)
+
+
+def test_join_truth_gives_every_chirp_label_its_truth():
+    missed_at_op = ap.visible_chirps(_eval_items(outcomes=("tp", "fn", "fn"),
+                                                 pred_rows=(5.0, np.nan, np.nan),
+                                                 scores=(0.95, np.nan, np.nan)),
+                                     _labels(), SOURCES)
+    det = ap.detection_table(ap.visible_chirps(_eval_items(), _labels(), SOURCES),
+                             missed_at_op, 0.8)
+    out = ap.join_truth(det, _truth())
+    assert out["width10_s"].tolist() == [0.29, 0.29, 0.014]
+    assert out["detected"].tolist() == [True, False, False]

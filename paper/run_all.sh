@@ -127,7 +127,9 @@ chain_v2figs() {       # new figures of pipeline v2 (replace the v1 assignment a
   ( cd "$PAPER" && PAPER_OUT="$PAPER_OUT" "$CHIRP_ROOT_PY" scripts/v2_fig_extract.py snippets traces raw case-heights )
   ( cd "$PAPER" && "$REPO/scripts/guarded" --name paper-v2fig-assign --mem 16G --vram 0.2 -- \
       env PAPER_OUT="$PAPER_OUT" "$CHIRP_ROOT_PY" scripts/v2_fig_extract.py assign-baseline )
-  # the true positives' simulator truth (true 10 % width, height) for Fig. 10 G, H
+  # simulator truth (true 10 % width, height) of the simulated test chirps for Fig. 10 G, H:
+  # the true positives (assignment) and every chirp label, detected or not at the run's
+  # operating threshold (recall); ~9 min, ~1.7 GB, CPU
   ( cd "$PAPER" && "$REPO/scripts/guarded" --name paper-v2fig-params --mem 4G --vram 0 -- \
       env PAPER_OUT="$PAPER_OUT" "$CHIRP_ROOT_PY" scripts/v2_assign_params.py )
   step plot_v2_pipeline_explainer.py

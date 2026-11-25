@@ -42,11 +42,18 @@ F   The benchmark of B: emitter correct among each one's own detections
     (expert: items called chirp; detector: kept, score >= operating
     threshold), by the emitter's ΔF to the nearest other live fish
     (``df_nearest_hz``); unweighted, Wilson 95 % intervals.
-G,H The true positives of E by the chirp's TRUE 10 % width (G; octave bins
+G,H Detection and assignment by the chirp's TRUE 10 % width (G; octave bins
     10, 20, 40, 80, 160 ms, outer bins open) and TRUE height (H; octave bins
     50, 100, 200, 400 Hz): the simulator's per-period truth of each chirp
-    (``assign_params.csv``, ``v2_assign_params.py``). Shares E's y-axis, like
-    F, so that the flat size dependence reads against the ΔF dependence.
+    (``v2_assign_params.py``). Two series (author's request 2026-11-25:
+    detection by chirp parameter without another row): recall, the share of
+    the visible chirps of A (its 9,401 chirp labels) detected at the
+    operating threshold (``detect_params.csv``: the evaluation's matching
+    re-run with the boxes of score >= the threshold, A's operating point;
+    squares), and the share of E's true positives assigned correctly
+    (``assign_params.csv``; circles, as E). Numbers: chirp labels per bin
+    (recall's n). G and H share a y-axis ("Fraction") with E's limits, so
+    that the flat size dependence reads against the ΔF dependence.
 I-K Chirp-parameter decoder for boxes at the operating threshold on the
     simulated test chirps of unseen fish (fish-disjoint template splits):
     calibrated estimate vs per-period truth of height (I), FWHM (J) and 10 %
@@ -60,7 +67,11 @@ text width (printed at x0.92); 8-pt labels, "small" (6.7 pt) legends,
 annotations and n; the palette of Figs. 5-7 only: detector = the indigo of
 ``style.other_color`` (filled markers), human expert = grey open markers,
 winner/loser = ``style.winner_color``/``loser_color``, black references,
-mako densities.
+mako densities. Layout (author, 2026-11-25): explicit cm in
+``v2_performance_layout.py`` (rows of equal span, equal panel widths per
+row, wider gaps between groups and rows, the simulated and real panels of
+the detection row under two group headings); the script prints every
+axes' extent in cm.
 
 Environment: ``paper/.venv``::
 
@@ -69,7 +80,8 @@ Environment: ``paper/.venv``::
 Runtime: ~15 s cold, ~4 s warm. Prints every number it plots and writes
 them with write_stats ("v2_performance"; bins and thresholds as word keys,
 e.g. ``agreement.t0_8``, ``benchmark.dualhead.by_snr.below_m20_db``,
-``assignment.by_width10.head_correct.10_to_20_ms``).
+``assignment.by_width10.head_correct.10_to_20_ms``,
+``sim_recall.by_height.detected.0_to_50_hz``, ``sim_recall.by_width10.p_range``).
 """
 
 from __future__ import annotations
@@ -86,13 +98,14 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, NullFormatter, NullLocator
 
 import v2_fig_common as C
+import v2_performance_layout as L
 from manuscript_stats import write_stats
 from style import loser_color, other_color, set_light_style, winner_color
 
 NAME = "plot_v2_performance"
 # figure size [cm]: full text width (17.4 cm, placed at 100 %, printed at x0.92
-# like the other full-width figures)
-W, H = 17.4, 15.05
+# like the other full-width figures); at most 15.05 cm tall
+W, H = L.W, L.H
 THR = C.OPERATING
 REAL_V1 = C.CHIRP_DATA / "labels" / "real_v1" / "report"
 REAL_DATASET = "2019"  # the 2019/2020 tube competitions (the paper's data)
@@ -115,6 +128,7 @@ WIDTH_KEYS = ["0_to_10_ms", "10_to_20_ms", "20_to_40_ms", "40_to_80_ms", "80_to_
 HEIGHT_EDGES_HZ = [50.0, 100.0, 200.0, 400.0]
 HEIGHT_KEYS = ["0_to_50_hz", "50_to_100_hz", "100_to_200_hz", "200_to_400_hz", "400_hz_up"]
 PARAMS_KEYS = ["recording", "label_row", "pred_row"]  # a true positive (assign_*.csv)
+DETECT_KEYS = ["recording", "label_row"]  # a chirp label (detect_params.csv)
 
 # palette (Figs. 5-7): the detector in the indigo of the other-event colour,
 # filled; the human expert grey and open; references black
@@ -125,6 +139,13 @@ SERIES = {
     "human": {"color": EXPERT, "mfc": "white", "mec": EXPERT, "mew": 0.8},
 }
 LABELS = {"dualhead": "RT-DETR dual-head", "human": "human expert"}
+# G, H: two detector series, told apart by marker and line style
+SIZE_SERIES = {
+    "detected": {**SERIES["dualhead"], "marker": "s", "ls": (0, (2.5, 1.5)),
+                 "label": "detected"},
+    "head_correct": {**SERIES["dualhead"], "marker": "o", "ls": "-",
+                     "label": "correctly assigned"},
+}
 LW = 1.0  # data lines
 LW_CURVE = 1.3  # threshold curves (A, C)
 EB_LW = 0.8  # error bars
@@ -158,6 +179,32 @@ def octave_positions(edges: list[float]) -> list[float]:
 
 def despine(ax, *, trim=False):
     sns.despine(ax=ax, offset=SPINE_OFFSET, trim=trim)
+
+
+HEADING_RULE = {"color": "#b4b4b4", "lw": 0.6}  # the rule of a group heading
+HEADING_PAD = 0.15  # gap between the heading text and its rule [cm]
+
+
+def group_heading(fig, text: str, x0: float, x_text: float, x1: float, y: float) -> None:
+    """A group heading on a thin rule from x0 to x1 (cm), at height y (cm); the
+    text starts at x_text."""
+    tr = C.fig_cm(fig)
+    t = fig.text(x_text, y, text, transform=tr, ha="left", va="center", fontsize="medium")
+    bb = t.get_window_extent(fig.canvas.get_renderer()).transformed(tr.inverted())
+    for a, b in ((x0, bb.x0 - HEADING_PAD), (bb.x1 + HEADING_PAD, x1)):
+        fig.add_artist(Line2D([a, b], [y, y], transform=tr, solid_capstyle="butt",
+                              **HEADING_RULE))
+
+
+def extent_table(fig, axes: dict) -> str:
+    """Every axes' extent [cm] as drawn (after aspect adjustment), as a table."""
+    w, h = fig.get_size_inches() / C.CM
+    boxes = {}
+    for name, a in axes.items():
+        a.apply_aspect()
+        p = a.get_position()
+        boxes[name] = L.Box(p.x0 * w, p.y0 * h, p.width * w, p.height * h)
+    return L.extent_table(boxes)
 
 
 # ---------------------------------------------------------------------------
@@ -274,15 +321,20 @@ def pr_panel(ax, models, base, report):
 
 
 def proportion_points(ax, x, k, n, series, *, dx=0.0, logx=False, zorder=4):
-    """Proportions k/n at x joined by a line, with Wilson 95 % intervals."""
+    """Proportions k/n at x joined by a line, with Wilson 95 % intervals.
+
+    ``series``: colour, marker face/edge colour and edge width; optionally
+    ``marker`` (default circle) and line style ``ls`` (default solid).
+    """
     p = k / n
     lo, hi = C.wilson(k, n)
     xx = np.asarray(x) * (10**dx if logx else 1) + (0 if logx else dx)
-    ax.plot(xx, p, color=series["color"], lw=LW, zorder=zorder - 1, clip_on=False)
+    ax.plot(xx, p, color=series["color"], lw=LW, ls=series.get("ls", "-"), zorder=zorder - 1,
+            clip_on=False)
     ax.errorbar(xx, p, yerr=[np.clip(p - lo, 0, None), np.clip(hi - p, 0, None)],
-                fmt="o", ms=PT_MS, mfc=series["mfc"], mec=series["mec"], mew=series["mew"],
-                ecolor=series["color"], elinewidth=EB_LW, capsize=0, zorder=zorder,
-                clip_on=False)
+                fmt=series.get("marker", "o"), ms=PT_MS, mfc=series["mfc"], mec=series["mec"],
+                mew=series["mew"], ecolor=series["color"], elinewidth=EB_LW, capsize=0,
+                zorder=zorder, clip_on=False)
     return p, lo, hi
 
 
@@ -350,12 +402,13 @@ ASSIGN_YLIM = (0.4, 1.0)
 N_Y = 0.405  # the n row at the foot of the assignment panels
 
 
-def assign_yaxis(ax, *, ylabel=True):
-    """The shared y-axis of the assignment row (E-H)."""
+def assign_yaxis(ax, ylabel: str | None = "Correctly assigned"):
+    """The y-axis of the assignment row (E-H; one range): labelled, or
+    without tick labels where a panel shares its left neighbour's axis."""
     ax.set_ylim(*ASSIGN_YLIM)
     ax.set_yticks([0.4, 0.6, 0.8, 1.0])
     if ylabel:
-        ax.set_ylabel("Correctly assigned")
+        ax.set_ylabel(ylabel)
     else:
         ax.tick_params(labelleft=False)
 
@@ -373,7 +426,7 @@ def log_xaxis(ax, lims, ticks):
 def df_axis(ax, *, ylabel=True):
     """ΔF axis of E and F (log x, open outer bins) and the row's y-axis."""
     log_xaxis(ax, (3.3, 210), [10, 25, 50, 100])
-    assign_yaxis(ax, ylabel=ylabel)
+    assign_yaxis(ax, "Correctly assigned" if ylabel else None)
     despine(ax)
 
 
@@ -487,24 +540,73 @@ def assignment_panel(ax, a, report):
     report["assignment"]["by_df"] = by_df
 
 
-def size_panel(ax, a, column, scale, edges, keys, lims, name, report):
-    """Simulated: emitter correct by the chirp's true size (octave bins)."""
-    values = a[column] * scale
-    b = size_bins(values, edges, keys)
-    g = a.groupby(b, observed=False)["head_correct"].agg(["sum", "size"]).reindex(keys)
-    if (g["size"] == 0).any():
-        raise ValueError(f"{name}: empty bins {list(g.index[g['size'] == 0])}")
+def detection_set(report) -> pd.DataFrame:
+    """The visible simulated test chirps of A (one row per chirp label) with
+    their truth and whether they are detected at the operating threshold;
+    writes the counts to ``report["sim_recall"]``.
+
+    Their number and the detected ones must be A's operating point (the
+    evaluation's matching re-run at the threshold, ``v2_assign_params.py``).
+    """
+    path = C.SNIPPETS / "detect_params.csv"
+    if not path.exists():
+        msg = (f"{path} missing: run scripts/v2_assign_params.py --threshold {fmt_thr(THR)} "
+               "(root env)")
+        raise FileNotFoundError(msg)
+    meta = json.loads((C.SNIPPETS / "detect_params.json").read_text())
+    if not np.isclose(meta["threshold"], THR):
+        msg = (f"detect_params.csv is at threshold {meta['threshold']}, the run's is {THR}: "
+               f"rerun scripts/v2_assign_params.py --threshold {fmt_thr(THR)}")
+        raise ValueError(msg)
+    d = pd.read_csv(path)
+    if d.duplicated(DETECT_KEYS).any():
+        raise ValueError("detect_params.csv: a chirp label in more than one row")
+    op = report["sim"]["dualhead"]
+    n, k = int(len(d)), int(d["detected"].sum())
+    if (n, k) != (int(op["tp"] + op["fn"]), int(op["tp"])):
+        msg = (f"detect_params.csv: {k} of {n} chirp labels detected, A's operating point "
+               f"{int(op['tp'])} of {int(op['tp'] + op['fn'])}")
+        raise ValueError(msg)
+    report["sim_recall"] = {
+        "threshold": THR, "n_labels": n, "n_detected": k, "recall": k / n,
+        "join": {key: meta[key] for key in ("n_with_truth", "n_truth_nan", "n_edge_clipped",
+                                            "n_chirps", "n_scenes",
+                                            "n_tp_reference_score_ge_threshold")},
+    }
+    return d
+
+
+def size_panel(ax, a, d, column, scale, edges, keys, lims, name, report):
+    """Simulated, by the chirp's true size (octave bins): recall among the
+    visible chirps ``d`` (squares) and emitter correct among the true
+    positives ``a`` (circles); n: chirp labels per bin (recall's n)."""
     pos = octave_positions(edges)
-    p, lo, hi = proportion_points(ax, pos, g["sum"].to_numpy(float), g["size"].to_numpy(float),
-                                  SERIES["dualhead"], logx=True)
+    drawn = {}
+    for key, table, dx in (("detected", d, -0.035), ("head_correct", a, 0.035)):
+        b = size_bins(table[column] * scale, edges, keys)
+        g = table.groupby(b, observed=False)[key].agg(["sum", "size"]).reindex(keys)
+        if (g["size"] == 0).any():
+            raise ValueError(f"{name}, {key}: empty bins {list(g.index[g['size'] == 0])}")
+        p, lo, hi = proportion_points(ax, pos, g["sum"].to_numpy(float),
+                                      g["size"].to_numpy(float), SIZE_SERIES[key], dx=dx,
+                                      logx=True, zorder=5 if key == "head_correct" else 4)
+        drawn[key] = (g, p, lo, hi)
     log_xaxis(ax, lims, edges)
-    assign_yaxis(ax, ylabel=False)
     despine(ax)
-    n_row(ax, pos, g["size"].to_numpy(), N_Y)
+    n_row(ax, pos, drawn["detected"][0]["size"].to_numpy(), N_Y)
+
+    g, p, lo, hi = drawn["detected"]
+    report["sim_recall"][name] = {
+        "detected": by_bin(keys, g["sum"], g["size"], p, lo, hi),
+        "p_range": {"min": float(np.min(p)), "max": float(np.max(p))},
+        "n": int(g["size"].sum()), "edges": list(edges),
+    }
+    g, p, lo, hi = drawn["head_correct"]
     out = {"head_correct": by_bin(keys, g["sum"], g["size"], p, lo, hi),
            "p_range": {"min": float(np.min(p)), "max": float(np.max(p))},
            "n": int(g["size"].sum()), "edges": list(edges)}
     # the same by Δf stratum: does size matter where assignment is hard?
+    b = size_bins(a[column] * scale, edges, keys)
     for stratum, mask in (("df_below_10_hz", a["emitter_df_hz"] < 10),
                           ("df_10_hz_up", a["emitter_df_hz"] >= 10)):
         gs = a[mask].groupby(b[mask], observed=False)["head_correct"].agg(["sum", "size"])
@@ -514,6 +616,14 @@ def size_panel(ax, a, column, scale, edges, keys, lims, name, report):
         out[stratum] = by_bin(keys, gs["sum"], gs["size"], ks / ns, ls, hs)
         out[f"{stratum}_p_range"] = {"min": float(np.min(ks / ns)), "max": float(np.max(ks / ns))}
     report["assignment"][name] = out
+
+
+def series_handles(series: dict) -> list:
+    """Key entries (line, marker) of the given series."""
+    return [Line2D([], [], color=s["color"], lw=LW, ls=s.get("ls", "-"),
+                   marker=s.get("marker", "o"), ms=PT_MS, mfc=s["mfc"], mec=s["mec"],
+                   mew=s["mew"], label=s["label"])
+            for s in series.values()]
 
 
 # ---------------------------------------------------------------------------
@@ -559,49 +669,48 @@ def main() -> None:
     report: dict = {"operating_threshold": THR}
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
 
-    # layout [cm]: one row per pipeline stage: detection (A-D: simulated A, B;
-    # real C, D sharing the agreement axis), assignment (E-H sharing the
-    # y-axis; E, F one ΔF label), chirp parameters (I-K); the key above
-    ph, sq = 2.75, 3.6
-    y1, y2, y3 = 11.0, 6.6, 1.3
-    ax_a = C.axes_cm(fig, 1.55, y1, 2.9, ph)
-    ax_b = C.axes_cm(fig, 5.75, y1, 3.0, ph)
-    ax_c = C.axes_cm(fig, 10.3, y1, 3.15, ph)
-    ax_d = C.axes_cm(fig, 13.95, y1, 3.25, ph)
-    ax_e = C.axes_cm(fig, 1.55, y2, 3.7, ph)
-    ax_f = C.axes_cm(fig, 5.8, y2, 3.2, ph)
-    ax_g = C.axes_cm(fig, 9.75, y2, 3.85, ph)
-    ax_h = C.axes_cm(fig, 14.15, y2, 3.05, ph)
-    ax_i = C.axes_cm(fig, 1.65, y3, sq, sq)
-    ax_j = C.axes_cm(fig, 7.25, y3, sq, sq)
-    ax_k = C.axes_cm(fig, 12.85, y3, sq, sq)
+    # layout [cm] (v2_performance_layout): one row per pipeline stage:
+    # detection (A-D: simulated A, B | real C, D sharing the agreement axis,
+    # under two group headings), assignment (E-H: E, F by ΔF sharing the
+    # y-axis and one ΔF label | G, H by true chirp size sharing the y-axis),
+    # chirp parameters (I-K); the key above
+    boxes = L.layout()
+    ax = {name: C.axes_cm(fig, b.x, b.y, b.w, b.h) for name, b in boxes.items()}
+    ax_a, ax_b, ax_c, ax_d = (ax[k] for k in "ABCD")
+    ax_e, ax_f, ax_g, ax_h = (ax[k] for k in "EFGH")
+    ax_i, ax_j, ax_k = (ax[k] for k in "IJK")
 
     # --- detection -------------------------------------------------------------
     pr_panel(ax_a, ["dualhead"], lambda m: C.PP_EVAL[m] / "sim_test_after", report)
-    ax_a.set_title("Simulated", loc="left", pad=6)
     op = report["sim"]["dualhead"]
     C.annotate(ax_a, rf"score $\geq$ {fmt_thr(THR)}", xy=(op["recall"], op["precision"]),
                xytext=(0.87, 0.9), color="k", rad=0.2, shrink_b=4)
     benchmark_panel(ax_b, report)
     agreement_panel(ax_c, report)
-    ax_c.set_title("Real recordings", loc="left", pad=6)
     status_panel(ax_d, report)
     ax_d.tick_params(labelleft=False)
 
     # --- assignment ------------------------------------------------------------
     a = assignment_set(report)
+    d = detection_set(report)
     assignment_panel(ax_e, a, report)
     benchmark_emitter_panel(ax_f, report)
     # one ΔF label centred under the pair E, F
     ax_e.set_xlabel(r"$\Delta f$ to the nearest other fish [Hz]")
     pe, pf = ax_e.get_position(), ax_f.get_position()
     ax_e.xaxis.label.set_x(((pe.x0 + pf.x1) / 2 - pe.x0) / pe.width)
-    size_panel(ax_g, a, "width10_s", 1e3, WIDTH_EDGES_MS, WIDTH_KEYS, (5.0, 320.0),
+    size_panel(ax_g, a, d, "width10_s", 1e3, WIDTH_EDGES_MS, WIDTH_KEYS, (5.0, 320.0),
                "by_width10", report)
-    size_panel(ax_h, a, "height_hz", 1.0, HEIGHT_EDGES_HZ, HEIGHT_KEYS, (25.0, 800.0),
+    size_panel(ax_h, a, d, "height_hz", 1.0, HEIGHT_EDGES_HZ, HEIGHT_KEYS, (25.0, 800.0),
                "by_height", report)
+    assign_yaxis(ax_g, "Fraction")
+    assign_yaxis(ax_h, None)
     ax_g.set_xlabel(r"True 10\,\% width [ms]")
     ax_h.set_xlabel("True height [Hz]")
+    # the key of G and H in G's empty middle (between the n row and the data)
+    ax_g.legend(handles=series_handles(SIZE_SERIES), loc="center left",
+                bbox_to_anchor=(0.0, 0.52), frameon=False, handlelength=2.2,
+                handletextpad=0.5, borderaxespad=0.1, labelspacing=0.3)
 
     # --- chirp parameters --------------------------------------------------------
     sim = pd.read_parquet(C.DECODER_EVAL / "predictions.parquet")
@@ -619,21 +728,19 @@ def main() -> None:
     ax_k.set_xlabel(r"True 10\,\% width [ms]")
     ax_k.set_ylabel(r"Estimated 10\,\% width [ms]")
 
-    # --- key ---------------------------------------------------------------------
-    handles = [Line2D([], [], color=SERIES[m]["color"], lw=LW, marker="o", ms=PT_MS,
-                      mfc=SERIES[m]["mfc"], mec=SERIES[m]["mec"], mew=SERIES[m]["mew"],
-                      label=LABELS[m])
-               for m in ("dualhead", "human")]
-    fig.legend(handles=handles, loc="center", ncol=2, frameon=False, fontsize="small",
-               handlelength=1.6, handletextpad=0.5, columnspacing=1.8,
-               bbox_to_anchor=(0.5, (y1 + ph + 0.95) / H))
-    C.letters_cm(fig, [(ax_a, "A", 1.35, 0.3), (ax_b, "B", 1.2, 0.3),
-                       (ax_c, "C", 1.5, 0.3), (ax_d, "D", 0.35, 0.3),
-                       (ax_e, "E", 1.35, 0.3), (ax_f, "F", 0.35, 0.3),
-                       (ax_g, "G", 0.35, 0.3), (ax_h, "H", 0.35, 0.3),
-                       (ax_i, "I", 1.45, 0.3), (ax_j, "J", 1.45, 0.3),
-                       (ax_k, "K", 1.45, 0.3)])
+    # --- key, group headings, letters ---------------------------------------------
+    fig.legend(handles=series_handles({m: {**SERIES[m], "label": LABELS[m]}
+                                       for m in ("dualhead", "human")}),
+               loc="center", ncol=2, frameon=False, fontsize="small", handlelength=1.6,
+               handletextpad=0.5, columnspacing=1.8,
+               bbox_to_anchor=(L.W / 2 / W, L.KEY_Y / H))
+    letters = L.letters()
+    for text, first, last in (("Simulated", "A", "B"), ("Real recordings", "C", "D")):
+        x0 = boxes[first].x - letters[first] - L.LETTER_HALF
+        group_heading(fig, text, x0, boxes[first].x, boxes[last].right, L.HEADING_Y)
+    C.letters_cm(fig, [(ax[k], k, letters[k], L.LETTER_DY) for k in "ABCDEFGHIJK"])
 
+    print(extent_table(fig, ax))
     paths = C.save(fig, NAME)
     print(json.dumps(report, indent=1, default=float))
     print("\n".join(map(str, paths)))
