@@ -729,7 +729,7 @@ def main() -> None:
     ax_j.set_xlabel("True FWHM [ms]")
     ax_j.set_ylabel("Estimated FWHM [ms]")
     ax_k.set_xlabel(r"True 10\,\% width [ms]")
-    ax_k.set_ylabel(r"Estimated 10\,\% width [ms]")
+    ax_k.set_ylabel("Estimated\n" r"10\,\% width [ms]")  # two lines: longer than the square
 
     # --- key, group headings, letters ---------------------------------------------
     fig.legend(handles=series_handles({m: {**SERIES[m], "label": LABELS[m]}
@@ -738,9 +738,12 @@ def main() -> None:
                handletextpad=0.5, columnspacing=1.8,
                bbox_to_anchor=(L.W / 2 / W, L.KEY_Y / H))
     letters = L.letters()
-    for text, first, last in (("Simulated", "A", "B"), ("Real recordings", "C", "D")):
+    # one heading per row (E-K are all simulated; author, 2026-11-25)
+    for text, first, last in (("Simulated", "A", "B"), ("Real recordings", "C", "D"),
+                              ("Simulated", "E", "H"), ("Simulated", "I", "K")):
         x0 = boxes[first].x - letters[first] - L.LETTER_HALF
-        group_heading(fig, text, x0, boxes[first].x, boxes[last].right, L.HEADING_Y)
+        group_heading(fig, text, x0, boxes[first].x, boxes[last].right,
+                      L.heading_y(boxes[first].top))
     C.letters_cm(fig, [(ax[k], k, letters[k], L.LETTER_DY) for k in "ABCDEFGHIJK"])
 
     print(extent_table(fig, ax))

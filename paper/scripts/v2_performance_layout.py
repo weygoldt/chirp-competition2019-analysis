@@ -16,8 +16,12 @@ groups are separated by visibly more whitespace than panels within a group):
 - assignment: four equally wide panels in two pairs that each share a
   y-axis, E-F (ΔF) and G-H (true chirp size), separated by ``GROUP_GAP_2``;
 - chirp parameters: three equal squares, evenly spaced;
+- every row under a group heading (author, 2026-11-25: per-row headings, so
+  that E-K, all simulated, do not read as continuing the columns of C, D):
+  "Simulated" and "Real recordings" over the detection row, "Simulated" over
+  the assignment and chirp-parameter rows, each ``HEADING_DY`` above its row;
 - between the rows ``ROW_GAP`` of whitespace from the lowest x-axis label of
-  one row to the top of the next row's letters.
+  one row to the top of the next row's heading.
 
 Gaps between panels reserve the right panel's y tick labels and y-axis label
 (``YLABEL_1``: one label line, ``YLABEL_2``: two), plus visible whitespace.
@@ -45,13 +49,15 @@ GROUP_GAP_2 = YLABEL_1 + SPACE + GROUP_EXTRA  # F -> G: by ΔF | by true chirp s
 XLABEL = 1.1  # below an axes: spine offset, x tick labels and the x-axis label
 LETTER_DY = 0.3  # panel letters: centre this far above the axes' top
 LETTER_HALF = 0.14  # half the height of a panel letter
-ROW_GAP = 0.7  # whitespace between one row's x-axis labels and the next row's letters
+ROW_GAP = 0.45  # whitespace between one row's x-axis labels and the next row's heading
 
 KEY_Y = 14.8  # centre of the figure key (detector, expert)
-HEADING_Y = 14.32  # centre of the group headings of the detection row
 TOP_1 = 13.65  # top of the detection row
+HEADING_DY = 0.67  # centre of a row's group heading above the row's top
+HEADING_HALF = 0.14  # half the height of a heading
+HEADING_Y = TOP_1 + HEADING_DY  # centre of the group headings of the detection row
 PANEL_H = 2.3  # height of the detection and assignment panels
-SQUARE = 3.35  # side of the chirp-parameter panels
+SQUARE = 3.1  # side of the chirp-parameter panels
 BOTTOM_MARGIN = 0.1  # below the lowest x-axis label
 
 
@@ -87,7 +93,12 @@ def row(names: list[str], gaps: list[float], y: float, h: float) -> dict[str, Bo
 
 def next_top(bottom: float) -> float:
     """Top of the row below a row whose axes end at ``bottom``."""
-    return bottom - XLABEL - ROW_GAP - (LETTER_DY + LETTER_HALF)
+    return bottom - XLABEL - ROW_GAP - (HEADING_DY + HEADING_HALF)
+
+
+def heading_y(top: float) -> float:
+    """Centre of the group heading of the row whose axes top is ``top``."""
+    return top + HEADING_DY
 
 
 def layout() -> dict[str, Box]:
@@ -109,7 +120,7 @@ def layout() -> dict[str, Box]:
 
 ROWS = ("ABCD", "EFGH", "IJK")
 SHARED = "DFH"  # panels that share their left neighbour's y-axis (no y tick labels)
-TWO_LINE = "C"  # panels with a two-line y-axis label
+TWO_LINE = "CK"  # panels with a two-line y-axis label
 
 
 def letters() -> dict[str, float]:
