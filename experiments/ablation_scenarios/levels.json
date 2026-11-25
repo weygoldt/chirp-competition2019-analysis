@@ -1,0 +1,150 @@
+{
+ "df": [
+  {
+   "name": "df_00p5",
+   "level_hz": 0.5,
+   "seeds": [
+    20000,
+    20030
+   ]
+  },
+  {
+   "name": "df_01p0",
+   "level_hz": 1.0,
+   "seeds": [
+    20100,
+    20130
+   ]
+  },
+  {
+   "name": "df_02p0",
+   "level_hz": 2.0,
+   "seeds": [
+    20200,
+    20230
+   ]
+  },
+  {
+   "name": "df_03p0",
+   "level_hz": 3.0,
+   "seeds": [
+    20300,
+    20330
+   ]
+  },
+  {
+   "name": "df_04p0",
+   "level_hz": 4.0,
+   "seeds": [
+    20400,
+    20430
+   ]
+  },
+  {
+   "name": "df_06p0",
+   "level_hz": 6.0,
+   "seeds": [
+    20500,
+    20530
+   ]
+  },
+  {
+   "name": "df_08p0",
+   "level_hz": 8.0,
+   "seeds": [
+    20600,
+    20630
+   ]
+  },
+  {
+   "name": "df_12p0",
+   "level_hz": 12.0,
+   "seeds": [
+    20700,
+    20730
+   ]
+  },
+  {
+   "name": "df_20p0",
+   "level_hz": 20.0,
+   "seeds": [
+    20800,
+    20830
+   ]
+  }
+ ],
+ "rate": [
+  {
+   "name": "rate_1000ms",
+   "interval_ms": 1000,
+   "seeds": [
+    30000,
+    30020
+   ]
+  },
+  {
+   "name": "rate_0500ms",
+   "interval_ms": 500,
+   "seeds": [
+    30100,
+    30120
+   ]
+  },
+  {
+   "name": "rate_0300ms",
+   "interval_ms": 300,
+   "seeds": [
+    30200,
+    30220
+   ]
+  },
+  {
+   "name": "rate_0200ms",
+   "interval_ms": 200,
+   "seeds": [
+    30300,
+    30320
+   ]
+  },
+  {
+   "name": "rate_0150ms",
+   "interval_ms": 150,
+   "seeds": [
+    30400,
+    30420
+   ]
+  },
+  {
+   "name": "rate_0120ms",
+   "interval_ms": 120,
+   "seeds": [
+    30500,
+    30520
+   ]
+  },
+  {
+   "name": "rate_0100ms",
+   "interval_ms": 100,
+   "seeds": [
+    30600,
+    30620
+   ]
+  },
+  {
+   "name": "rate_0085ms",
+   "interval_ms": 85,
+   "seeds": [
+    30700,
+    30720
+   ]
+  },
+  {
+   "name": "rate_0075ms",
+   "interval_ms": 75,
+   "seeds": [
+    30800,
+    30820
+   ]
+  }
+ ]
+}

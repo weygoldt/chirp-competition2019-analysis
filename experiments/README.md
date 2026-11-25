@@ -98,6 +98,21 @@ One training run per arm. Report: `$CHIRP_DATA/runs/ablation_frontend/report.md`
 | `compare.py ROOT --sim-a --sim-b`, `plot_curves.py` | `runs/ablation_frontend/compare/`, `val_curves.png` | A-vs-B tables, paired scene bootstrap, figures |
 | `run_remaining.sh` | logs in `runs/ablation_frontend/logs/` | the order the B evaluation, real labels, benchmark and compare were run in (boost off) |
 
+### Front-end ablation revisited (`ablation_scenarios/`, 2026-11-25)
+
+Where should the short windows help? Close EODf (assignment) and chirp trains
+faster than the training minimum (detection). Report:
+`$CHIRP_DATA/runs/ablation_frontend/scenarios/REPORT.md`; design and commands
+in [ablation_scenarios/README.md](ablation_scenarios/README.md).
+
+| script | output (`$CHIRP_DATA/...`) | role |
+|---|---|---|
+| `s1_restratify.py` | `runs/ablation_frontend/scenarios/s1_restratify/` | stored sim_v4 test results re-binned by the emitter's own ΔF |
+| `make_configs.py`, `simulate.sh` | `scenes/ablation_bench_v1/` (450 scenes) | breakdown benchmark: ΔEODf 0.5-20 Hz, chirp trains 1000-75 ms |
+| `bench_build.py A\|B`, `bench_run.sh build\|predict` | `datasets/ablation_bench_v1_{A,B}`, `runs/ablation_frontend/scenarios/bench/{A,B}` | both front ends; each arm on its own, before/after post-processing, 100 / 25 ms matching |
+| `bench_analyse.py`, `bench_figure.py` | `runs/ablation_frontend/scenarios/bench/analysis/` | A-vs-B by emitter ΔF and by same-fish interval, paired scene bootstrap, figure |
+| `prepare_longonly_cont.py`, `continue_longonly.sh` | `runs/dualhead_r18_sim_v4_longonly_r1c` | arm B resumed after epoch 10 and stopped after 22 (A's budget): arm `Bc` |
+
 ### Decoder (`decoder/`)
 
 | file | run (`$CHIRP_DATA/params/runs/...`) | role |

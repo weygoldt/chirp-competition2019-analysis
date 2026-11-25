@@ -1,0 +1,58 @@
+# Arm B continued to arm A's budget (experiments/ablation_scenarios/
+# prepare_longonly_cont.py): resumed after epoch 10 from a copy of
+# dualhead_r18_sim_v4_longonly_r1's state.pt with patience 100; stopped
+# after epoch 22 by continue_longonly.sh. Below: the arm-B config with
+# patience 6 -> 100 and [model] resume added.
+# Front-end ablation, arm B (decision 6): the released dual-head's training
+# config, unchanged below this header (byte-identical to
+# experiments/training/dualhead_r18_sim_v4.toml from "seed = 0" on), trained
+# on sim_v4_longonly (sim_v4 with the 0.2048 s window in all 3 channels).
+# Run: /mnt/data1/chirp_v2/runs/dualhead_r18_sim_v4_longonly_r1.
+#
+# Dual-head RT-DETRv2-r18 (boxes + emitter EODf) on sim_v4 (2026-11-13).
+# sim_v4: hybrid scenes only (real backgrounds from the fish's inactive
+# period, v1-screened). From COCO weights (no earlier dual-head run, which
+# saw synthetic noise). Selection on sim_v4 val (fitness = AP x assignment
+# accuracy). A stop signal ships the best checkpoint; dualhead/state.pt
+# allows [model] resume in a new run dir.
+seed = 0
+# deformable attention (grid_sample) has no deterministic backward on CUDA
+deterministic = false
+device = "cuda"
+max_vram_fraction = 0.35
+score_threshold = 0.5
+
+[model]
+type = "dualhead"
+resume = "/mnt/data1/chirp_v2/runs/dualhead_r18_sim_v4_longonly_r1c/resume_state_epoch10_patience100.pt"
+architecture = "rtdetr_v2_r18vd"
+pretrained = true
+num_queries = 300
+num_denoising = 100
+max_det = 50
+emitter_loss_weight = 10.0
+backbone_lr_scale = 0.1
+grad_clip = 0.1
+ema_decay = 0.9999
+time_shift_px = 32
+val_max_images = 2000
+
+[optim]
+epochs = 30
+batch = 16
+optimizer = "AdamW"
+lr0 = 0.0001
+lrf = 0.05
+schedule = "cosine"
+warmup_epochs = 0.5
+weight_decay = 0.0001
+patience = 100
+amp = true
+workers = 8
+
+[augment]
+time_flip = 0.0
+
+[cv]
+n_folds = 0
+final_fit = true
