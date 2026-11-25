@@ -74,13 +74,13 @@ printed for the captions.
 ## How to run
 
 1. Cache the raw-data inputs (upgrade repo env: chirpdetector/gridtools;
-   CPU; ~15 s for `snippets traces raw`, ~1 min for `assign-baseline`,
+   CPU; ~15 s for `snippets traces raw`, ~35 s for `case-heights`, ~1 min for `assign-baseline`,
    which loads the tracks of the 300 simulated test scenes and should go
    through `guarded`):
 
    ```sh
    cd paper
-   /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py snippets traces raw
+   /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py snippets traces raw case-heights
    ~/wrk/analyses/chirp_competition_upgrade/scripts/guarded --name v2fig-assign --mem 16G --vram 0.2 -- \
      /home/weygoldt/wrk/analyses/chirp_competition_upgrade/.venv/bin/python scripts/v2_fig_extract.py assign-baseline
    # the true positives' simulator truth for Fig. 2G, H (~2 min, ~1.3 GB, CPU)
@@ -273,7 +273,32 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   two hard cases for the detector (huge, long chirps; chirp rates so high
   that chirps smear together), windows chosen by the author from the
   candidates of a search (`v2_fig_extract.SNIPPETS` `f3_long`, `f3_dense`:
-  recording, t0, t1 and the band shown; `--window` previews a candidate).
+  recording, t0, t1 and the band shown; `--window` previews a candidate),
+  widened to 15-20 s around the chosen 6-s candidates, edges between boxes
+  and bands from the boxes and tracks plus a margin (the plot script fails
+  if a drawn box is cut). Fish labels and scale bars of B and C are placed
+  where no box is (`FreeSpace`).
+  - B: `2020-06-02-10_00` (analysed trial), 835-853 s, 620-1340 Hz; the
+    821-Hz fish (track 7; other fish 727 Hz). 28 chirps, all detected with
+    one box each (scores 0.91-0.97) and assigned to this fish; decoded
+    heights 340-467 Hz, 13 with a FWHM >= 50 ms (up to 298 ms). Heights
+    against the chirps' instantaneous-frequency traces
+    (`v2_fig_extract.py case-heights`, harvest extraction as for Fig. 1D;
+    `f3_long_trace_heights.json`): 22 of 28 traces extracted (6 rejected by
+    the harvest), 20 within 100 Hz (median decoder - trace +28 Hz), chirp
+    491 +102 Hz and chirp 467 +305 Hz (its box reaches 480 Hz above the
+    baseline, so the trace may be the one that is off). The candidate search
+    found about a third of this fish's long chirps elsewhere in the
+    recording overestimated by 180-330 Hz.
+  - C: `2020-03-18-10_34` (a draw, not one of the 33 analysed trials),
+    11400.3-11417.62 s, 560-1040 Hz; the 701-Hz fish (track 0; other fish
+    816 Hz). Chirps counted without the detector (the search's method:
+    peaks, >= 6 dB prominence and >= 40 ms apart, of the 51-ms channel's
+    power 40-90 Hz above the fish's EOD$f$; `EVENTS`): 109 (6.3 per s,
+    median interval 88 ms); 74 detections of the fish, 62 matched to a
+    counted chirp (centres within 50 ms), 47 chirps (43 %) without a
+    detection, 12 detections without a counted chirp; 48 boxes span 2-4
+    counted chirps; 10 boxes below the threshold (0.64-0.78).
 
 ## Numbers and their sources
 

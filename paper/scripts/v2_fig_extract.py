@@ -25,6 +25,11 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     (emitter's field pattern, other fish projected out, pulse-pair estimator
     with a 1-ms adaptive window) and per-EOD-period frequencies from the
     upward zero crossings of the same combined signal. ``traces.npz``.
+``case-heights``
+    The instantaneous-frequency height (and widths) of every chirp in the
+    windows of ``CASE_HEIGHT_SNIPPETS`` (failure-mode figure B, long chirps),
+    from the same harvest extraction, next to the decoder's estimates.
+    ``<snippet>_trace_heights.json``.
 ``raw``
     The raw voltage of the electrode with the largest RMS during the
     front-end example (``f1_fe_e``), for the "recording" thumbnail of the
@@ -122,14 +127,23 @@ SNIPPETS: dict[str, tuple] = {
     # close fish
     "g_close_15388": ("2019-12-09-10_00", 15387.9, 15389.1),
     "g_close_9394": ("2020-03-13-10_00", 9393.9, 9395.1),
-    # failure-mode figure B and C (round 3, 2026-11-25): two hard cases for the
-    # detector, (B) huge, long chirps and (C) chirp rates so high that the
-    # chirps smear together. PLACEHOLDERS until the author picks the windows:
-    # replace the tuples (recording, t0, t1, (f0, f1)) and rerun
-    # ``snippets --only f3_long f3_dense``
-    "f3_long": ("2019-11-28-09_58", 4643.6, 4647.6, (620.0, 1260.0)),
-    "f3_dense": ("2019-12-02-10_00", 6344.0, 6350.0, (600.0, 960.0)),
+    # failure-mode figure B and C (round 3, the author's choice of 2026-11-25
+    # among the candidates of a search; 15-20 s centred on the chosen 6-s
+    # candidate, edges between boxes, the band from the boxes and tracks plus
+    # a margin so that no box is cut; the plot script checks both):
+    # (B) huge, long chirps of the 821-Hz fish (track 7) of an analysed trial
+    # (candidate 841-847 s)
+    "f3_long": ("2020-06-02-10_00", 835.0, 853.0, (620.0, 1340.0)),
+    # (C) chirp rates so high that the chirps smear together: the ~702-Hz fish
+    # (track 0) of a draw, not one of the 33 analysed trials (candidate
+    # 11406-11412 s)
+    "f3_dense": ("2020-03-18-10_34", 11400.3, 11417.62, (560.0, 1040.0)),
 }
+
+# failure-mode figure B: snippets whose chirps get an instantaneous-frequency
+# height from the raw recording (``case-heights``), to check the decoder's
+# heights of long chirps
+CASE_HEIGHT_SNIPPETS = ("f3_long",)
 
 # pipeline figure D: chirps of the f1_tile recording whose traces are extracted
 TRACE_CHIRPS: dict[str, tuple[str, int]] = {
@@ -346,6 +360,87 @@ def traces() -> None:
     np.savez_compressed(OUT / "traces.npz", meta=json.dumps(meta), **out)
 
 
+def peak_excursion(t: np.ndarray, freq: np.ndarray, row) -> dict:
+    """A chirp's height in its instantaneous-frequency trace: the largest
+    excursion of the trace from the box start to 100 ms after the box end
+    above its baseline (median of the 200 ms that end 50 ms before the box),
+    and the trace's widths at 50 % and 10 % of that height (the contiguous run
+    around the peak)."""
+    pre = (t > row.t_start_s - 0.25) & (t < row.t_start_s - 0.05)
+    base = float(np.nanmedian(freq[pre]))
+    inside = (t >= row.t_start_s) & (t <= row.t_end_s + 0.1)
+    ti, fi = t[inside], freq[inside] - base
+    k = int(np.nanargmax(fi))
+    height = float(fi[k])
+
+    def width(frac):
+        above = fi > frac * height
+        a = b = k
+        while a > 0 and above[a - 1]:
+            a -= 1
+        while b < len(fi) - 1 and above[b + 1]:
+            b += 1
+        return float(ti[b] - ti[a])
+
+    return {"baseline_hz": base, "height_hz": height, "fwhm_s": width(0.5),
+            "width10_s": width(0.1)}
+
+
+def case_heights() -> None:
+    """Instantaneous-frequency heights of the chirps of ``CASE_HEIGHT_SNIPPETS``
+    (gridtools harvest extraction, as ``traces``), to compare with the
+    decoder's heights: ``<snippet>_trace_heights.json``, one record per
+    operating chirp in the snippet's window."""
+    from gridtools.io import load_tracks
+    from gridtools.templates.harvest import (
+        HarvestConfig,
+        harvest_candidate,
+        open_recording_lenient,
+    )
+
+    cfg = HarvestConfig()
+    for name in CASE_HEIGHT_SNIPPETS:
+        rec_name, t0, t1, _ = snippet_window(SNIPPETS[name])
+        table = pd.read_parquet(RUN / rec_name / PARQUET)
+        rows = table[table.chirp & (table.t_end_s > t0) & (table.t_start_s < t1)]
+        patched = TRACKS_RUN / rec_name / "tracks_gapfill.npz" if TRACKS_RUN else None
+        gaps = np.load(patched) if patched is not None and patched.exists() else None
+        recording, _ = open_recording_lenient(REC_2019 / rec_name)
+        tracks = load_tracks(REC_2019 / rec_name)
+        out = []
+        for row in rows.itertuples():
+            rec = {"chirp_id": int(row.chirp_id), "t_center_s": float(row.t_center_s),
+                   "track_id": float(row.track_id), "decoder_height_hz": float(row.height_hz),
+                   "decoder_fwhm_s": float(row.fwhm_s),
+                   "decoder_width10_s": float(row.width10_s)}
+            # the harvest uses the wavetracker tracks: not valid in a filled gap
+            if gaps is not None and (
+                    (gaps["gap_fish_id"] == row.track_id) & (gaps["gap_action"] == "filled")
+                    & (gaps["gap_start_s"] < row.t_end_s)
+                    & (gaps["gap_end_s"] > row.t_start_s)).any():
+                out.append({**rec, "status": "in_filled_gap"})
+                continue
+            box = pd.Series({"box_index": int(row.chirp_id), "t_start_s": row.t_start_s,
+                             "t_end_s": row.t_end_s, "f_low_hz": row.f_low_hz,
+                             "f_high_hz": row.f_high_hz, "score": row.score,
+                             "track_id": int(row.track_id), "emitter_hz": row.emitter_hz})
+            result = harvest_candidate(recording, tracks, box, cfg, recording_name=rec_name)
+            ex = result.extraction
+            rec.update(status=str(result.record.get("status")),
+                       reason=str(result.record.get("reason")))
+            if ex is not None:
+                t = ex.window_start_s + np.arange(len(ex.signal)) / ex.samplerate_hz
+                freq = np.asarray(ex.traces["smooth_freq"], dtype=float)
+                rec.update({f"trace_{k}": v for k, v in peak_excursion(t, freq, row).items()})
+            out.append(rec)
+            log.info("%s chirp %d: decoder %.0f Hz, trace %s Hz (%s)", name, row.chirp_id,
+                     row.height_hz, f"{rec.get('trace_height_hz', float('nan')):.0f}",
+                     rec["status"])
+        (OUT / f"{name}_trace_heights.json").write_text(json.dumps(
+            {"snippet": name, "recording": rec_name, "window_s": [t0, t1],
+             "detections": DETECTIONS, "run": str(RUN), "chirps": out}, indent=1) + "\n")
+
+
 def raw() -> None:
     from gridtools.io import open_recording
 
@@ -464,7 +559,8 @@ def assign_baseline() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("steps", nargs="+", choices=["snippets", "traces", "raw", "assign-baseline"])
+    parser.add_argument("steps", nargs="+",
+                        choices=["snippets", "traces", "raw", "case-heights", "assign-baseline"])
     parser.add_argument("--only", nargs="*", help="snippet names (default: all)")
     parser.add_argument(
         "--window", nargs="+", action="append", default=[],
@@ -492,6 +588,8 @@ def main() -> None:
             traces()
         elif step == "raw":
             raw()
+        elif step == "case-heights":
+            case_heights()
         else:
             assign_baseline()
 

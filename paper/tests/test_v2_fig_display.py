@@ -104,3 +104,27 @@ def test_track_segments_joins_filled_samples_to_their_neighbours(common):
     _, fs, _, _, pieces = common.track_segments(t, f, fl, bridge_s=10.0)
     assert pieces == [(0.3, 1.2)]
     assert np.isnan(fs[2]) and np.isnan(fs[3])  # filled samples are not solid
+
+
+# --- failure-mode figure: trace heights and chirp counting ---------------------
+
+
+def test_peak_excursion_of_a_gaussian_chirp():
+    from types import SimpleNamespace
+
+    fs = 4000.0
+    t = np.arange(0, 1.0, 1 / fs)
+    sd = 0.01
+    freq = 700.0 + 300.0 * np.exp(-0.5 * ((t - 0.5) / sd) ** 2)
+    out = X.peak_excursion(t, freq, SimpleNamespace(t_start_s=0.4, t_end_s=0.6))
+    assert out["baseline_hz"] == pytest.approx(700.0)
+    assert out["height_hz"] == pytest.approx(300.0, abs=0.5)
+    assert out["fwhm_s"] == pytest.approx(2 * np.sqrt(2 * np.log(2)) * sd, abs=2 / fs)
+    assert out["width10_s"] == pytest.approx(2 * np.sqrt(2 * np.log(10)) * sd, abs=2 / fs)
+
+
+def test_match_times_is_one_to_one_closest_first(common):
+    import plot_v2_failure_modes as F
+
+    ua, ub = F.match_times(np.array([1.00, 1.04, 2.0]), np.array([1.03, 3.0]), tol=0.05)
+    assert ua == {1} and ub == {0}  # 1.04 is closer to 1.03 than 1.00 is

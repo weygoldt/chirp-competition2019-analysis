@@ -22,13 +22,22 @@ A   2019-12-09-10_00, 4312-4328 s, inside a hand-labelled test region:
     detections without a label get a "?". The tracks are drawn as the
     assignment uses them: linearly interpolated (dashed) across their short
     gaps.
-B   a fish producing huge, long chirps (``CASES["B"]``);
+B   a fish producing huge, long chirps (``CASES["B"]``, snippet ``f3_long``:
+    2020-06-02-10_00, 835-853 s, the 821-Hz fish of an analysed trial). The
+    decoder's heights are compared with the heights of the chirps'
+    instantaneous-frequency traces from the raw recording
+    (``v2_fig_extract.py case-heights``; stats ``long.trace_heights``).
 C   chirp rates so high that the chirps smear together in the spectrogram
-    (``CASES["C"]``).
-    B and C are PLACEHOLDERS until the author picks the windows: set them in
-    ``v2_fig_extract.SNIPPETS`` (``f3_long``, ``f3_dense``: recording, t0,
-    t1, frequency band), rerun ``v2_fig_extract.py snippets --only f3_long
-    f3_dense`` and set ``placeholder`` to False below.
+    (``CASES["C"]``, snippet ``f3_dense``: 2020-03-18-10_34, 11400.3-11417.62
+    s, the ~702-Hz fish of a draw, not one of the 33 analysed trials).
+    The chirps are counted independently of the detector as peaks of the
+    51-ms channel's power 40-90 Hz above the emitter's EOD$f$ (``EVENTS``,
+    the method of the candidate search of 2026-11-25; stats
+    ``dense.events``) and matched to the detections.
+    The windows were chosen by the author (2026-11-25) from the candidates
+    of a search, and widened to 15-20 s around the chosen 6-s candidates;
+    they are set in ``v2_fig_extract.SNIPPETS`` (recording, t0, t1, band).
+    The script fails if a drawn box is cut by the window or the band.
 
 Round 3 (author, 2026-11-25): the former B (a 140-s track gap: an upstream
 tracking problem) and C (assignments between fish < 7 Hz apart: redundant
@@ -76,14 +85,28 @@ DRAWN: set[str] = set()  # symbols drawn in the panels (the key lists only these
 # v2_fig_extract.SNIPPETS whose meta holds the window and the band shown;
 # ``below_min_score``: also draw the stored detections from this score up to
 # the operating threshold (dotted grey; None: none); ``scalebar_s``: length of
-# the scale bar; ``placeholder``: the window is not chosen yet (marked in the
-# panel)
+# the scale bar, ``scalebar_at``: "top" or "bottom" edge of the image (where
+# the boxes leave room); ``trace_heights``: compare the decoder's heights with
+# traces' (``<snippet>_trace_heights.json`` of v2_fig_extract case-heights);
+# ``events``: count the chirps independently of the detector (``EVENTS``);
+# ``placeholder``: the window is not chosen yet (marked in the panel)
 CASES = {
-    "B": {"key": "long", "snippet": "f3_long", "below_min_score": 0.5, "scalebar_s": 0.5,
-          "placeholder": True},
-    "C": {"key": "dense", "snippet": "f3_dense", "below_min_score": 0.5, "scalebar_s": 0.5,
-          "placeholder": True},
+    "B": {"key": "long", "snippet": "f3_long", "below_min_score": 0.5, "scalebar_s": 1.0,
+          "scalebar_at": "bottom", "trace_heights": True, "events": False,
+          "placeholder": False},
+    "C": {"key": "dense", "snippet": "f3_dense", "below_min_score": 0.5, "scalebar_s": 1.0,
+          "scalebar_at": "top", "trace_heights": False, "events": True,
+          "placeholder": False},
 }
+# decoded and trace heights "agree" within this many Hz
+HEIGHT_AGREE_HZ = 100.0
+# chirps counted without the detector (the candidate search's method): peaks
+# of the power [dB] of the 51-ms channel, averaged over the band 40-90 Hz
+# above the emitter's EOD$f$ (its track), with a prominence of at least 6 dB
+# and at least 40 ms apart; a detection matches a peak if its box centre lies
+# within 50 ms (one-to-one, closest pairs first)
+EVENTS = {"channel": 1, "band_above_hz": (40.0, 90.0), "prominence_db": 6.0,
+          "min_interval_s": 0.04, "match_s": 0.05}
 
 # ---------------------------------------------------------------------------
 # layout [cm]: every row from L to R (as in the pipeline figure); three rows
@@ -228,6 +251,180 @@ def nice_ticks(f0: float, f1: float) -> list[int]:
     return ticks
 
 
+def chirp_events(snip, t0: float, t1: float, tid: int) -> np.ndarray:
+    """Chirps of fish ``tid`` counted without the detector (``EVENTS``): times
+    of the peaks of the 51-ms channel's power in the band 40-90 Hz above the
+    fish's EOD$f$."""
+    from scipy.signal import find_peaks
+
+    lo, hi = EVENTS["band_above_hz"]
+    t, f = snip["times_s"], snip["freqs_hz"]
+    it = (t >= t0) & (t <= t1)
+    tt = t[it]
+    tr_t, tr_f = snip["tracks"][tid]
+    fe = np.interp(tt, tr_t, tr_f)
+    power = 10 ** (snip["power_db"][EVENTS["channel"]][:, it].astype(float) / 10)
+    level = np.array([10 * np.log10(power[(f >= fe[k] + lo) & (f <= fe[k] + hi), k].mean())
+                      for k in range(len(tt))])
+    dist = max(1, int(round(EVENTS["min_interval_s"] / (tt[1] - tt[0]))))
+    peaks, _ = find_peaks(level, prominence=EVENTS["prominence_db"], distance=dist)
+    return tt[peaks]
+
+
+def match_times(a: np.ndarray, b: np.ndarray, tol: float):
+    """Greedy one-to-one matching (closest pairs first): matched indices of a, b."""
+    pairs = sorted((abs(x - y), i, j) for i, x in enumerate(a) for j, y in enumerate(b)
+                   if abs(x - y) <= tol)
+    ua, ub = set(), set()
+    for _, i, j in pairs:
+        if i not in ua and j not in ub:
+            ua.add(i)
+            ub.add(j)
+    return ua, ub
+
+
+def summary(x) -> dict:
+    """Median, min and max of the finite values (empty dict if there are none)."""
+    x = np.asarray(x, float)
+    x = x[np.isfinite(x)]
+    if not len(x):
+        return {}
+    return {"median": float(np.median(x)), "min": float(x.min()), "max": float(x.max())}
+
+
+def trace_heights(case: dict, det: pd.DataFrame) -> tuple[dict, list]:
+    """The decoder's heights against the instantaneous-frequency traces' heights
+    (chirps whose trace the harvest extracted)."""
+    path = C.SNIPPETS / f"{case['snippet']}_trace_heights.json"
+    if not path.exists():
+        msg = f"{path} missing: run scripts/v2_fig_extract.py case-heights (upgrade env)"
+        raise FileNotFoundError(msg)
+    j = json.loads(path.read_text())
+    tab = pd.DataFrame(j["chirps"]).set_index("chirp_id")
+    missing = set(det.chirp_id) - set(tab.index)
+    if missing:
+        msg = f"{path}: no trace heights for chirps {sorted(missing)}; rerun case-heights"
+        raise ValueError(msg)
+    ok = tab[tab.status == "harvested"]
+    diff = (ok.decoder_height_hz - ok.trace_height_hz).to_numpy()
+    out = {
+        "n_chirps": len(tab), "n_traces": len(ok),
+        "n_within": int((np.abs(diff) <= HEIGHT_AGREE_HZ).sum()),
+        "within_hz": HEIGHT_AGREE_HZ,
+        "decoder_minus_trace_hz": summary(diff),
+        "abs_decoder_minus_trace_hz": summary(np.abs(diff)),
+        "n_decoder_above_by_more": int((diff > HEIGHT_AGREE_HZ).sum()),
+        "n_decoder_below_by_more": int((diff < -HEIGHT_AGREE_HZ).sum()),
+    }
+    rows = (ok.assign(diff_hz=diff).reset_index()[
+        ["chirp_id", "t_center_s", "decoder_height_hz", "trace_height_hz", "diff_hz",
+         "decoder_fwhm_s", "trace_fwhm_s"]].round(3).to_dict(orient="records"))
+    return out, rows
+
+
+def dense_events(snip, det: pd.DataFrame, order, t0: float, t1: float) -> tuple[dict, dict]:
+    """Chirps of the fish with the most detections counted without the
+    detector, matched to its detections; and how many of them each box spans."""
+    emitter = max(order, key=lambda tid: int((det.track_id == tid).sum()))
+    mine = det[det.track_id == emitter]
+    ev = chirp_events(snip, t0, t1, emitter)
+    centres = np.sort(mine.t_center_s.to_numpy())
+    ue, ud = match_times(ev, centres, EVENTS["match_s"])
+    per_box = np.array([int(((ev >= r.t_start_s) & (ev <= r.t_end_s)).sum())
+                        for r in mine.itertuples()])
+    span = t1 - t0
+    out = {
+        "emitter_hz": C.track_median(snip, emitter, t0, t1),
+        "n_events": len(ev), "rate_per_s": len(ev) / span,
+        "n_detections": len(mine), "detection_rate_per_s": len(mine) / span,
+        "n_matched": len(ue), "n_events_without_detection": len(ev) - len(ue),
+        "fraction_without_detection": (len(ev) - len(ue)) / len(ev) if len(ev) else 0.0,
+        "n_detections_without_event": len(centres) - len(ud),
+        "event_interval_ms": summary(np.diff(ev) * 1e3),
+        "events_per_box": summary(per_box),
+        "n_boxes_spanning_2_or_more": int((per_box >= 2).sum()),
+    }
+    detail = {"emitter_track": int(emitter), "event_times_s": np.round(ev, 3).tolist(),
+              "events_per_box": per_box.tolist()}
+    return out, detail
+
+
+class FreeSpace:
+    """Where text or a scale bar fits in a spectrogram without touching a box.
+
+    ``boxes``: the drawn boxes (absolute times; ``t_ref`` the panel's time
+    origin). Sizes in data units from the axes' size in cm; a clearance of
+    ``PAD_CM`` around every box.
+    """
+
+    PAD_CM = 0.05
+
+    def __init__(self, ax, boxes: pd.DataFrame, t_ref: float):
+        self.ax = ax
+        self.boxes = np.c_[boxes.t_start_s - t_ref, boxes.t_end_s - t_ref,
+                           boxes.f_low_hz, boxes.f_high_hz] if len(boxes) else np.zeros((0, 4))
+        W, H = ax.figure.get_size_inches() / C.CM
+        bb = ax.get_position()
+        (self.x0, self.x1), (self.y0, self.y1) = ax.get_xlim(), ax.get_ylim()
+        self.sx = (self.x1 - self.x0) / (bb.width * W)  # s per cm
+        self.sy = (self.y1 - self.y0) / (bb.height * H)  # Hz per cm
+
+    def text_size(self, text: str) -> tuple[float, float]:
+        """Width [s] and height [Hz] of a small text."""
+        return C.text_width_cm(self.ax.figure, text) * self.sx, 0.24 * self.sy
+
+    def add(self, xa, xb, ya, yb) -> None:
+        """Something placed (a label): later placements keep clear of it."""
+        self.boxes = np.r_[self.boxes, [[xa, xb, ya, yb]]]
+
+    def clear(self, xa, xb, ya, yb) -> bool:
+        px, py = self.PAD_CM * self.sx, self.PAD_CM * self.sy
+        b = self.boxes
+        hit = ((b[:, 0] - px < xb) & (b[:, 1] + px > xa)
+               & (b[:, 2] - py < yb) & (b[:, 3] + py > ya))
+        return not hit.any()
+
+    def first_x(self, rects, start_cm: float = 0.2) -> float:
+        """The leftmost x (from ``start_cm`` into the panel) at which every
+        (width, y_low, y_high) of ``rects``, starting at x, is clear: labels
+        that belong together share one x."""
+        step = 0.02 * self.sx
+        widest = max(w for w, _, _ in rects)
+        for x in np.arange(self.x0 + start_cm * self.sx, self.x1 - widest, step):
+            if all(self.clear(x, x + w, ya, yb) for w, ya, yb in rects):
+                return float(x)
+        msg = f"no room for labels {rects} (width s, Hz, Hz)"
+        raise ValueError(msg)
+
+    def scalebar_spot(self, length: float, label: str,
+                      prefer: str = "bottom") -> tuple[float, float]:
+        """End x and height of a scale bar (label above it): as far right as
+        possible, near the ``prefer``-red edge of the image, else the other."""
+        lw, lh = self.text_size(label)
+        margin = 0.2 * self.sx
+        heights = [self.y0 + 0.15 * self.sy, self.y1 - 0.45 * self.sy]
+        if prefer == "top":
+            heights.reverse()
+        for y in heights:
+            for x1 in np.arange(self.x1 - margin, self.x0 + length, -0.02 * self.sx):
+                xa = min(x1 - length, x1 - length / 2 - lw / 2)
+                if self.clear(xa, x1, y - 0.05 * self.sy, y + 0.06 * self.sy + lh):
+                    return float(x1), float(y)
+        msg = f"no room for a {length:g}-s scale bar"
+        raise ValueError(msg)
+
+
+def check_inside(drawn: pd.DataFrame, below: pd.DataFrame, t0, t1, f0, f1, name):
+    """Every drawn box lies inside the window and the band (none is cut)."""
+    shown = pd.concat([drawn[drawn.drawn_as.notna()], below])
+    cut = shown[(shown.t_start_s < t0) | (shown.t_end_s > t1)
+                | (shown.f_low_hz < f0) | (shown.f_high_hz > f1)]
+    if len(cut):
+        msg = (f"{name}: boxes {cut.chirp_id.tolist()} are cut by the window "
+               f"{t0}-{t1} s / band {f0}-{f1} Hz: widen them in v2_fig_extract.SNIPPETS")
+        raise ValueError(msg)
+
+
 def panel_case(ax, case: dict, report, stats):
     """One hard case: the window and band of its snippet, every detection at the
     operating threshold, and (dotted grey) the stored ones below it."""
@@ -239,42 +436,52 @@ def panel_case(ax, case: dict, report, stats):
         raise ValueError(msg)
     f0, f1 = m["band_hz"]
     fish, order = C.fish_styles(snip, t0, t1)
+    # boxes that reach into the window (check_inside: none is cut)
     rows = C.window(snip, t0, t1)
     _, lv = C.show_power(ax, snip, t0, t1, f0, f1)
     dashed = draw_tracks(ax, snip, fish, t0, t1)
     lo = case["below_min_score"]
     below = rows.iloc[0:0]
     if lo is not None:
-        below = rows[~rows.operating & (rows.score >= lo)]
+        # those that reach into the band (a harmonic copy far above is not in
+        # view)
+        below = rows[~rows.operating & (rows.score >= lo) & (rows.f_low_hz < f1)
+                     & (rows.f_high_hz > f0)]
         for _, r in below.iterrows():
             C.draw_missed(ax, r, t0)
         if len(below):
             DRAWN.add("missed")
     drawn = C.draw_detections(ax, rows, fish, t0)
-    DRAWN.update(drawn.drawn_as.dropna())
-    fish_labels(ax, snip, order, t0, t1, 0.012 * (t1 - t0), dy=(22, -22))
+    # removed harmonic copies far above the band are simply not in view
+    in_band = drawn[~(drawn.drawn_as.isin(["harmonic", "duplicate"]) & (drawn.f_low_hz > f1))]
+    check_inside(in_band, below, t0, t1, f0, f1, case["snippet"])
+    DRAWN.update(in_band.drawn_as.dropna())
+    # the fish labels and the scale bar where no box is (the boxes fill most of
+    # these windows)
+    shown = pd.concat([in_band[in_band.drawn_as.notna()], below])
+    free = FreeSpace(ax, shown, t0)
+    # EOD$f_1$ just above its band, EOD$f_2$ just below (0.11 cm), at one x
+    labels = []
+    for k, tid in enumerate(order[:2]):
+        w, h = free.text_size(rf"EOD$f_{{{k + 1}}}$")
+        y = C.track_median(snip, tid, t0, t1) + (1 if k == 0 else -1) * (0.11 * free.sy + h / 2)
+        labels.append((k + 1, y, (w, y - h / 2, y + h / 2)))
+    x = free.first_x([rect for _, _, rect in labels])
+    for k, y, (w, ya, yb) in labels:
+        C.eod_label(ax, x, y, k)
+        free.add(x, x + w, ya, yb)
     sb = case["scalebar_s"]
-    C.scalebar(ax, t1 - t0 - 0.012 * (t1 - t0), f0 + 0.06 * (f1 - f0), sb,
-               f"{sb * 1e3:.0f} ms" if sb < 1 else f"{sb:g} s")
+    sb_label = f"{sb * 1e3:.0f} ms" if sb < 1 else f"{sb:g} s"
+    x1, y_sb = free.scalebar_spot(sb, sb_label, prefer=case["scalebar_at"])
+    C.scalebar(ax, x1, y_sb, sb, sb_label)
     C.spec_yaxis(ax, ticks=nice_ticks(f0, f1))
     if case["placeholder"]:
         ax.text(0.5, 0.97, "placeholder window (not chosen yet)", transform=ax.transAxes,
                 ha="center", va="top", color="#ffb000", fontsize=C.ANNOT_FS, zorder=30)
 
     det = drawn[drawn.drawn_as.isin(["assigned", "unassigned"])].sort_values("t_start_s")
-    onsets = det.t_start_s.to_numpy()
-    ioi = np.diff(onsets) * 1e3
-    dur = (det.t_end_s - det.t_start_s).to_numpy() * 1e3
-    ext = (det.f_high_hz - det.f_low_hz).to_numpy()
     span = t1 - t0
     hz = [C.track_median(snip, t, t0, t1) for t in order]
-
-    def rng(x):
-        x = np.asarray(x, float)
-        x = x[np.isfinite(x)]
-        return {"median": float(np.median(x)), "min": float(x.min()), "max": float(x.max())} \
-            if len(x) else {"median": np.nan, "min": np.nan, "max": np.nan}
-
     out = {
         "duration_s": span,
         "band_hz": [f0, f1],
@@ -283,19 +490,26 @@ def panel_case(ax, case: dict, report, stats):
         "n_unassigned": int((det.drawn_as == "unassigned").sum()),
         "n_assigned_per_fish": [int((det.track_id == t).sum()) for t in order],
         "n_below_threshold": len(below),
-        "n_removed": int(drawn.drawn_as.isin(["harmonic", "duplicate"]).sum()),
+        "n_removed": int(in_band.drawn_as.isin(["harmonic", "duplicate"]).sum()),
         "rate_per_s": len(det) / span,
-        "box_duration_ms": rng(dur),
-        "box_extent_hz": rng(ext),
-        "onset_interval_ms": rng(ioi),
-        "height_hz": rng(det.height_hz),
-        "fwhm_ms": rng(det.fwhm_s * 1e3),
-        "width10_ms": rng(det.width10_s * 1e3),
+        "score": summary(det.score),
+        "box_duration_ms": summary((det.t_end_s - det.t_start_s) * 1e3),
+        "box_extent_hz": summary(det.f_high_hz - det.f_low_hz),
+        "onset_interval_ms": summary(np.diff(det.t_start_s.to_numpy()) * 1e3),
+        "height_hz": summary(det.height_hz),
+        "fwhm_ms": summary(det.fwhm_s * 1e3),
+        "width10_ms": summary(det.width10_s * 1e3),
+        "n_fwhm_ge_50_ms": int((det.fwhm_s >= 0.05).sum()),
         "n_params_flagged": int((~det.params_ok.astype(bool)).sum()),
         "fish_hz": hz,
     }
     if len(hz) >= 2:
         out["fish_df_hz"] = hz[0] - hz[1]
+    detail = {}
+    if case["trace_heights"]:
+        out["trace_heights"], detail["trace_heights"] = trace_heights(case, det)
+    if case["events"]:
+        out["events"], detail["events"] = dense_events(snip, det, order, t0, t1)
     report[case["key"]] = {
         "recording": m["recording"], "window_s": [t0, t1], "levels_db": lv,
         "placeholder": case["placeholder"], "interpolated_track_pieces": dashed,
@@ -304,12 +518,9 @@ def panel_case(ax, case: dict, report, stats):
                            "params_ok", "drawn_as"]].round(3).to_dict(orient="records"),
         "below_threshold": below[["chirp_id", "t_center_s", "score"]].round(3)
         .to_dict(orient="records"),
-        **{k: v for k, v in out.items() if k not in ("fish_hz",)},
-        "fish_hz": [round(h, 1) for h in hz],
+        **out, "fish_hz": [round(h, 1) for h in hz], **detail,
     }
-    # stats: numbers only, NaN-free (write_stats refuses NaN)
-    stats[case["key"]] = {k: v for k, v in out.items()
-                          if not (isinstance(v, dict) and any(np.isnan(x) for x in v.values()))}
+    stats[case["key"]] = out
 
 
 # ---------------------------------------------------------------------------
