@@ -63,6 +63,11 @@ def main() -> None:
         help="Evaluate only these STAGE_tolTAG (e.g. after_tol100), to run them in parallel; "
         "needs --reuse and an existing OUT/predictions_flagged.parquet; writes summary_<only>.json.",
     )
+    p.add_argument(
+        "--predict-only",
+        action="store_true",
+        help="Stop after writing the raw and flagged predictions (then evaluate with --reuse --only ...).",
+    )
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -89,6 +94,9 @@ def main() -> None:
         preds = assign_by_frequency(preds, tracks, CONFIG.fundamental_tolerance_hz, max_gap_s=CONFIG.max_gap_s)
         flagged = flag_detections(preds, tracks, CONFIG)
         flagged.to_parquet(flagged_path)
+    if args.predict_only:
+        logging.info("wrote %s; evaluation skipped (--predict-only)", flagged_path)
+        return
     truth = dataset_ground_truth(dataset, ids)
     keep = flagged["drop_reason"].astype(str).to_numpy() == ""
     stages = {

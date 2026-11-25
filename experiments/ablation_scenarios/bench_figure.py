@@ -28,8 +28,13 @@ from paths import DATA  # noqa: E402
 
 ROOT = DATA / "runs/ablation_frontend/scenarios/bench/analysis"
 CM = 1 / 2.54
-COLORS = {"A": "#2b3a76", "B": "#34858d", "Bc": "#5ea869"}
-LABELS = {"A": "A: 3 windows", "B": "B: long window only", "Bc": "B continued to 22 epochs"}
+COLORS = {"A": "#2b3a76", "B": "#34858d", "Bc16": "#34858d", "Bc22": "#5ea869"}
+LABELS = {
+    "A": "A: 3 windows",
+    "B": "B: long window only",
+    "Bc16": "B, long window, epoch 16",
+    "Bc22": "B, long window, epoch 22",
+}
 
 
 def style() -> None:
@@ -70,7 +75,8 @@ def diff_panel(ax, x, table, metric, arms):
     ax.axhline(0, color="black", lw=0.6, ls=":")
     ax.errorbar(x, d, yerr=[d - lo, hi - d], color=COLORS[b], marker="o", capsize=0, elinewidth=0.8)
     ax.set_xscale("log")
-    ax.set_ylabel(f"{b} $-$ {a} (pp)")
+    short = {"Bc16": "B", "Bc22": "B"}
+    ax.set_ylabel(f"{short.get(b, b)} $-$ {short.get(a, a)} (pp)")
 
 
 def main() -> None:

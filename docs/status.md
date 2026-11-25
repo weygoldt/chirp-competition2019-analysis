@@ -103,3 +103,15 @@ Found while documenting (not fixed; code behaviour):
   --library`/`--recordings`, `data build-real` (the four recordings);
   gridtools `[chirps] library`, `[background] library`, `sim run --out`,
   `sim compare --calibration`, the background source roots.
+- Resuming a dual-head fit (`[model] resume`) leaves the EMA model at the
+  default `emitter_unit = 1.0` (found 2026-11-25, front-end ablation
+  revisited): `_dualhead_engine.fit` builds the model and `ModelEMA` (a deep
+  copy) before `_load_state` restores the unit (205/224 = 0.9152), and sets it
+  on the model only. The EMA is validated and exported, so after a resume the
+  logged emitter MAE / assignment / fitness, the best-epoch choice and every
+  exported checkpoint decode the emitter offset 1.093x too large (val MAE
+  2.9 -> 5.2 Hz, assignment 0.91 -> 0.83); training itself is unaffected.
+  Fix: `ema.ema.emitter_unit = model.emitter_unit` after `_load_state` (or
+  build the EMA after it). Workaround used:
+  `experiments/ablation_scenarios/make_bc_bundles.py` (repairs the field in
+  per-epoch snapshots).
