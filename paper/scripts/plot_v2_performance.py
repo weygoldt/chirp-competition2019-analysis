@@ -52,8 +52,8 @@ G,H Detection and assignment by the chirp's TRUE 10 % width (G; octave bins
     re-run with the boxes of score >= the threshold, A's operating point;
     squares), and the share of E's true positives assigned correctly
     (``assign_params.csv``; circles, as E). Numbers: chirp labels per bin
-    (recall's n). G and H share a y-axis ("Fraction") with E's limits, so
-    that the flat size dependence reads against the ΔF dependence.
+    (recall's n). G and H share a y-axis ("Fraction", 0.6-1; author,
+    2026-11-25: E's 0.4-1 left the flat series squeezed at the top).
 I-K Chirp-parameter decoder for boxes at the operating threshold on the
     simulated test chirps of unseen fish (fish-disjoint template splits):
     calibrated estimate vs per-period truth of height (I), FWHM (J) and 10 %
@@ -400,13 +400,16 @@ def benchmark_panel(ax, report):
 # ---------------------------------------------------------------------------
 ASSIGN_YLIM = (0.4, 1.0)
 N_Y = 0.405  # the n row at the foot of the assignment panels
+SIZE_YLIM = (0.6, 1.0)  # G, H: detection and assignment by chirp size
+SIZE_N_Y = 0.605
 
 
-def assign_yaxis(ax, ylabel: str | None = "Correctly assigned"):
+def assign_yaxis(ax, ylabel: str | None = "Correctly assigned", ylim=ASSIGN_YLIM,
+                 ticks=(0.4, 0.6, 0.8, 1.0)):
     """The y-axis of the assignment row (E-H; one range): labelled, or
     without tick labels where a panel shares its left neighbour's axis."""
-    ax.set_ylim(*ASSIGN_YLIM)
-    ax.set_yticks([0.4, 0.6, 0.8, 1.0])
+    ax.set_ylim(*ylim)
+    ax.set_yticks(list(ticks))
     if ylabel:
         ax.set_ylabel(ylabel)
     else:
@@ -593,7 +596,7 @@ def size_panel(ax, a, d, column, scale, edges, keys, lims, name, report):
         drawn[key] = (g, p, lo, hi)
     log_xaxis(ax, lims, edges)
     despine(ax)
-    n_row(ax, pos, drawn["detected"][0]["size"].to_numpy(), N_Y)
+    n_row(ax, pos, drawn["detected"][0]["size"].to_numpy(), SIZE_N_Y)
 
     g, p, lo, hi = drawn["detected"]
     report["sim_recall"][name] = {
@@ -703,8 +706,8 @@ def main() -> None:
                "by_width10", report)
     size_panel(ax_h, a, d, "height_hz", 1.0, HEIGHT_EDGES_HZ, HEIGHT_KEYS, (25.0, 800.0),
                "by_height", report)
-    assign_yaxis(ax_g, "Fraction")
-    assign_yaxis(ax_h, None)
+    assign_yaxis(ax_g, "Fraction", ylim=SIZE_YLIM, ticks=(0.6, 0.8, 1.0))
+    assign_yaxis(ax_h, None, ylim=SIZE_YLIM, ticks=(0.6, 0.8, 1.0))
     ax_g.set_xlabel(r"True 10\,\% width [ms]")
     ax_h.set_xlabel("True height [Hz]")
     # the key of G and H in G's empty middle (between the n row and the data)
