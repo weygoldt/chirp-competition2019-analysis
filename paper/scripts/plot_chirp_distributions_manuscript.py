@@ -101,11 +101,15 @@ def setup_plot():
     cm = 1 / 2.54
     fig = plt.figure(figsize=(17.4 * cm, 8 * cm), dpi=300)
 
+    # Columns: A, its right marginal, spacer, B, spacer, C. The spacers split the whitespace so
+    # that the gap from A's marginal to B's tick labels and the gap from B's last tick label to
+    # C's y-axis label are about equal (0.7 cm each); moving width between the spacers leaves the
+    # panels' sizes and the positions of A and C unchanged.
     gs = GridSpec(
         nrows=2,
         ncols=6,
         figure=fig,
-        width_ratios=[1, 0.1, 0.2, 1, 0.17, 0.5],
+        width_ratios=[1, 0.1, 0.11, 1, 0.26, 0.5],
         height_ratios=[0.1, 1],
     )
 

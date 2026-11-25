@@ -3,11 +3,11 @@
 A   shifts of the re-labeled onsets and offsets relative to BORIS (re-labeled - annotated): kernel density
     (Gaussian, bandwidth KDE_BW_S), interquartile range shaded, median as a line
 B   video motion around onsets: BORIS onsets of all analysed chases (dashed), BORIS (black) and re-labeled
-    (indigo) onsets of the matched chases (mean, 95 % bootstrap band over chases)
+    (blue) onsets of the matched chases (mean, 95 % bootstrap band over chases)
 C   the same around offsets
 D   loser chirp rate around chase onsets: Fig. 6's panel B1 (identical numbers: the JSON it draws), zoomed to
     RATE_XLIM; the same rate for every chase shifted by the median re-labeling shift (dashed) and for the
-    re-labeled onsets of the matched chases (indigo); Fig. 6's jittered null in grey
+    re-labeled onsets of the matched chases (blue); Fig. 6's jittered null in grey
 E   the same around chase offsets (Fig. 6, C1)
 
 D, E: medians and 2.5th-97.5th percentiles of the leave-out resamples, as in Fig. 6 (``chase_event_rates``);
@@ -33,7 +33,7 @@ from matplotlib.patches import Patch
 import chase_event_rates as cer
 from manuscript_stats import write_stats
 from paper_config import FIGURES, PROCESSED
-from style import letter_subplots, loser_color, other_color, set_light_style
+from style import letter_subplots, loser_color, set_light_style
 
 # The figure helpers of v2_fig_common, copied: importing that module needs the run to be one of its pipeline
 # runs (v2_fig_common.RUNS), so the figure failed in the sensitivity run at threshold 0.9.
@@ -78,13 +78,30 @@ C = SimpleNamespace(CM=_CM, INK="k", MUTED="#6e6e6e", rc_tweaks=_rc_tweaks, axes
                     letters_cm=_letters_cm, save=_save)
 
 NAME = "plot_chase_validation"
-# Palette of Figs. 5-7: the re-labeled chases in the chasing indigo, everywhere; the annotated chases in black
-# (video motion) or, for the loser's chirp rate, in Fig. 6's loser teal; Fig. 6's grey null.
-RELABEL_C, ANNOT_C, ALL_C, LOSER_C, NULL_C = other_color, C.INK, C.MUTED, loser_color, "grey"
+# Palette: the re-labeled chases in the blue of Fig. 1's chirp line (mako, 4 colours, the second), everywhere;
+# the annotated chases in black (video motion) or, for the loser's chirp rate, in Fig. 6's loser teal (D, E
+# show Fig. 6's curves); Fig. 6's grey null.
+FIG1_LINES = sns.color_palette("mako", 4)  # Fig. 1 (plot_what_is_a_chirp_and_why_use_spetrograms.py)
+RELABEL_C, ANNOT_C, ALL_C, LOSER_C, NULL_C = FIG1_LINES[1], C.INK, C.MUTED, loser_color, "grey"
 REF = {"color": C.INK, "lw": 0.5, "ls": ":", "zorder": 0}  # the event time (reference line)
 SEED = 42
-W_CM, H_CM = 17.4, 10.8
+# Layout [cm]. Both rows span LEFT..RIGHT: LEFT leaves room for the y-axis label of D (and for the labels of
+# A's ridges), RIGHT for the last tick label. Top row: A, then the pair B, C (equal sizes); bottom row: the
+# pair D, E (equal sizes). The two onset/offset pairs are spaced alike (PAIR_GAP: room for the second panel's
+# tick labels and a narrow break); the gap between A and B is wider (A_B_GAP: B's two-line y-axis label and a
+# wide break between the groups). A is drawn at the seconds per cm of B and C, so that a shift has the same
+# length in A as between the curves of B and C.
+W_CM, H_CM = 17.4, 11.1
+LEFT, RIGHT = 1.4, 17.1
+TOP_Y, BOTTOM_Y, ROW_H = 6.8, 1.2, 3.6  # lower edges of the rows, their height
+A_B_GAP, PAIR_GAP = 2.25, 1.2
+# Panel letters, centred this far left of their axes and above their top: A and D at the left page edge,
+# B left of its y-axis label, C and E left of their tick labels
+LETTER_DX = {"A": LEFT - 0.3, "B": 1.4, "C": 0.85, "D": LEFT - 0.3, "E": 0.85}
+LETTER_DY = 0.3
+RIDGE_LABEL_DX_CM = 0.15  # A: the ridges' labels, right-aligned this far left of the axes
 SHIFT_XLIM = (-6, 3)  # A; the shifts outside are counted in the stats
+SHIFT_PAD_S = 0.2  # A: the axis runs this much beyond SHIFT_XLIM
 KDE_BW_S = 0.25
 MOTION_XLIM, MOTION_XTICKS = (-6, 6), [-6, -4, -2, 0, 2, 4, 6]
 # D, E: Fig. 6 shows +-30 s; +-10 s keeps the loser's modulations around the chase ends that a shift of about
@@ -133,13 +150,16 @@ def shift_ridges(ax, pairs: pd.DataFrame) -> dict:
         ax.plot(x, y, color=RELABEL_C, lw=1.0)
         ax.plot(SHIFT_XLIM, [y0, y0], color=RELABEL_C, lw=0.5)
         ax.plot([q50, q50], [y0, y0 + scale * np.interp(q50, x, dens[end])], color=C.INK, lw=1.0)
-        ax.text(SHIFT_XLIM[0], y0 + 0.12, f"{end}\nn = {len(d)}", fontsize=_ANNOT_FS, ha="left", va="bottom")
+        # the ridge's label in the room left of the axes (A has no y axis), like a tick label of its baseline
+        ax.annotate(f"{end}\nn = {len(d)}", xy=(0, y0), xycoords=("axes fraction", "data"),
+                    xytext=(-RIDGE_LABEL_DX_CM * 72 / 2.54, 0), textcoords="offset points",
+                    fontsize=_ANNOT_FS, ha="right", va="bottom", annotation_clip=False)
         ax.text(q50 - 0.15, y0 + scale * np.interp(q50, x, dens[end]) + 0.04, f"{q50:.2f} s".replace("-", "$-$"),
                 fontsize=_ANNOT_FS, ha="right", va="bottom")
         out[end] = {"n": int(len(d)), "n_outside": int(np.sum((d < SHIFT_XLIM[0]) | (d > SHIFT_XLIM[1]))),
                     "median_s": float(q50), "iqr_s": [float(q25), float(q75)]}
     ax.axvline(0, **REF)
-    ax.set_xlim(SHIFT_XLIM[0] - 0.2, SHIFT_XLIM[1] + 0.2)
+    ax.set_xlim(SHIFT_XLIM[0] - SHIFT_PAD_S, SHIFT_XLIM[1] + SHIFT_PAD_S)
     ax.set_xticks([-6, -4, -2, 0, 2])
     ax.set_ylim(-0.08, 1.98)
     ax.set_yticks([])
@@ -209,6 +229,20 @@ def rate_panel(ax, end: str, fig6: dict, rates) -> dict:
     }
 
 
+def layout(fig) -> tuple:
+    """The axes of A-E (see the layout constants)."""
+    a_span = SHIFT_XLIM[1] - SHIFT_XLIM[0] + 2 * SHIFT_PAD_S
+    motion_span = MOTION_XLIM[1] - MOTION_XLIM[0]
+    w = (RIGHT - LEFT - A_B_GAP - PAIR_GAP) / (2 + a_span / motion_span)  # B, C
+    w_a = w * a_span / motion_span
+    w_rate = (RIGHT - LEFT - PAIR_GAP) / 2  # D, E
+    return (C.axes_cm(fig, LEFT, TOP_Y, w_a, ROW_H),
+            C.axes_cm(fig, LEFT + w_a + A_B_GAP, TOP_Y, w, ROW_H),
+            C.axes_cm(fig, RIGHT - w, TOP_Y, w, ROW_H),
+            C.axes_cm(fig, LEFT, BOTTOM_Y, w_rate, ROW_H),
+            C.axes_cm(fig, RIGHT - w_rate, BOTTOM_Y, w_rate, ROW_H))
+
+
 def main() -> None:
     logging.disable(logging.INFO)
     set_light_style()
@@ -222,11 +256,7 @@ def main() -> None:
     stats: dict = {}
 
     fig = plt.figure(figsize=(W_CM * C.CM, H_CM * C.CM))
-    ax_a = C.axes_cm(fig, 0.6, 6.55, 4.6, 3.6)
-    ax_b = C.axes_cm(fig, 6.85, 6.55, 4.6, 3.6)
-    ax_c = C.axes_cm(fig, 12.5, 6.55, 4.6, 3.6)
-    ax_d = C.axes_cm(fig, 1.4, 1.2, 7.0, 3.6)
-    ax_e = C.axes_cm(fig, 10.1, 1.2, 7.0, 3.6)
+    ax_a, ax_b, ax_c, ax_d, ax_e = layout(fig)
 
     # A: shifts
     stats["shifts"] = shift_ridges(ax_a, pairs)
@@ -268,8 +298,8 @@ def main() -> None:
     for ax in (ax_b, ax_c, ax_d, ax_e):
         sns.despine(ax=ax, offset=4, trim=False)
     sns.despine(ax=ax_a, left=True, offset=4, trim=False)
-    C.letters_cm(fig, [(ax_a, "A", 0.3, 0.3), (ax_b, "B", 1.4, 0.3), (ax_c, "C", 0.85, 0.3),
-                       (ax_d, "D", 1.1, 0.3), (ax_e, "E", 0.85, 0.3)])
+    C.letters_cm(fig, [(ax, let, LETTER_DX[let], LETTER_DY)
+                       for ax, let in zip((ax_a, ax_b, ax_c, ax_d, ax_e), "ABCDE", strict=True)])
     paths = C.save(fig, NAME)
     print(json.dumps(stats, indent=1))
     print("\n".join(map(str, paths)))
