@@ -738,9 +738,10 @@ def main() -> None:
                handletextpad=0.5, columnspacing=1.8,
                bbox_to_anchor=(L.W / 2 / W, L.KEY_Y / H))
     letters = L.letters()
-    # one heading per row (E-K are all simulated; author, 2026-11-25)
+    # headings over the detection and assignment rows (E-H are all simulated;
+    # none over I-K: author, 2026-11-25)
     for text, first, last in (("Simulated", "A", "B"), ("Real recordings", "C", "D"),
-                              ("Simulated", "E", "H"), ("Simulated", "I", "K")):
+                              ("Simulated", "E", "H")):
         x0 = boxes[first].x - letters[first] - L.LETTER_HALF
         group_heading(fig, text, x0, boxes[first].x, boxes[last].right,
                       L.heading_y(boxes[first].top))

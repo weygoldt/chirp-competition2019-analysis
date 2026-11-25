@@ -52,9 +52,10 @@ def test_rows_are_separated_by_row_gap_and_everything_fits_the_page(boxes):
     letter_top = L.LETTER_DY + L.LETTER_HALF
     heading_top = L.HEADING_DY + L.HEADING_HALF
     assert bottom_1 - L.XLABEL - (top_2 + heading_top) == pytest.approx(L.ROW_GAP, abs=TOL)
-    assert bottom_2 - L.XLABEL - (top_3 + heading_top) == pytest.approx(L.ROW_GAP, abs=TOL)
+    # no heading over the chirp-parameter row
+    assert bottom_2 - L.XLABEL - (top_3 + letter_top) == pytest.approx(L.ROW_GAP_PLAIN, abs=TOL)
     assert bottom_3 - L.XLABEL >= L.BOTTOM_MARGIN - TOL
-    for top in (top_1, top_2, top_3):  # every row's heading sits above its letters
+    for top in (top_1, top_2):  # a row's heading sits above its letters
         assert L.heading_y(top) - L.HEADING_HALF > top + letter_top
     assert L.heading_y(top_1) == pytest.approx(L.HEADING_Y, abs=TOL)
     assert L.HEADING_Y + L.HEADING_HALF < L.KEY_Y < L.H

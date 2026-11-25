@@ -16,12 +16,14 @@ groups are separated by visibly more whitespace than panels within a group):
 - assignment: four equally wide panels in two pairs that each share a
   y-axis, E-F (ΔF) and G-H (true chirp size), separated by ``GROUP_GAP_2``;
 - chirp parameters: three equal squares, evenly spaced;
-- every row under a group heading (author, 2026-11-25: per-row headings, so
-  that E-K, all simulated, do not read as continuing the columns of C, D):
-  "Simulated" and "Real recordings" over the detection row, "Simulated" over
-  the assignment and chirp-parameter rows, each ``HEADING_DY`` above its row;
+- group headings (author, 2026-11-25): "Simulated" and "Real recordings"
+  over the detection row, "Simulated" over the assignment row (so that E-H,
+  all simulated, do not read as continuing the columns of C, D), each
+  ``HEADING_DY`` above its row; none over the chirp-parameter row (author:
+  unnecessary);
 - between the rows ``ROW_GAP`` of whitespace from the lowest x-axis label of
-  one row to the top of the next row's heading.
+  one row to the top of the next row's heading, or ``ROW_GAP_PLAIN`` to the
+  top of its letters where it has no heading.
 
 Gaps between panels reserve the right panel's y tick labels and y-axis label
 (``YLABEL_1``: one label line, ``YLABEL_2``: two), plus visible whitespace.
@@ -50,6 +52,7 @@ XLABEL = 1.1  # below an axes: spine offset, x tick labels and the x-axis label
 LETTER_DY = 0.3  # panel letters: centre this far above the axes' top
 LETTER_HALF = 0.14  # half the height of a panel letter
 ROW_GAP = 0.45  # whitespace between one row's x-axis labels and the next row's heading
+ROW_GAP_PLAIN = 0.7  # ... and the next row's letters, where that row has no heading
 
 KEY_Y = 14.8  # centre of the figure key (detector, expert)
 TOP_1 = 13.65  # top of the detection row
@@ -57,7 +60,7 @@ HEADING_DY = 0.67  # centre of a row's group heading above the row's top
 HEADING_HALF = 0.14  # half the height of a heading
 HEADING_Y = TOP_1 + HEADING_DY  # centre of the group headings of the detection row
 PANEL_H = 2.3  # height of the detection and assignment panels
-SQUARE = 3.1  # side of the chirp-parameter panels
+SQUARE = 3.2  # side of the chirp-parameter panels
 BOTTOM_MARGIN = 0.1  # below the lowest x-axis label
 
 
@@ -91,9 +94,12 @@ def row(names: list[str], gaps: list[float], y: float, h: float) -> dict[str, Bo
     return out
 
 
-def next_top(bottom: float) -> float:
-    """Top of the row below a row whose axes end at ``bottom``."""
-    return bottom - XLABEL - ROW_GAP - (HEADING_DY + HEADING_HALF)
+def next_top(bottom: float, heading: bool = True) -> float:
+    """Top of the row below a row whose axes end at ``bottom`` (with or
+    without a group heading above it)."""
+    if heading:
+        return bottom - XLABEL - ROW_GAP - (HEADING_DY + HEADING_HALF)
+    return bottom - XLABEL - ROW_GAP_PLAIN - (LETTER_DY + LETTER_HALF)
 
 
 def heading_y(top: float) -> float:
@@ -104,7 +110,7 @@ def heading_y(top: float) -> float:
 def layout() -> dict[str, Box]:
     """The axes of Fig. 10, A-K."""
     top_2 = next_top(TOP_1 - PANEL_H)
-    top_3 = next_top(top_2 - PANEL_H)
+    top_3 = next_top(top_2 - PANEL_H, heading=False)
     boxes = {
         **row(list("ABCD"), [GAP_1, GROUP_GAP_1, SHARED_GAP], TOP_1 - PANEL_H, PANEL_H),
         **row(list("EFGH"), [SHARED_GAP, GROUP_GAP_2, SHARED_GAP], top_2 - PANEL_H, PANEL_H),
