@@ -93,9 +93,13 @@ PP_EVAL = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess"
 
 OUT = paper_config.PROCESSED / "v2_figures"  # created by main(), not at import
 
-# name -> (recording, t_start_s, t_end_s); times in seconds from the
-# recording's first sample (the clock of chirps_rtdetr.parquet)
-SNIPPETS: dict[str, tuple[str, float, float]] = {
+# name -> (recording, t_start_s, t_end_s) or (recording, t_start_s, t_end_s,
+# (f_low_hz, f_high_hz)); times in seconds from the recording's first sample
+# (the clock of chirps_rtdetr.parquet). The optional band is the frequency
+# range the figure shows (stored in the snippet's meta as ``band_hz``; the
+# spectrogram itself always covers the front end's 500-1500 Hz), so that a
+# window chosen for a figure is set here, in one place
+SNIPPETS: dict[str, tuple] = {
     # pipeline figure A: front end; two fish 29 Hz apart, a small and a big chirp
     "f1_fe_e": ("2020-06-05-10_00", 89.9, 91.1),
     # pipeline figure B: detection and assignment, 8.2 s (2245.2-2253.4 s)
@@ -111,11 +115,20 @@ SNIPPETS: dict[str, tuple[str, float, float]] = {
     # failure-mode figure A: hand-labelled test region (2019-12-09, region
     # 4260-4423 s)
     "f3_labelled": ("2019-12-09-10_00", 4312.0, 4328.0),
-    # failure-mode figure B: the track of one fish ends while it keeps chirping
+    # failure-mode figure (stats only since 2026-11-25): the track of one fish
+    # has a 140-s gap while it keeps chirping (the Methods cite its numbers)
     "f3_trackgap": ("2019-12-04-10_00", 7468.0, 7488.0),
-    # failure-mode figure C: assignments between close fish
+    # failure-mode figure (stats only since 2026-11-25): assignments between
+    # close fish
     "g_close_15388": ("2019-12-09-10_00", 15387.9, 15389.1),
     "g_close_9394": ("2020-03-13-10_00", 9393.9, 9395.1),
+    # failure-mode figure B and C (round 3, 2026-11-25): two hard cases for the
+    # detector, (B) huge, long chirps and (C) chirp rates so high that the
+    # chirps smear together. PLACEHOLDERS until the author picks the windows:
+    # replace the tuples (recording, t0, t1, (f0, f1)) and rerun
+    # ``snippets --only f3_long f3_dense``
+    "f3_long": ("2019-11-28-09_58", 4643.6, 4647.6, (620.0, 1260.0)),
+    "f3_dense": ("2019-12-02-10_00", 6344.0, 6350.0, (600.0, 960.0)),
 }
 
 # pipeline figure D: chirps of the f1_tile recording whose traces are extracted
@@ -176,6 +189,39 @@ def _tracks_window(tracks, t0: float, t1: float) -> dict[str, np.ndarray]:
     }
 
 
+def snippet_window(entry: tuple) -> tuple[str, float, float, tuple[float, float] | None]:
+    """(recording, t0, t1, band or None) of a ``SNIPPETS`` entry; fails loudly
+    on anything else."""
+    if len(entry) == 3:
+        rec_name, t0, t1 = entry
+        band = None
+    elif len(entry) == 4:
+        rec_name, t0, t1, band = entry
+        band = (float(band[0]), float(band[1]))
+        if not 500.0 <= band[0] < band[1] <= 1500.0:
+            msg = f"band {band} outside the front end's 500-1500 Hz"
+            raise ValueError(msg)
+    else:
+        msg = f"snippet entry {entry!r}: (recording, t0, t1[, (f0, f1)])"
+        raise ValueError(msg)
+    if not float(t0) < float(t1):
+        msg = f"snippet entry {entry!r}: t0 must be before t1"
+        raise ValueError(msg)
+    return str(rec_name), float(t0), float(t1), band
+
+
+def parse_window(values: list[str]) -> tuple[str, tuple]:
+    """``--window NAME RECORDING T0 T1 [F0 F1]`` -> (name, SNIPPETS entry)."""
+    if len(values) not in (4, 6):
+        msg = f"--window takes NAME RECORDING T0 T1 [F0 F1], got {values}"
+        raise ValueError(msg)
+    name, rec_name, t0, t1 = values[0], values[1], float(values[2]), float(values[3])
+    entry = (rec_name, t0, t1) if len(values) == 4 else (
+        rec_name, t0, t1, (float(values[4]), float(values[5])))
+    snippet_window(entry)  # validate
+    return name, entry
+
+
 def snippets(names: list[str] | None = None) -> None:
     from chirpdetector.bundle import load_bundle
     from chirpdetector.inference.spans import span_bounds, span_spectrogram
@@ -185,9 +231,10 @@ def snippets(names: list[str] | None = None) -> None:
     bundle = load_bundle(BUNDLE)
     config = bundle.spectrogram
     track_cache: dict[str, object] = {}
-    for name, (rec_name, t0, t1) in SNIPPETS.items():
+    for name, entry in SNIPPETS.items():
         if names and name not in names:
             continue
+        rec_name, t0, t1, band = snippet_window(entry)
         recording = open_recording(REC_2019 / rec_name)
         fs = recording.samplerate_hz
         start, stop = span_bounds(bundle, fs, recording.n_samples, t0, t1)
@@ -201,6 +248,7 @@ def snippets(names: list[str] | None = None) -> None:
             "recording": rec_name,
             "t_start_s": t0,
             "t_end_s": t1,
+            "band_hz": list(band) if band is not None else None,
             "n_electrodes": int(recording.n_channels),
             "samplerate_hz": float(fs),
             "reference_db": reference_level_db(spec),
@@ -301,7 +349,7 @@ def traces() -> None:
 def raw() -> None:
     from gridtools.io import open_recording
 
-    rec_name, t0, t1 = SNIPPETS["f1_fe_e"]
+    rec_name, t0, t1, _ = snippet_window(SNIPPETS["f1_fe_e"])
     recording = open_recording(REC_2019 / rec_name)
     block = recording.read_time(t0, t1)
     rms = np.sqrt(np.mean((block - block.mean(0)) ** 2, axis=0))
@@ -418,12 +466,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("steps", nargs="+", choices=["snippets", "traces", "raw", "assign-baseline"])
     parser.add_argument("--only", nargs="*", help="snippet names (default: all)")
+    parser.add_argument(
+        "--window", nargs="+", action="append", default=[],
+        metavar="NAME RECORDING T0 T1 [F0 F1]",
+        help="snippets: set (or add) snippet NAME to this window instead of the "
+        "SNIPPETS table, e.g. to preview candidates (repeatable; only these are "
+        "extracted unless --only names more). For the figure, write the chosen "
+        "window into SNIPPETS so that the run is reproducible",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     OUT.mkdir(parents=True, exist_ok=True)
+    only = list(args.only or [])
+    for values in args.window:
+        name, entry = parse_window(values)
+        if name in SNIPPETS and SNIPPETS[name] != entry:
+            log.warning("snippet %s: --window %s overrides the SNIPPETS table %s",
+                        name, entry, SNIPPETS[name])
+        SNIPPETS[name] = entry
+        only.append(name)
     for step in args.steps:
         if step == "snippets":
-            snippets(args.only)
+            snippets(only or None)
         elif step == "traces":
             traces()
         elif step == "raw":

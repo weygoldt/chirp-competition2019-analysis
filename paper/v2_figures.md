@@ -11,7 +11,7 @@ redesign, 2026-11-14, before the author's second design round).
 |---|---|---|---|
 | `plot_v2_pipeline_explainer` | `plot_assignment_feature_extraction.pdf` | `scripts/plot_v2_pipeline_explainer.py` | 17.4 x 16.4 cm |
 | `plot_v2_performance` | `plot_pipeline_performances_manuscript_supplement_supplement.pdf` | `scripts/plot_v2_performance.py` | 17.4 x 15.05 cm (since 2026-11-24, placed at 100 %) |
-| `plot_v2_failure_modes` | `plot_pipeline_performances_manuscript_supplement.pdf` | `scripts/plot_v2_failure_modes.py` | 17.4 x 12.05 cm |
+| `plot_v2_failure_modes` | `plot_pipeline_performances_manuscript_supplement.pdf` | `scripts/plot_v2_failure_modes.py` | 17.4 x 12.8 cm (since 2026-11-25) |
 
 ## Detections and output roots
 
@@ -90,8 +90,9 @@ printed for the captions.
    Writes `$PAPER_OUT/data/processed/v2_figures/` (default
    `paper/output/rtdetr/data/processed/v2_figures/`).
    `raw` (new) caches 1.2 s of the raw voltage of one electrode for the
-   "Recording" thumbnail of Fig. 1. `snippets` caches exactly the eight
-   snippets the two spectrogram figures draw (`SNIPPETS` in the script;
+   "Recording" thumbnail of Fig. 1. `snippets` caches the ten
+   snippets of the two spectrogram figures (`SNIPPETS` in the script; since
+   2026-11-25 `f3_trackgap` and the two `g_close_*` only for numbers;
    since 2026-11-24 each also holds the unclipped spectrogram in dB,
    `power_db`, which the figures display; rerun `snippets` after updating).
    For the gap-filled dataset prefix both commands with
@@ -120,9 +121,9 @@ author's decision after comparing unclipped, floor-only and symmetric
 percentile clipping) every spectrogram panel of both figures, and the
 thumbnails, shows this power in dB re 1 V^2 (`power_db`, unclipped in the
 cache), with display levels the 2nd and 98th percentile of the panel's own
-crop (`C.CLIP_PCT`, `C.show_power`) and a small colour bar per panel or row
-(`C.power_bar`); the zoom of Fig. 3A uses the levels of the main panel (it
-is a crop of it). Only the RGB "detector input" of Fig. 1A keeps the front
+crop (`C.CLIP_PCT`, `C.show_power`); the zoom of Fig. 3A uses the levels of
+the main panel (it is a crop of it). The colour bars of 2026-11-24
+(`C.power_bar`) were removed on 2026-11-25 (author). Only the RGB "detector input" of Fig. 1A keeps the front
 end's own 0-1 levels (60-dB range ending 10 dB above the median per-frame
 peak of the 205-ms channel, clipped), because it is the image the detector
 receives. The earlier display rules (`chirp_levels`, `background_levels`:
@@ -179,21 +180,24 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   assignment grey open circles. Fig. 2 uses the expert's colour only for the
   expert's own performance (B, F); the detector's agreement with the expert
   (C) is the detector's colour.
-- **Spectrogram symbols** (Figs. 1 and 3; a key in Fig. 1B and Fig. 3;
-  since 2026-11-24, the manuscript's figure standard: fish identity by line
-  style, never by colour): white box, solid for the fish EOD$f_1$ (the
-  higher-frequency fish of the panel), dashed for EOD$f_2$; white circle =
-  predicted emitter EOD$f$, drawn only if its centre is inside the image
-  and never clipped; light grey: solid = unassigned, dash-dot = removed by
-  post-processing, dotted = below the operating threshold; black triangles
-  above the image = hand labels; "?" = detection without a hand label;
-  numbers above boxes = assignment confidence (white); tracks as thin black
-  lines on their bands (dashed where interpolated), labelled EOD$f_1$ /
-  EOD$f_2$ in white; the assignment tolerance (+-20 Hz) as black brackets
-  right of Fig. 1B.
+- **Spectrogram symbols** (Figs. 1 and 3; a key only in Fig. 3; since
+  2026-11-25 fish identity neither by colour nor by line style): every
+  detection a solid white box, all boxes in one line width (`C.BOX_LW`,
+  0.6 pt, also in the thumbnails and the key); white circle = predicted
+  emitter EOD$f$, drawn only if its centre is inside the image and never
+  clipped; the circle on a fish's track shows the assignment; light grey
+  solid = unassigned; white, dashed and translucent = removed by
+  post-processing; light grey dotted = below the operating threshold;
+  black triangles above the image = hand labels; "?" = detection without a
+  hand label; tracks as thin black lines on their bands, dashed where
+  interpolated (gap-filled samples, and gaps of 1-10 s that the assignment
+  interpolates linearly: `C.draw_tracks(bridge_s=C.ASSIGN_MAX_GAP_S)`),
+  labelled EOD$f_1$ / EOD$f_2$ in white.
 - **Arrows**: one gentle curvature (`arc3`, rad +-0.2), small filled head,
   0.7 pt, a 2-pt gap at the text and a 2.5-4-pt gap at the target
-  (`C.annotate`); connectors between thumbnails thin grey arcs.
+  (`C.annotate`); between the rail's thumbnails short, black, straight
+  arrows (since 2026-11-25); dimensions (Fig. 1D) as double-headed arrows
+  whose tips stop 1.2 pt short of the trace.
 - **Text**: no panel titles except where the panel is ambiguous without
   them (Fig. 1: window lengths, "detector input", "harmonic"/"duplicate";
   Fig. 2: "Real recordings"/"Simulated"); grouping by spacing, no brackets
@@ -244,6 +248,32 @@ Rules of the v2 figures (`v2_fig_common.py`; second design round):
   each panel's crop, with colour bars (see How to run). The candidates and
   the display-level comparisons (unclipped, floor rules, percentile clips)
   were rendered outside the repository for the author.
+- **Round 3b (2026-11-25, author's third design round).** Alignment: every
+  row of both figures spans one left and right edge (L = 1.5 cm, R =
+  17.0 cm; the scripts print each axes' extent in cm), axes in a row share
+  top and bottom, panels of one kind have one size, and in Fig. 1 the D
+  panels sit on the columns of A3 and A4; groups separated by 0.85 cm of
+  white space. Both figures: no colour bars, one box line width, every
+  assigned box solid (the emitter marker on a track shows the assignment).
+  Fig. 1: rail arrows short, black, straight; the "Parameters" thumbnail a
+  schematic chirp with height and width arrows (the decoder returns four
+  scalars with SDs, not a trace: `ParamNet` predicts a mean and a
+  log-variance for height, FWHM, 10 % width and undershoot); channel dots
+  in seaborn "deep" red/green/blue instead of R/G/B chips; B full width,
+  without key and tolerance brackets, the "box" arrow onto the box's top
+  edge at right angles; C without key, removed boxes dashed and
+  translucent; D with the estimates as double-headed arrows (SDs only in
+  the caption), thinner traces and the single-EOD-period dots on top, the
+  key in one line above D. Fig. 3: the former B (track gap) and C (close
+  fish) are no longer drawn (their numbers are still computed and written
+  to the stats); the enlargement in A shows the main panel's frequency
+  range and is marked by two dashed lines (the dashed zoom rectangle had
+  read as a second, bigger below-threshold box around the missed chirp);
+  A's tracks are drawn interpolated across their 1-10 s gaps; B and C are
+  two hard cases for the detector (huge, long chirps; chirp rates so high
+  that chirps smear together), windows chosen by the author from the
+  candidates of a search (`v2_fig_extract.SNIPPETS` `f3_long`, `f3_dense`:
+  recording, t0, t1 and the band shown; `--window` previews a candidate).
 
 ## Numbers and their sources
 

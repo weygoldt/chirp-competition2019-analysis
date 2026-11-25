@@ -10,17 +10,20 @@ three figures (see "Figure style" in ``paper/v2_figures.md``):
 - spectrograms in ``mako`` (capped below white, so that white annotations
   stand out): power in dB re 1 V^2 (the snippets' unclipped ``power_db``),
   display levels the 2nd and 98th percentile of each panel's crop
-  (``CLIP_PCT``) with a small colour bar; a frequency axis offset from the
-  image, no time axis but white scale bars; the detector's RGB input keeps
-  its own 0-1 levels;
+  (``CLIP_PCT``; no colour bars since round 3, 2026-11-25); a frequency axis
+  offset from the image, no time axis but white scale bars; the detector's
+  RGB input keeps its own 0-1 levels;
 - on the spectrograms no colour for fish identity (the manuscript's figure
   standard): the frequency tracks as thin black lines on their bands,
-  labelled EOD$f_1$ (higher-frequency fish of the panel) and EOD$f_2$;
-  detections as white boxes, solid for the fish EOD$f_1$, dashed for
-  EOD$f_2$, the predicted emitter EOD$f$ as a white circle; light grey:
-  unassigned (solid), removed by post-processing (dash-dot), below the
-  operating threshold (dotted); black triangles above the image: hand
-  labels;
+  labelled EOD$f_1$ (higher-frequency fish of the panel) and EOD$f_2$,
+  dashed where interpolated (gap-filled samples, and gaps of more than 1 s
+  that the assignment bridges by linear interpolation); detections as solid
+  white boxes, all in one line width (``BOX_LW``), with the predicted emitter
+  EOD$f$ as a white circle: the circle on a fish's track shows the
+  assignment (round 3: no line style per fish); light grey solid,
+  unassigned; white dashed and translucent, removed by post-processing;
+  light grey dotted, below the operating threshold; black triangles above
+  the image: hand labels;
 - annotation arrows with one gentle curvature and a gap at both ends.
 
 Environment: ``paper/.venv`` (imports ``style``, which needs seaborn).
@@ -38,7 +41,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import ConnectionPatch, FancyArrowPatch, FancyBboxPatch, Rectangle
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
 
 import paper_config
 
@@ -80,6 +83,21 @@ def _operating_threshold() -> float:
 
 
 OPERATING = _operating_threshold()  # the run's operating threshold
+
+
+def _assign_max_gap_s() -> float:
+    """The assignment's ``max_gap_s`` (meta.json of the run's recordings; one
+    value): inside gaps up to this long a track is live and linearly
+    interpolated (gridtools ``Track.frequency_at``)."""
+    values = {json.loads(m.read_text())["assignment"]["config"]["max_gap_s"]
+              for m in sorted(RUN.glob("*/meta.json"))}
+    if len(values) != 1:
+        msg = f"{RUN}: assignment max_gap_s {sorted(values)}"
+        raise ValueError(msg)
+    return float(values.pop())
+
+
+ASSIGN_MAX_GAP_S = _assign_max_gap_s()
 
 
 def tile_duration_s() -> float:
@@ -129,22 +147,26 @@ CLIP_PCT = 2.0
 DENSITY_CMAP = LinearSegmentedColormap.from_list(
     "mako_density", _MAKO(np.linspace(0.92, 0.35, 256)))
 
-# the two fish of a panel: identity by line style, never by colour. Boxes and
-# emitter markers white (contrast on mako), EOD$f_1$ solid, EOD$f_2$ dashed;
-# the tracks thin black lines on their (saturated) bands
+# the fish of a panel: never told apart by colour or line style (round 3,
+# 2026-11-25). Boxes and emitter markers white (contrast on mako), every
+# assigned box solid: its emitter marker on a fish's track shows the
+# assignment; the tracks thin black lines on their (saturated) bands
 BOX_COLOR = "white"
-FISH_LS = ("-", (0, (3.0, 1.5)))  # EOD$f_1$, EOD$f_2$
+BOX_LS = "-"
 TRACK_COLOR = "k"
 TRACK_LW = 0.6
-FILLED_LS = (0, (2.5, 1.5))  # interpolated track samples (gap-filled run)
-# boxes that are not assigned output: light grey, no fish line style
+# interpolated track samples (gap-filled run, and gaps the assignment bridges)
+FILLED_LS = (0, (2.5, 1.5))
+TRACK_GAP_S = 1.0  # samples further apart than this are a gap in the track
+# boxes that are not assigned output
 GREY_BOX = "#c8c8c8"
 UNASSIGNED_COLOR = GREY_BOX  # solid, with its emitter marker
-DROPPED_COLOR = GREY_BOX  # removed by post-processing (dash-dot)
-DROPPED_LS = (0, (4.0, 1.3, 1.0, 1.3))
+DROPPED_COLOR = BOX_COLOR  # removed by post-processing: dashed, translucent
+DROPPED_LS = (0, (3.0, 2.0))
+DROPPED_ALPHA = 0.55
 MISSED_COLOR = GREY_BOX  # below the operating threshold (dotted)
-MISSED_LS = (0, (1, 1.2))
-BOX_LW = 0.9
+MISSED_LS = (0, (1.0, 1.2))
+BOX_LW = 0.6  # one box line width in every panel, thumbnail and key
 ANNOT_FS = "small"  # 6.7 pt at the 8-pt base; nothing in the figures is smaller
 ANNOT = {"color": "white", "fontsize": ANNOT_FS}
 DARK_BACK = {"bbox": dict(boxstyle="square,pad=0.12", fc=SPEC_BG, ec="none", alpha=0.8)}
@@ -298,9 +320,12 @@ def fish_order(snip: dict, t0: float, t1: float) -> list[int]:
 
 
 def fish_styles(snip: dict, t0: float, t1: float) -> tuple[dict, list[int]]:
-    """{track id: box line style} (EOD$f_1$ solid, EOD$f_2$ dashed) and the order."""
+    """The panel's fish: {track id: k} (k = 0 for EOD$f_1$, the highest
+    median frequency in [t0, t1], 1 for EOD$f_2$, ...) and the track ids in
+    that order. Boxes no longer differ by fish (round 3); the dict says which
+    tracks are drawn and which boxes count as assigned in the panel."""
     order = fish_order(snip, t0, t1)
-    return {tid: FISH_LS[i % 2] for i, tid in enumerate(order)}, order
+    return {tid: k for k, tid in enumerate(order)}, order
 
 
 # ---------------------------------------------------------------------------
@@ -366,37 +391,17 @@ def show_power(ax, snip: dict, t0: float, t1: float, f0: float, f1: float, *,
     return im, levels
 
 
-def power_bar(fig, im, x: float, y: float, length: float, *, vertical: bool = False,
-              thickness: float = 0.13, label: str = "dB", ticks_before: bool = False):
-    """A small colour bar of a ``show_power`` image at (x, y) cm (lower left corner).
-
-    Horizontal (default): tick labels below (``ticks_before``: above), the
-    unit ``label`` right of the bar. Vertical: tick labels right, the unit
-    above the bar. Ticks every 5, 10, 20 or 40 dB: the finest step that
-    leaves at least 0.8 cm (horizontal) or 0.7 cm (vertical) per tick.
-    """
-    w, h = (thickness, length) if vertical else (length, thickness)
-    cax = axes_cm(fig, x, y, w, h)
-    cb = fig.colorbar(im, cax=cax, orientation="vertical" if vertical else "horizontal")
-    cb.outline.set_linewidth(0.5)
-    lo, hi = im.get_clim()
-    max_ticks = max(2, int(length / (0.7 if vertical else 0.8)) + 1)
-    for step in (5, 10, 20, 40):
-        ticks = np.arange(np.ceil(lo / step) * step, hi + 1e-9, step)
-        if len(ticks) <= max_ticks:
-            break
-    cb.set_ticks(ticks)
-    cax.tick_params(labelsize=ANNOT_FS, length=2, width=0.5, pad=1)
+def axes_extents(fig, named_axes: list[tuple[str, object]]) -> str:
+    """A table of each named axes' extent in figure cm (to check alignment):
+    left, right, bottom, top, width, height."""
     W, H = fig.get_size_inches() / CM
-    if vertical:
-        fig.text((x + thickness / 2) / W, (y + length + 0.08) / H, label, ha="center",
-                 va="bottom", fontsize=ANNOT_FS)
-    else:
-        if ticks_before:
-            cax.xaxis.set_ticks_position("top")
-        fig.text((x + length + 0.1) / W, (y + thickness / 2) / H, label, ha="left",
-                 va="center_baseline", fontsize=ANNOT_FS)
-    return cb
+    lines = [f"{'axes':<14}{'left':>7}{'right':>7}{'bottom':>8}{'top':>7}{'width':>7}"
+             f"{'height':>8}  [cm; figure {W:.2f} x {H:.2f}]"]
+    for name, ax in named_axes:
+        bb = ax.get_position()
+        lines.append(f"{name:<14}{bb.x0 * W:7.3f}{bb.x1 * W:7.3f}{bb.y0 * H:8.3f}"
+                     f"{bb.y1 * H:7.3f}{bb.width * W:7.3f}{bb.height * H:8.3f}")
+    return "\n".join(lines)
 
 
 def show_rgb(ax, snip: dict, t0: float, t1: float, f0: float, f1: float,
@@ -410,64 +415,114 @@ def show_rgb(ax, snip: dict, t0: float, t1: float, f0: float, f1: float,
     ax.set_ylim(f0, f1)
 
 
+def track_segments(tt: np.ndarray, ff: np.ndarray, filled: np.ndarray, *,
+                   gap_s: float = TRACK_GAP_S, bridge_s: float | None = None):
+    """Split a track into its detected (solid) and interpolated (dashed) parts.
+
+    Detected samples further apart than ``gap_s`` break the solid line. The
+    ``filled`` samples of a gap-filled track are drawn dashed, joined to the
+    neighbouring detections; with ``bridge_s``, so is every gap of at most
+    ``bridge_s`` between two detections (the straight line between them: the
+    linear interpolation the assignment uses inside gaps up to its
+    ``max_gap_s``). Returns (t_solid, f_solid, t_dashed, f_dashed) with NaN
+    between pieces, and the dashed pieces as a list of (t_start, t_end).
+    """
+    tt, ff, fl = np.asarray(tt, float), np.asarray(ff, float), np.asarray(filled, bool)
+    ts, fs = np.where(fl, np.nan, tt), np.where(fl, np.nan, ff)
+    step = np.diff(tt)
+    gaps = np.flatnonzero(step > gap_s)
+    t_solid = np.insert(ts, gaps + 1, np.nan)
+    f_solid = np.insert(fs, gaps + 1, np.nan)
+    pieces: list[tuple[np.ndarray, np.ndarray]] = []
+    # filled runs, each joined to the detections on either side
+    if fl.any():
+        edges = np.flatnonzero(np.diff(np.r_[0, fl.astype(int), 0]))
+        for a, b in zip(edges[::2], edges[1::2], strict=True):
+            lo, hi = max(a - 1, 0), min(b, len(tt) - 1)
+            pieces.append((tt[lo:hi + 1], ff[lo:hi + 1]))
+    if bridge_s is not None:
+        for i in gaps:
+            if step[i] <= bridge_s and not (fl[i] or fl[i + 1]):
+                pieces.append((tt[i:i + 2], ff[i:i + 2]))
+    pieces.sort(key=lambda p: p[0][0])
+    t_dash = np.concatenate([np.r_[p[0], np.nan] for p in pieces]) if pieces else np.zeros(0)
+    f_dash = np.concatenate([np.r_[p[1], np.nan] for p in pieces]) if pieces else np.zeros(0)
+    return t_solid, f_solid, t_dash, f_dash, [(float(p[0][0]), float(p[0][-1])) for p in pieces]
+
+
 def draw_tracks(
     ax, snip: dict, fish: dict, t0: float, t1: float, *, t_ref: float | None = None,
     lw: float = TRACK_LW, color=TRACK_COLOR, alpha: float = 1.0,
-) -> None:
-    """The tracks of the fish in ``fish`` (track ids), thin black lines."""
+    bridge_s: float | None = None,
+) -> list[tuple[int, float, float]]:
+    """The tracks of the fish in ``fish`` (track ids), thin black lines.
+
+    Solid where detected, dashed where interpolated (``track_segments``;
+    ``bridge_s``: also gaps between detections of up to that length).
+    Returns the dashed pieces that reach into [t0, t1]: (track id, start, end).
+    """
     t_ref = t0 if t_ref is None else t_ref
+    dashed = []
+    margin = 0.5 if bridge_s is None else max(0.5, bridge_s)
     for tid, (tt, ff) in snip["tracks"].items():
         if tid not in fish:
             continue
-        m = (tt >= t0 - 0.5) & (tt <= t1 + 0.5)
+        # with bridges: the detections just outside the view, for the gaps
+        # that reach into it
+        m = (tt >= t0 - margin) & (tt <= t1 + margin)
         if m.sum() < 2:
             continue
-        tm, fm = tt[m], ff[m].astype(float)
         fl = snip.get("filled", {}).get(tid, np.zeros(len(tt), bool))[m]
-        # detected samples: solid, broken at gaps longer than 1 s
-        td, fd = np.where(fl, np.nan, tm), np.where(fl, np.nan, fm)
-        gaps = np.flatnonzero(np.diff(tm) > 1.0)
-        td = np.insert(td, gaps + 1, np.nan)
-        fd = np.insert(fd, gaps + 1, np.nan)
-        ax.plot(td - t_ref, fd, color=color, lw=lw, alpha=alpha, zorder=2,
+        ts, fs, td, fd, pieces = track_segments(tt[m], ff[m], fl, bridge_s=bridge_s)
+        ax.plot(ts - t_ref, fs, color=color, lw=lw, alpha=alpha, zorder=2,
                 solid_capstyle="butt")
-        if fl.any():
-            # interpolated samples (gap-filled tracks): dashed, joined to the
-            # neighbouring detections
-            keep = fl | np.r_[fl[1:], False] | np.r_[False, fl[:-1]]
-            ti, fi = np.where(keep, tm, np.nan), np.where(keep, fm, np.nan)
-            ax.plot(ti - t_ref, fi, color=color, lw=lw, alpha=alpha, zorder=2,
+        if len(td):
+            ax.plot(td - t_ref, fd, color=color, lw=lw, alpha=alpha, zorder=2,
                     ls=FILLED_LS, dash_capstyle="butt")
+        dashed += [(int(tid), a, b) for a, b in pieces if b >= t0 and a <= t1]
+    return dashed
 
 
 def box_style(row: pd.Series, fish: dict) -> dict | None:
-    """Edge colour and line style of a detection (None: not drawn).
+    """Edge colour, line style and alpha of a detection (None: not drawn).
 
-    ``fish``: {track id: line style} of the panel's fish (``fish_styles``).
+    ``fish``: the panel's fish (``fish_styles``; only its keys are used): a
+    box assigned to one of them is a solid white box.
     """
     if row.pp_drop_reason in ("harmonic", "duplicate") and row.operating:
-        return {"ec": DROPPED_COLOR, "ls": DROPPED_LS, "kind": row.pp_drop_reason}
+        return {"ec": DROPPED_COLOR, "ls": DROPPED_LS, "alpha": DROPPED_ALPHA,
+                "kind": row.pp_drop_reason}
     if not row.operating:
         return None
     tid = row.track_id
     if np.isfinite(tid) and int(tid) in fish:
-        return {"ec": BOX_COLOR, "ls": fish[int(tid)], "kind": "assigned"}
-    return {"ec": UNASSIGNED_COLOR, "ls": "-", "kind": "unassigned"}
+        return {"ec": BOX_COLOR, "ls": BOX_LS, "alpha": 1.0, "kind": "assigned"}
+    return {"ec": UNASSIGNED_COLOR, "ls": "-", "alpha": 1.0, "kind": "unassigned"}
 
 
 def fish_box(ax, row: pd.Series, t_ref: float, fish: dict, **kw) -> None:
-    """A detection assigned to one of ``fish``: white box in that fish's line style."""
-    draw_box(ax, row, t_ref, BOX_COLOR, ls=fish[int(row.track_id)], **kw)
+    """A detection assigned to one of ``fish``: a solid white box."""
+    if not (np.isfinite(row.track_id) and int(row.track_id) in fish):
+        msg = f"chirp {row.name}: track {row.track_id} is not a fish of the panel"
+        raise ValueError(msg)
+    draw_box(ax, row, t_ref, BOX_COLOR, ls=BOX_LS, **kw)
+
+
+def dropped_box(ax, row: pd.Series, t_ref: float, **kw) -> None:
+    """A detection removed by post-processing: dashed, translucent, no marker."""
+    draw_box(ax, row, t_ref, DROPPED_COLOR, ls=DROPPED_LS, alpha=DROPPED_ALPHA,
+             marker=False, **kw)
 
 
 def draw_box(ax, row: pd.Series, t_ref: float, ec=BOX_COLOR, ls="-", lw: float = BOX_LW,
-             marker: bool = True, zorder: int = 5, ms: float = 2.8) -> None:
+             marker: bool = True, zorder: int = 5, ms: float = 2.8,
+             alpha: float = 1.0) -> None:
     ax.add_patch(
         Rectangle(
             (row.t_start_s - t_ref, row.f_low_hz),
             row.t_end_s - row.t_start_s,
             row.f_high_hz - row.f_low_hz,
-            fill=False, ec=ec, ls=ls, lw=lw, zorder=zorder,
+            fill=False, ec=ec, ls=ls, lw=lw, zorder=zorder, alpha=alpha,
         )
     )
     if marker and np.isfinite(row.emitter_hz):
@@ -485,21 +540,31 @@ def draw_missed(ax, row: pd.Series, t_ref: float, lw: float = BOX_LW) -> None:
     draw_box(ax, row, t_ref, MISSED_COLOR, ls=MISSED_LS, lw=lw, marker=False)
 
 
+def detection_kinds(rows: pd.DataFrame, fish: dict, *,
+                    show_dropped: bool = True) -> pd.DataFrame:
+    """The rows (by score) with ``drawn_as``: how ``draw_detections`` draws
+    each ("assigned", "unassigned", "harmonic", "duplicate"; None: not drawn)."""
+    kinds = []
+    for _, row in rows.sort_values("score").iterrows():
+        st = box_style(row, fish)
+        drop = st is not None and st["kind"] in ("harmonic", "duplicate")
+        kinds.append(None if st is None or (drop and not show_dropped) else st["kind"])
+    out = rows.sort_values("score").copy()
+    out["drawn_as"] = kinds
+    return out
+
+
 def draw_detections(ax, rows: pd.DataFrame, fish: dict, t_ref: float, *,
                     lw: float = BOX_LW, show_dropped: bool = True,
                     ms: float = 2.8) -> pd.DataFrame:
     """Draw every operating detection; returns the rows with their style kind."""
-    kinds = []
-    for _, row in rows.sort_values("score").iterrows():
-        st = box_style(row, fish)
-        if st is None or (not show_dropped and st["kind"] in ("harmonic", "duplicate")):
-            kinds.append(None)
+    out = detection_kinds(rows, fish, show_dropped=show_dropped)
+    for _, row in out.iterrows():
+        if row.drawn_as is None:
             continue
-        draw_box(ax, row, t_ref, st["ec"], st["ls"], lw=lw, ms=ms,
+        st = box_style(row, fish)
+        draw_box(ax, row, t_ref, st["ec"], st["ls"], lw=lw, ms=ms, alpha=st["alpha"],
                  marker=st["kind"] not in ("harmonic", "duplicate"))
-        kinds.append(st["kind"])
-    out = rows.sort_values("score").copy()
-    out["drawn_as"] = kinds
     return out
 
 
@@ -550,23 +615,22 @@ def no_yaxis(ax) -> None:
         s.set_visible(False)
 
 
-def zoom_connect(fig, ax_from, rect, ax_to, *, color="white", to_color="k",
-                 corners=("right", "left"), lw: float = 0.6, ls=(0, (2, 1.5))):
-    """Mark ``rect`` = (x0, y0, x1, y1) in ``ax_from`` and connect it to ``ax_to``."""
-    x0, y0, x1, y1 = rect
-    ax_from.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec=color, lw=lw,
-                                ls=ls, zorder=15))
-    if corners == ("right", "left"):
-        pairs = [((x1, y1), (0, 1)), ((x1, y0), (0, 0))]
-    elif corners == ("bottom", "top"):
-        pairs = [((x0, y0), (0, 1)), ((x1, y0), (1, 1))]
-    else:
-        raise ValueError(corners)
-    for xy_a, xy_b in pairs:
-        con = ConnectionPatch(xyA=xy_a, coordsA=ax_from.transData, xyB=xy_b,
-                              coordsB=ax_to.transAxes, color=to_color, lw=lw, ls=ls,
-                              zorder=0)
-        fig.add_artist(con)
+def zoom_span(ax_from, x0: float, x1: float, ax_to, *, color="white", lw: float = 0.7,
+              ls=(0, (2.5, 1.5))):
+    """Mark the time span [x0, x1] of ``ax_from`` that ``ax_to`` enlarges over
+    the same frequency range: two dashed vertical lines over the whole image
+    (never a rectangle, which could be read as a detection box), repeated at
+    the left and right edge of the enlargement. With panels of one height,
+    connector lines would run along the images' borders."""
+    for x in (x0, x1):
+        ax_from.axvline(x, color=color, lw=lw, ls=ls, zorder=15)
+    # just inside the enlargement's edges (on the edge, half the line would
+    # fall on the white page)
+    for x, dx in ((0, lw / 2), (1, -lw / 2)):
+        tr = mpl.transforms.offset_copy(ax_to.transAxes, fig=ax_to.figure, x=dx,
+                                        units="points")
+        ax_to.plot([x, x], [0, 1], color=color, lw=lw, ls=ls, zorder=15, transform=tr,
+                   clip_on=False)
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +668,8 @@ def key_strip(fig, x: float, y: float, items: list[tuple[str, dict, str]], *,
             c = st.get("color", "white")
             if kind in ("box", "boxdot"):
                 ax.add_patch(Rectangle((0.22, 0.16), 0.56, 0.68, fill=False, ec=c,
-                                       ls=st.get("ls", "-"), lw=BOX_LW))
+                                       ls=st.get("ls", "-"), lw=BOX_LW,
+                                       alpha=st.get("alpha", 1.0)))
                 if kind == "boxdot":
                     ax.plot(0.5, 0.36, "o", ms=2.6, mfc=c, mec="k", mew=0.45)
             elif kind == "dot":
