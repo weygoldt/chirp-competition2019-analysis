@@ -48,6 +48,7 @@ def test_controls_are_at_risk_and_unchirped_at_s_and_censored_at_their_own_chirp
     assert s3.loc[0, "exit"] == 7.0 and s3.loc[0, "event"] == 1 and s3.loc[0, "weight"] == 1.0
     assert s3.loc[2, "exit"] == 17.0 and s3.loc[2, "event"] == 1
     assert s3.loc[3, "exit"] == 3.0 and s3.loc[3, "event"] == 0  # censored at its own chirp (6 - 3)
+    assert s3.loc[3, "by_chirp"] == 1 and s3.loc[[0, 2], "by_chirp"].tolist() == [0, 0]
     assert s3.loc[[2, 3], "weight"].sum() == pytest.approx(1.0)
     # trigger 3 at s = 6: only interval 2 (0 is chirped since 3; 1 since 0; 4 ended)
     s6 = f[f["set"] == 1]

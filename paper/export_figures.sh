@@ -22,6 +22,7 @@ FIGS=(
   plot_event_time_rates_winner_loser_chirp
   plot_chirp_coupling
   plot_receiver_before_after
+  plot_receiver_matched_checks
   plot_hurdle_decomposition
   plot_v2_pipeline_explainer
   plot_v2_performance

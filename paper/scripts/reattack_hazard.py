@@ -5,8 +5,9 @@ once the loser has chirped? The windowed Gamma GLMMs (``stats_chirp_affects_chas
 inter-chase interval to a loser chirp in a window around the offset that is clipped at the next onset, so the
 predictor depends on the response; their complete-window check removes that by conditioning on the outcome.
 A hazard model with the chirp as a time-varying covariate uses every interval, and a chirp counts only once it
-has happened. This module builds the data; ``stats_reattack_hazard.py`` fits the models and
-``plot_receiver_before_after.py`` draws them.
+has happened. This module builds the data; ``stats_reattack_hazard.py`` fits the models,
+``stats_reattack_matched.py`` makes the matched chirp-triggered comparison (``reattack_matched.py``) and
+``plot_receiver_before_after.py`` (Fig. 8) and ``plot_receiver_matched_checks.py`` (supplement) draw them.
 
 Data: the windowed models' own (``summarize_submissive_chirp_effect_on_dominant``, which writes their
 ``chirp_effect_on_dominant_obs.csv``), step by step: the same trials (``is_bad_trial``: group >= 5, LED files,

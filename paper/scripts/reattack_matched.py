@@ -3,7 +3,8 @@
 The re-attack hazard (``reattack_hazard.py``, ``stats_reattack_hazard.py``) asks whether the winner's next chase
 onset comes sooner or later once the loser has chirped (``chirped``: 1 from the loser's first chirp at or after
 max(offset - 5 s, onset) on). This module makes the same comparison as an event-triggered average, the way
-Fig. 6 shows chirp rates around chase offsets, for the draft Fig. 8 (``plot_receiver_didactic_draft.py``).
+Fig. 6 shows chirp rates around chase offsets (``stats_reattack_matched.py`` runs it; Fig. 8 B and the supplement
+figure ``plot_receiver_matched_checks.py`` draw it).
 
 Triggers
     ``first_chirp_triggers``: in every interval (chase offset -> next onset) whose loser first chirps after the
@@ -105,8 +106,9 @@ def matched_followups(intervals: pd.DataFrame, triggers: pd.DataFrame, n_control
     """Follow-up rows of every trigger and its matched controls.
 
     Columns: set (trigger row of ``triggers``), group ('trigger' / 'control'), recording, interval, s,
-    weight, exit (time after the trigger at which the row leaves the risk set) and event (1 if it leaves by a
-    re-attack). A trigger without an eligible control is dropped (``attrs['n_without_controls']``).
+    weight, exit (time after the trigger at which the row leaves the risk set), event (1 if it leaves by a
+    re-attack) and by_chirp (1 if a control leaves because its own loser chirps). A trigger without an
+    eligible control is dropped (``attrs['n_without_controls']``).
 
     ``rule`` 'unchirped_at_s' (the design): controls at risk and not yet chirped at s, censored at their
     own first chirp. 'never_chirped' (the selection trap, for the surrogate check only): controls at risk
@@ -140,9 +142,10 @@ def matched_followups(intervals: pd.DataFrame, triggers: pd.DataFrame, n_control
         if rule == "unchirped_at_s":
             elig &= sw[None, :] > s[:, None]
             c_exit_abs, c_event = np.minimum(L, sw), np.where(np.isfinite(sw), 0, ev)
+            c_by_chirp = np.isfinite(sw).astype(int)  # a first chirp always lies before the interval's end
         else:
             elig &= ~np.isfinite(sw)
-            c_exit_abs, c_event = L, ev
+            c_exit_abs, c_event, c_by_chirp = L, ev, np.zeros(len(L), int)
         kk, jj = np.nonzero(elig)  # (trigger, control) pairs, sorted by trigger
         if n_controls is not None and len(kk):
             # a random rank within each trigger's eligible controls; keep the first n_controls
@@ -159,12 +162,12 @@ def matched_followups(intervals: pd.DataFrame, triggers: pd.DataFrame, n_control
         set_ids = trg.index.to_numpy()
         t_rows = pd.DataFrame({"set": set_ids[has], "group": TRIGGER, COMP: rec, "interval": ti[has],
                                "s": s[has], "weight": 1.0, "exit": L[pos[has]] - s[has],
-                               "event": ev[pos[has]].astype(int)})
+                               "event": ev[pos[has]].astype(int), "by_chirp": 0})
         c_rows = pd.DataFrame({"set": set_ids[kk], "group": CONTROL, COMP: rec, "interval": idx[jj],
                                "s": s[kk], "weight": 1.0 / n[kk], "exit": c_exit_abs[jj] - s[kk],
-                               "event": c_event[jj].astype(int)})
+                               "event": c_event[jj].astype(int), "by_chirp": c_by_chirp[jj]})
         out.extend([t_rows, c_rows])
-    cols = ["set", "group", COMP, "interval", "s", "weight", "exit", "event"]
+    cols = ["set", "group", COMP, "interval", "s", "weight", "exit", "event", "by_chirp"]
     f = pd.concat(out, ignore_index=True) if out else pd.DataFrame({c: [] for c in cols})
     f["_g"] = (f["group"] == CONTROL).astype(int)
     f = f.sort_values(["set", "_g", "interval"], kind="stable").drop(columns="_g").reset_index(drop=True)[cols]

@@ -84,10 +84,13 @@ chain_receiver() {     # needs chain_gamma and the offset window (chain_rates)
   step plot_re_analysis.py
 }
 
-chain_reattack() {     # main text Fig. 8 (receiver_before_after): Bayesian re-attack hazard after loser chirps
+chain_reattack() {     # main text Fig. 8 (receiver_before_after) and its supplement (receiver_matched_checks):
+                       # Bayesian re-attack hazard after loser chirps and the matched chirp-triggered comparison
                        # (needs chain interchase's obs.csv and the offset window; 30-45 min on 4 cores, ~1 GB)
   heavy reattack-hazard 8G stats_reattack_hazard.py   # piecewise-exponential Poisson GLMMs (9 fits)
-  step plot_receiver_before_after.py      # previous intervals (A), re-attack rates (B), rate ratios (C)
+  heavy reattack-matched 4G stats_reattack_matched.py # triggers vs matched moments, bootstrap, surrogates (~3 min)
+  step plot_receiver_before_after.py      # raster (A), not yet re-attacked vs matched (B), previous intervals (C)
+  step plot_receiver_matched_checks.py    # supplement: triggered rates, all chirps, surrogates and the trap
 }
 
 chain_hurdle() {       # Fig. hurdle_decomposition (+ offset logistic regressions)

@@ -1,14 +1,15 @@
-"""plot_receiver_before_after: rows, within-competition weights, medians, per-competition ratios (A) and the
-re-attack rates and rate ratios (B, C) on synthetic data."""
+"""plot_receiver_before_after: the previous-interval panel (C: rows, within-competition weights, medians,
+per-competition ratios), the raster (A) and the inputs of the matched panel (B) on synthetic data."""
 
 from __future__ import annotations
+
+import json
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import plot_receiver_before_after as rba
-import reattack_hazard as rh
 
 
 def table(rows):
@@ -84,81 +85,69 @@ def test_competition_ratios_and_counts():
     assert s["n_competitions"] == 3 and s["n_competitions_all"] == 4
 
 
-def person_period():
-    """Two competitions with rates 2x as high once chirped, in pieces 1 and 2; piece 0 has no chirped event."""
-    rows = []
-    for comp, base in (("c1", 0.01), ("c2", 0.02)):
-        for piece in (0, 1, 2):
-            for chirped in (0, 1):
-                x = 100.0
-                e = 0 if (piece == 0 and chirped) else int(round(base * x * (2 if chirped else 1) * (piece + 1)))
-                rows.append((comp, 1, piece, e, x, chirped, 0.0))
-    return pd.DataFrame(rows, columns=[rba.COMP, "interval", "piece", "event", "exposure", rba.COVARIATE,
-                                       "log_prev"])
+def intervals():
+    """Five intervals of one competition (offset at 100 s each, for readability)."""
+    return pd.DataFrame({
+        rba.COMP: "r1", "onset": [90.0, 97.0, 95.0, 90.0, 90.0], "offset": 100.0,
+        "length": [10.0, 8.0, 80.0, 30.0, 20.0], "event": [1, 1, 1, 0, 1],
+        # after the offset; in the tail; none; none; none counted (a chirp at 92 s is before offset - 5 s)
+        "first_chirp": [103.0, 98.0, np.nan, np.nan, np.nan],
+        "prev_interval": [5.0, 6.0, 7.0, np.nan, 9.0]})
 
 
-def test_rates_per_piece_and_competition():
-    rates, comp, stats = rba.summarise_rates(person_period())
-    assert len(rates) == len(rh.PIECES_S) - 1  # every piece, also those without rows
-    assert rates.loc[0, "rate1"] == 0 and rates.loc[1, "ratio"] == pytest.approx(2.0)
-    assert stats["rate_per_min"]["chirp"][0] == 0 and stats["rate_per_min"]["chirp"][3] == 0
-    assert stats["rate_per_min"]["no_chirp"][1] == pytest.approx(60 * (0.02 + 0.04) / 2)
-    assert len(stats["events"]["chirp"]) == len(rh.PIECES_S) - 1
-    assert comp["ratio"].notna().all() and stats["competitions"]["n_above_1"] == 2
-    assert all(np.isfinite(v) for v in stats["rate_per_min"]["no_chirp"])
-
-
-def test_primary_rows_drop_intervals_without_a_previous_one():
-    pp = person_period()
-    pp.loc[pp[rba.COMP] == "c2", "log_prev"] = np.nan
-    assert set(rba.primary_rows(pp)[rba.COMP]) == {"c1"}
+def test_primary_intervals_are_those_with_a_previous_interval():
+    iv = rba.primary_intervals(intervals())
+    assert list(iv.index) == [0, 1, 2, 4]
     with pytest.raises(KeyError):
-        rba.primary_rows(pp.drop(columns=["log_prev"]))
+        rba.primary_intervals(intervals().drop(columns=["first_chirp"]))
 
 
-def test_piece_centres_within_the_axis():
-    x = rba.piece_centres()
-    assert x[0] == pytest.approx(np.sqrt(rba.XLIM_S[0] * 2.0))  # 0-2 s, from the axis' left edge
-    assert x[1] == pytest.approx(np.sqrt(2.0 * 5.0))
-    assert x[-1] == pytest.approx(np.sqrt(500.0 * rba.XLIM_S[1]))  # the open piece, to the right edge
-
-
-def test_load_hr(tmp_path, monkeypatch):
-    pd.DataFrame([{"fit": "primary", "hr": 1.1, "hdi_lo": 0.9, "hdi_hi": 1.3, "p_lt_1": 0.2}]).to_csv(
-        tmp_path / "hr_summary.csv", index=False)
-    monkeypatch.setattr(rba, "HAZARD_DIR", tmp_path)
-    assert rba.load_hr() == {"median": 1.1, "hdi": [0.9, 1.3], "p_lt_1": 0.2}
+def test_raster_rows_are_a_seeded_sample_sorted_by_length():
+    iv = pd.concat([intervals()] * 10, ignore_index=True).assign(length=np.arange(50.0, 0.0, -1.0))
+    a, b = rba.raster_rows(iv, 12, seed=3), rba.raster_rows(iv, 12, seed=3)
+    pd.testing.assert_frame_equal(a, b)
+    assert len(a) == 12 and a["length"].is_monotonic_increasing and a.index.is_unique
+    assert not rba.raster_rows(iv, 12, seed=4).index.equals(a.index)
     with pytest.raises(ValueError):
-        rba.load_hr("unadjusted")
+        rba.raster_rows(iv, 51)
 
 
-def fake_trace(alpha, u, beta, gamma_prev, n_draws=4):
-    """A posterior in bambi's layout (pieces in the order of their labels as strings), every draw alike."""
-    import arviz as az
+def test_raster_counts_each_kind_of_interval():
+    import matplotlib
 
-    labels = rh.piece_labels()
-    order = sorted(range(len(labels)), key=lambda k: labels[k])
-    rep = lambda v: np.broadcast_to(np.asarray(v, float), (1, n_draws, *np.shape(v))).copy()  # noqa: E731
-    return az.from_dict(
-        posterior={"piece_label": rep([alpha[k] for k in order]), "chirped": rep(beta),
-                   "log_prev_c": rep(gamma_prev), "log_dur_c": rep(0.0),
-                   f"1|{rba.COMP}": rep(u), f"chirped|{rba.COMP}": rep(np.zeros(len(u)))},
-        coords={"piece_label_dim": [labels[k] for k in order], "recording__factor_dim": ["c1", "c2"]},
-        dims={"piece_label": ["piece_label_dim"], f"1|{rba.COMP}": ["recording__factor_dim"],
-              f"chirped|{rba.COMP}": ["recording__factor_dim"]})
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    counts = rba.raster_panel(ax, intervals(), {"r1": np.array([92.0, 98.0, 103.0, 130.0])}, left_edge=-5.0)
+    plt.close(fig)
+    # 0: switch at 3 s; 1: tail chirp (98) -> at the offset; 2: no counted chirp, 80 s (> 60: clipped);
+    # 3: none, censored at 30 s; 4: the chirp at 92 lies before the offset - 5 s: not counted
+    assert counts == {"n_rows": 5, "n_clipped": 1, "n_chirped_at_offset": 1, "n_chirped_after_offset": 1,
+                      "n_no_chirp": 3, "n_censored": 1}
 
 
-def test_standardized_rates_average_the_model_over_the_observed_time_at_risk():
-    pp = person_period().assign(log_prev_c=0.0, log_dur_c=0.0)
-    # c1's chirped time at risk follows longer previous intervals (log_prev_c = 1); hazard x2 per unit
-    pp.loc[(pp[rba.COMP] == "c1") & (pp[rba.COVARIATE] == 1), "log_prev_c"] = 1.0
-    alpha = np.log(np.arange(1, 10) / 600.0)  # 0.1, 0.2, ... per min
-    tr = fake_trace(alpha, u=[0.0, np.log(2.0)], beta=np.log(1.5), gamma_prev=np.log(2.0))
-    st = rba.standardized_rates(tr, pp).set_index(["chirp", "piece"])
-    # equal weights (100 s with and without in every cell); c1's cells: (2 + 1) / 2, c2's: 2 (its u)
-    for k in (0, 1, 2):
-        base = 60 * np.exp(alpha[k])
-        assert st.loc[(0, k), "median"] == pytest.approx(base * (1.5 + 2.0) / 2)
-        assert st.loc[(1, k), "median"] == pytest.approx(base * (1.5 + 2.0) / 2 * 1.5)
-        assert st.loc[(1, k), "piece_label"] == rh.piece_labels()[k]
-    assert st.loc[(0, 0), "lo"] == pytest.approx(st.loc[(0, 0), "median"])  # identical draws
+def test_loser_chirps_by_recording_sorted():
+    t = pd.DataFrame({rba.COMP: ["a", "b", "a"], "time_s": [5.0, 1.0, 2.0]})
+    out = rba.loser_chirps(t)
+    assert out["a"].tolist() == [2.0, 5.0] and out["b"].tolist() == [1.0]
+
+
+def test_model_hr_reads_the_hazard_stats(tmp_path):
+    path = tmp_path / "reattack_hazard.json"
+    path.write_text(json.dumps({"values": {"fits": {"primary": {"hr": {"median": 1.1, "hdi": [0.9, 1.3],
+                                                                         "p_lt_1": 0.2}}}}}))
+    assert rba.model_hr(path) == {"median": 1.1, "hdi": [0.9, 1.3]}
+    with pytest.raises(ValueError):
+        rba.model_hr(path, "unadjusted")
+    with pytest.raises(FileNotFoundError):
+        rba.model_hr(tmp_path / "missing.json")
+
+
+def test_load_matched_needs_both_outputs(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        rba.load_matched(tmp_path)
+    np.savez(tmp_path / "curves.npz", grid=np.arange(3.0))
+    (tmp_path / "summary.json").write_text(json.dumps({"n_intervals": 3}))
+    curves, summary = rba.load_matched(tmp_path)
+    assert curves["grid"].tolist() == [0.0, 1.0, 2.0] and summary == {"n_intervals": 3}
