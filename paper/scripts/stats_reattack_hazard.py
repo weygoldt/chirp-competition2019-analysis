@@ -39,6 +39,7 @@ Outputs under ``$PAPER_OUT/data/processed/reattack_hazard/``: ``intervals.csv`` 
 
     paper/run.sh stats_reattack_hazard.py                      # all fits (chain reattack)
     paper/run.sh stats_reattack_hazard.py --fits primary --tune 300 --draws 200 --chains 4   # timing only
+    paper/run.sh stats_reattack_hazard.py --report-only    # summaries and stats from the saved posteriors
 """
 
 from __future__ import annotations
@@ -173,20 +174,41 @@ def hr_summary(trace, spec: dict) -> dict:
     return out
 
 
-def diagnostics(trace) -> dict:
+def diagnostics(trace, chirp: str) -> dict:
     """Divergences; max R-hat and min bulk / tail ESS over the population-level terms and the group SDs
-    (and, separately, over every variable including the per-competition effects)."""
+    (and, separately, over every variable including the per-competition effects, and over the chirp slope
+    and its group SD alone).
+
+    ``ok`` flags a fit by every variable (the windowed fits' thresholds, R-hat <= 1.01, ESS >= 400);
+    ``chirp_ok`` by the chirp terms only. They differ when only the baseline levels mix slowly: the piece
+    log hazards and the random intercepts trade off along a ridge (only their sums are identified), which
+    leaves the hazard ratio untouched."""
     names = list(trace.posterior.data_vars)
     main = [v for v in names if "|" not in v or v.endswith("_sigma")]
     s_main = az.summary(trace, var_names=main, kind="diagnostics")
     s_all = az.summary(trace, kind="diagnostics")
+    s_chirp = az.summary(trace, var_names=[v for v in (chirp, f"{chirp}|{rh.COMP}_sigma") if v in names],
+                         kind="diagnostics")
     out = {"divergences": int(trace.sample_stats["diverging"].sum()),
            "max_rhat": float(s_main["r_hat"].max()), "min_ess_bulk": float(s_main["ess_bulk"].min()),
            "min_ess_tail": float(s_main["ess_tail"].min()),
-           "max_rhat_all": float(s_all["r_hat"].max()), "min_ess_bulk_all": float(s_all["ess_bulk"].min())}
+           "max_rhat_all": float(s_all["r_hat"].max()), "min_ess_bulk_all": float(s_all["ess_bulk"].min()),
+           "chirp_rhat": float(s_chirp["r_hat"].max()), "chirp_ess_bulk": float(s_chirp["ess_bulk"].min()),
+           "chirp_ess_tail": float(s_chirp["ess_tail"].min())}
     out["ok"] = int(out["divergences"] == 0 and out["max_rhat_all"] <= OK_RHAT
                     and out["min_ess_bulk_all"] >= OK_ESS and out["min_ess_tail"] >= OK_ESS)
+    out["chirp_ok"] = int(out["divergences"] == 0 and out["chirp_rhat"] <= OK_RHAT
+                          and min(out["chirp_ess_bulk"], out["chirp_ess_tail"]) >= OK_ESS)
     return out
+
+
+def check_sampler(trace, name: str) -> None:
+    """Fail unless a saved posterior has the default sampler's chains, draws and tuning steps."""
+    n_chains, n_draws = trace.posterior.sizes["chain"], trace.posterior.sizes["draw"]
+    tune = trace.sample_stats.attrs.get("tuning_steps")
+    if (n_chains, n_draws, tune) != (SAMPLER["chains"], SAMPLER["draws"], SAMPLER["tune"]):
+        raise ValueError(f"{name}: posterior has {n_chains} chains x {n_draws} draws after {tune} tuning steps, "
+                         f"not the default {SAMPLER['chains']} x {SAMPLER['draws']} after {SAMPLER['tune']}")
 
 
 def model_rates(trace, spec: dict) -> pd.DataFrame:
@@ -239,6 +261,8 @@ def main(
     tune: int = SAMPLER["tune"], draws: int = SAMPLER["draws"], chains: int = SAMPLER["chains"],
     cores: int = SAMPLER["cores"], target_accept: float = SAMPLER["target_accept"],
     seed: int = SAMPLER["random_seed"],
+    report_only: bool = typer.Option(False, help="no sampling: rebuild the tables, summaries and stats from the "
+                                     "saved posteriors of a full run (<fit>.nc; run times from hr_summary.csv)"),
 ) -> None:
     names = [f.strip() for f in fits.split(",") if f.strip()]
     unknown = sorted(set(names) - set(FITS))
@@ -249,6 +273,11 @@ def main(
     full_run = sampler == SAMPLER and set(names) == set(FITS)
     out_dir = processed_dir(NAMESPACE)
     tag = "" if sampler == SAMPLER else "__test"  # never overwrite the real posteriors with a timing run
+    if report_only:
+        if sampler != SAMPLER or set(names) != set(FITS):
+            raise typer.BadParameter("--report-only reads the posteriors of a full run (all fits, default "
+                                     "sampler settings)")
+        previous = pd.read_csv(out_dir / "hr_summary.csv").set_index("fit")["seconds"]
 
     window = offset_window()
     print(f"offset window {window}; pieces {rh.piece_labels()}; sampler {sampler}")
@@ -263,10 +292,17 @@ def main(
     for name in names:
         spec = FITS[name]
         rows = fit_rows(pp, spec)
-        _, trace, secs = fit(name, spec, rows, sampler)
-        az.to_netcdf(trace, out_dir / f"{name}{tag}.nc")
+        if report_only:
+            trace = az.from_netcdf(out_dir / f"{name}.nc")
+            check_sampler(trace, name)
+            if int(trace.posterior.sizes[f"{rh.COMP}__factor_dim"]) != rows[rh.COMP].nunique():
+                raise ValueError(f"{name}: the saved posterior does not match the table's competitions")
+            secs = float(previous.loc[name])
+        else:
+            _, trace, secs = fit(name, spec, rows, sampler)
+            az.to_netcdf(trace, out_dir / f"{name}{tag}.nc")
         r = {**interval_counts(iv, pp, spec), "n_rows": int(len(rows)), "hr": hr_summary(trace, spec),
-             "diagnostics": diagnostics(trace), "seconds": float(secs),
+             "diagnostics": diagnostics(trace, spec["chirp"]), "seconds": float(secs),
              "random_slope": int(spec["slope"]), "noncentered": int(spec.get("noncentered", NONCENTERED))}
         results[name] = r
         print(f"--- {name}: HR {r['hr']['median']:.3f} [{r['hr']['hdi'][0]:.3f}, {r['hr']['hdi'][1]:.3f}], "

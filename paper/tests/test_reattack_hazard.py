@@ -162,3 +162,57 @@ def test_mantel_haenszel_rates_and_competition_ratios():
     cr = rh.competition_rate_ratios(cells)
     assert cr.loc["c1", "ratio"] == pytest.approx(2.0) and cr.loc["c2", "ratio"] == pytest.approx(2.0)
     assert np.isnan(cr.loc["c3", "ratio"])
+
+
+# ---------------------------------------------------------------------------
+# stats_reattack_hazard: model rows, formulas, sampler check, diagnostics (no sampling)
+# ---------------------------------------------------------------------------
+def test_fit_formulas():
+    import stats_reattack_hazard as srh
+
+    assert srh.formula(srh.FITS["primary"]) == (
+        "event ~ 0 + piece_label + chirped + log_prev_c + log_dur_c + (1 + chirped | recording)"
+        " + offset(log_exposure)")
+    assert "(1 | recording)" in srh.formula(srh.FITS["primary_intercept_only"])
+    assert srh.formula(srh.FITS["unadjusted"]).startswith("event ~ 0 + piece_label + chirped + (1 + chirped")
+    assert srh.FITS["placebo"]["chirp"] == "next_chirped" and srh.FITS["placebo"]["noncentered"]
+
+
+def test_fit_rows_keep_complete_rows_and_sum_them():
+    import stats_reattack_hazard as srh
+
+    iv, pp = tables()
+    pp = rh.add_interval_covariates(pp, iv)
+    pp["log_prev_c"], pp["log_dur_c"] = pp["log_prev"], pp["log_dur"]
+    pp["piece_label"] = pd.Categorical([rh.piece_labels()[i] for i in pp["piece"]], categories=rh.piece_labels())
+    rows = srh.fit_rows(pp, srh.FITS["primary"])
+    keep = pp["log_prev"].notna()  # interval 0 has no previous interval
+    assert rows["event"].sum() == pp.loc[keep, "event"].sum() == 1
+    assert rows["exposure"].sum() == pytest.approx(pp.loc[keep, "exposure"].sum())
+    assert np.allclose(rows["log_exposure"], np.log(rows["exposure"]))
+    assert rows.groupby(["piece_label", "chirped", "log_prev_c"], observed=True).size().max() == 1
+    placebo = srh.fit_rows(pp, srh.FITS["placebo_unadjusted"])  # next_chirped: intervals 0 and 1
+    assert placebo["event"].sum() == 2 and set(placebo["next_chirped"]) == {0, 1}
+
+
+def fake_posterior(n_chains=8, n_draws=1000, tune=3000):
+    import arviz as az
+
+    rng = np.random.default_rng(0)
+    idata = az.from_dict(posterior={"chirped": rng.normal(0, 0.1, (n_chains, n_draws)),
+                                    "chirped|recording_sigma": np.abs(rng.normal(0.2, 0.05, (n_chains, n_draws))),
+                                    "piece_label": rng.normal(-4, 0.1, (n_chains, n_draws, 2))},
+                         sample_stats={"diverging": np.zeros((n_chains, n_draws), bool)})
+    idata.sample_stats.attrs["tuning_steps"] = tune
+    return idata
+
+
+def test_check_sampler_and_diagnostics():
+    import stats_reattack_hazard as srh
+
+    srh.check_sampler(fake_posterior(), "primary")
+    with pytest.raises(ValueError):
+        srh.check_sampler(fake_posterior(n_chains=4, n_draws=200, tune=300), "primary")
+    d = srh.diagnostics(fake_posterior(), "chirped")
+    assert d["divergences"] == 0 and d["ok"] == 1 and d["chirp_ok"] == 1
+    assert d["chirp_ess_bulk"] > 4000 and d["chirp_rhat"] < 1.01
