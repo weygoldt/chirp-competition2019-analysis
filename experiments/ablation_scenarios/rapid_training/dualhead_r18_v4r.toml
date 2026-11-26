@@ -1,0 +1,48 @@
+# Front-end ablation round 2 (experiments/ablation_scenarios/rapid_training):
+# the released dual-head's training config (experiments/training/
+# dualhead_r18_sim_v4.toml, from "seed = 0" on) with early stopping switched
+# off (patience 6 -> 0): every run trains the full 30-epoch cosine schedule and
+# ships its best epoch by validation fitness, so that no front end stops
+# earlier than the other. run_round2.sh replaces "seed = 0" per run; the
+# dataset (sim_v4r or sim_v4r_longonly) sets the front end.
+seed = 0
+# deterministic = false: deformable attention (grid_sample) has no
+# deterministic backward on CUDA
+deterministic = false
+device = "cuda"
+max_vram_fraction = 0.35
+score_threshold = 0.5
+
+[model]
+type = "dualhead"
+architecture = "rtdetr_v2_r18vd"
+pretrained = true
+num_queries = 300
+num_denoising = 100
+max_det = 50
+emitter_loss_weight = 10.0
+backbone_lr_scale = 0.1
+grad_clip = 0.1
+ema_decay = 0.9999
+time_shift_px = 32
+val_max_images = 2000
+
+[optim]
+epochs = 30
+batch = 16
+optimizer = "AdamW"
+lr0 = 0.0001
+lrf = 0.05
+schedule = "cosine"
+warmup_epochs = 0.5
+weight_decay = 0.0001
+patience = 0
+amp = true
+workers = 8
+
+[augment]
+time_flip = 0.0
+
+[cv]
+n_folds = 0
+final_fit = true

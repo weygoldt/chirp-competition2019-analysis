@@ -49,6 +49,33 @@ Outputs: `$CHIRP_DATA/runs/ablation_frontend/scenarios/` (report `REPORT.md`).
    state (a copy with patience 100, nothing else changed) through epoch 22 and
    snapshot every epoch, for a budget-matched arm `Bc`.
 
+## Round 2: trained on rapid chirping, several seeds (`rapid_training/`, 2026-11-26)
+
+Round 1 compared detectors trained on train_v4, whose chirps of one fish are
+always >= 200 ms apart, on rapid trains they never saw, with one training run
+per front end and the single-window run resumed. The author's design for a fair
+comparison (ablation only, not a production model): both front ends trained on
+data that contains the tested regime, several seeds, no early stopping.
+
+| file | output (`$CHIRP_DATA/...`) | role |
+|---|---|---|
+| `make_configs.py` | `configs/train_v4_rapid_{train,val}.toml` | train_v4's train/val configs with rapid chirp timing (0.3-1 /s per fish, bursts of ~5 at a median 110 ms, no minimum interval; the simulator still keeps one fish's chirps ~70 ms apart) |
+| `prepare_scenes.sh` | `scenes/train_v4r/{train,val,test}` | train_v4 hard-linked (train_v4 is never written) + 300 train / 40 val rapid scenes (seeds 40000:40340); test = train_v4 test |
+| `build_datasets.py A\|B` | `datasets/sim_v4r`, `datasets/sim_v4r_longonly` | both front ends (as sim_v4 / sim_v4_longonly, checked) |
+| `dualhead_r18_v4r.toml` | | the released training config with `patience = 0` (full 30 epochs, best epoch by validation) |
+| `run_round2.sh [train] [evaluate] [compare]` | `runs/ablation_frontend/round2/` | orchestration: 2 front ends x seeds 1-3, two fits at a time; each model on the breakdown benchmark, the sim test set + 335 and 365 real labels, the Fig. S4C train; resumable (DONE markers; unfinished fits retrained from scratch, not resumed) |
+| `real_train_counts.py BUNDLE` | `round2/s4c/<model>.json` | chirps of the Fig. S4C train a detector finds (checks itself against Fig. S7's 109 / 62 first) |
+| `compare_round2.py` | `round2/compare/{tables.md,summary.csv,per_model.csv}` | per seed, mean ± SD per front end, single minus three windows with a Welch 95 % CI over seeds; round 1's models as reference rows |
+
+Launch (from the repository root, after both datasets exist):
+
+```sh
+echo 0 | sudo tee /sys/devices/system/cpu/cpufreq/boost
+systemd-run --user --unit=ablation-r2-$(date +%m%d-%H%M) --working-directory="$PWD" \
+  -E PATH="$PATH" -E HOME="$HOME" "$PWD/experiments/ablation_scenarios/rapid_training/run_round2.sh"
+tail -f /mnt/data1/chirp_v2/runs/ablation_frontend/round2/logs/round2.log
+```
+
 ## In the manuscript (2026-11-26)
 
 Supplementary Fig. S7 (`fig:frontend_ablation`, Appendix 7), the end of the

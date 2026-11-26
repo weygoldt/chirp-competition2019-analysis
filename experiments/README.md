@@ -114,6 +114,7 @@ in [ablation_scenarios/README.md](ablation_scenarios/README.md).
 | `prepare_longonly_cont.py`, `continue_longonly.sh` | `runs/dualhead_r18_sim_v4_longonly_r1c` | arm B resumed after epoch 10 and stopped after 22 (A's budget): arm `Bc` |
 | `make_bc_bundles.py`, `bench_bc.sh EPOCH` | `runs/dualhead_r18_sim_v4_longonly_r1c/bundles/`, `runs/ablation_frontend/scenarios/bench/Bc{16,22}` | Bc bundles with the resume's emitter-unit bug repaired; Bc on the benchmark |
 | `tile_rapid.py` | `runs/ablation_frontend/scenarios/tile_rapid.png` | one rapid-train tile as both models see it (single window vs RGB, A's channels) |
+| `rapid_training/` (round 2) | `scenes/train_v4r`, `datasets/sim_v4r{,_longonly}`, `runs/ablation_frontend/round2/` | both front ends retrained on train_v4 + rapid-chirping scenes, seeds 1-3, no early stopping; `run_round2.sh` trains, evaluates and compares (see the README there) |
 
 ### Decoder (`decoder/`)
 
