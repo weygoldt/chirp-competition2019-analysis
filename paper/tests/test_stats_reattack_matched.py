@@ -23,6 +23,8 @@ def test_design_numbers_are_complete_and_valid_stats():
     assert d["n_competitions"] == 3
     assert {f"w{T:g}" for T in srm.WINDOWS_S} <= set(d)
     assert set(d["survival"]) == {f"t{T:g}" for T in srm.SURVIVAL_AT_S}
+    t30 = d["survival"]["t30"]
+    assert t30["if_hr_0p5"] == pytest.approx(t30["matched"] ** 0.5)
     lo, hi = d["w30"]["ratio_ci"]
     assert lo <= hi and d["matched_per_trigger"]["min"] >= 1
     # matched weight stopped by its own chirp: a share
@@ -59,6 +61,12 @@ def test_surrogate_numbers_summarise_and_refuse_non_finite():
     sur.loc[0, "trap_w30"] = np.nan
     with pytest.raises(ValueError):
         srm.surrogate_numbers(sur)
+
+
+def test_the_stated_reference_is_the_one_drawn():
+    import plot_receiver_before_after as rba
+
+    assert srm.APPEASE_HR == rba.APPEASE_HR
 
 
 def test_scenario_names_are_stat_keys():

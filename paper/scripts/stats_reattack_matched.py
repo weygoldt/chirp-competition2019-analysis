@@ -73,6 +73,7 @@ DEFAULTS = {"n_boot": N_BOOT, "n_surrogates": N_SURROGATES, "sigma": SIGMA_S, "s
 WINDOWS_S = (1.0, 10.0, 30.0)  # rate ratios in [0, T] after the trigger
 SURVIVAL_AT_S = (10.0, 30.0)
 BAND = (2.5, 97.5)
+APPEASE_HR = 0.5  # Fig. 8 B's dotted reference (plot_receiver_before_after.APPEASE_HR)
 DESIGNS = {  # name: (triggers, control rule)
     "first_chirp": ("first", "unchirped_at_s"),
     "all_chirps": ("all", "unchirped_at_s"),
@@ -170,7 +171,9 @@ def design_numbers(res: dict) -> dict:
             "trigger": float(res["survival_at"][rm.TRIGGER][k]),
             "trigger_ci": _q(res["boot"]["survival"][rm.TRIGGER][:, k]),
             "matched": float(res["survival_at"][rm.CONTROL][k]),
-            "matched_ci": _q(res["boot"]["survival"][rm.CONTROL][:, k])}
+            "matched_ci": _q(res["boot"]["survival"][rm.CONTROL][:, k]),
+            # the reference curve of Fig. 8 B: what a chirp that halved the re-attack rate would give
+            "if_hr_0p5": float(res["survival_at"][rm.CONTROL][k] ** APPEASE_HR)}
     return out
 
 
