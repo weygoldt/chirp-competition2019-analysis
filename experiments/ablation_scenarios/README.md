@@ -49,6 +49,38 @@ Outputs: `$CHIRP_DATA/runs/ablation_frontend/scenarios/` (report `REPORT.md`).
    state (a copy with patience 100, nothing else changed) through epoch 22 and
    snapshot every epoch, for a budget-matched arm `Bc`.
 
+## In the manuscript (2026-11-26)
+
+Supplementary Fig. S7 (`fig:frontend_ablation`, Appendix 7), the end of the
+Methods paragraph "Spectrograms" and one sentence in the Fig. S4 caption, all
+`#toreview` (manuscript TODO item F). The text is
+`manuscript_frontend_ablation.patch` (a commit of the manuscript repository on
+top of `82a1954`); the figure and numbers come from the paper pipeline:
+
+- `export_for_paper.py`: the benchmark's per-label table for the paper module
+  (`$CHIRP_DATA/runs/ablation_frontend/scenarios/paper/bench_labels.parquet`,
+  sha256 in the `.json` beside it and checked by the module);
+- `paper/scripts/v2_fig_extract.py frontends` (root env): the dense chirp train
+  of Fig. S4C detected by the released and the single-window detector (epoch 16
+  of arm Bc), on the production tile grid;
+- `paper/scripts/plot_v2_frontend_ablation.py` (paper env, chain `v2figs`):
+  figure and `#stat` namespace `v2_frontend_ablation`, at the operating
+  threshold (true positives at 0.5 with score >= 0.8, as Fig. 10).
+
+Integration, from the repository root (paper outputs are git-ignored, so the
+two steps run where the primary run's outputs live):
+
+```sh
+cd paper
+PAPER_OUT=$PWD/output/rtdetr_gapfill_t080 PAPER_DETECTIONS=rtdetr_gapfill_t080 \
+    ../.venv/bin/python scripts/v2_fig_extract.py frontends
+PAPER_DETECTIONS=rtdetr_gapfill_t080 ./run.sh plot_v2_frontend_ablation.py
+cd ..
+python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t080
+paper/export_figures.sh
+cd manuscript && git apply ../experiments/ablation_scenarios/manuscript_frontend_ablation.patch && make
+```
+
 ## Reproduce
 
 ```sh

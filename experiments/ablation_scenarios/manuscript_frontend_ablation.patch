@@ -1,0 +1,235 @@
+From 6fcaf418fd2aa2d888f17f4c38a36775a183cc81 Mon Sep 17 00:00:00 2001
+From: weygoldt <88969563+weygoldt@users.noreply.github.com>
+Date: Thu, 26 Nov 2026 08:10:25 +0100
+Subject: [PATCH] Front-end ablation: Methods result, Appendix 7 with Fig. S7,
+ Fig. S4 caption link (to review; TODO F)
+
+The short analysis windows recover chirps of fast chirp trains (< 150 ms
+between the chirps of one fish), not assignments between close fish; replaces
+the 'no measurable benefit' sentence of the Methods (P3). Numbers: namespace
+v2_frontend_ablation (paper/scripts/plot_v2_frontend_ablation.py). The
+figure enters figures/ through ../paper/export_figures.sh.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ TODO.md        |  42 +++++++++++++++-
+ manuscript.typ | 132 ++++++++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 166 insertions(+), 8 deletions(-)
+
+diff --git a/TODO.md b/TODO.md
+index fd0f9fd..9de3a34 100644
+--- a/TODO.md
++++ b/TODO.md
+@@ -14,6 +14,45 @@ text retrieved during the check). Nothing was judged from memory.
+ 
+ ---
+ 
++## F: Front-end ablation (2026-11-26)
++
++The earlier ablation (`experiments/ablation/`) compared the released detector
++with a single-window detector (the 205-ms window in all three channels) that
++early stopping had ended after epoch 10 (best epoch 4), and found no benefit of
++the short windows. A breakdown benchmark of simulated chirp trains (1000 down to
++75~ms) and close fish pairs (0.5--20~Hz), with the single-window detector
++continued to the released detector's 16 epochs, shows where the windows differ:
++the short windows find more chirps that follow each other within ~150~ms
++(training data: at least 200~ms), and they do not help assignment between
++close fish (the single-window detector is slightly better there; its apparent
++deficit in the first ablation was training length). New: the Methods paragraph
++"Spectrograms" (end), one sentence in the Fig. S4 caption, Appendix 7
++(`sec:supp_frontend_ablation`) with Fig. S7 (`fig:frontend_ablation`). All new
++prose is in `#toreview[...]`, every number a `#stat` of namespace
++`v2_frontend_ablation`. Analysis: `paper/scripts/plot_v2_frontend_ablation.py`
++and `v2_fig_extract.py frontends` (chain `v2figs`); benchmark and report in
++`experiments/ablation_scenarios/` and
++`$CHIRP_DATA/runs/ablation_frontend/scenarios/REPORT.md`.
++
++- **F1 · Methods wording.** The "no measurable benefit" sentence (P3) is
++  replaced by the result; check depth (the share of chirps within 150~ms of a
++  same-fish chirp in the analyzed trials, 2.6%, could also go to the
++  Discussion or be dropped) and whether "for the same number of epochs" needs
++  the Appendix's explanation in the Methods.
++- **F2 · Placement.** Appendix 7 is last so that Figs. S1--S6 keep their
++  numbers; it could follow the failure modes (Appendix 4, Fig. S4) as Fig. S5,
++  which would renumber the chase-validation and random-effects figures.
++- **F3 · What the comparison does not cover.** One training run per front end
++  (seed variance unknown); simulation only, except the one real train of
++  Fig. S4C (62 vs 53 of 109 chirps); the simulator never lets the chirps of one
++  fish overlap, so its fastest trains are ~13 chirps/s while the real train
++  reaches 40-ms intervals; the recall difference depends on the threshold
++  (3.6 points at the operating threshold 0.8, 5.1 at 0.5) because the two
++  detectors' scores are calibrated differently (the single-window detector
++  scores isolated chirps a little higher: at 0.8 it finds as many or slightly
++  more chirps of slow trains, CIs including 0). Decide how much of this the
++  caption or the Appendix should state.
++
+ ## V: Timing of the chase annotations (2026-11-24)
+ 
+ The BORIS chase onsets and offsets lag a dominant-centered re-labeling of 100
+@@ -80,7 +119,8 @@ scope (author): the chase-hazard analysis (branch `chirp-chase-hazard`).
+   review of wording and depth, and the `#notecl[P3: …]` points (the
+   sine-wave stimulation of the chirp-chamber fish, which the repository
+   cannot confirm; the unarchived fit of the Student-$t$ constants of the
+-  assignment confidence; how much to say about the front-end ablation).
++  assignment confidence; how much to say about the front-end ablation: now
++  item F, 2026-11-26).
+   Notes from the fact sheet: chirp-chamber templates are split by inferred
+   recording group (consecutive chirps of similar EOD$f$), which approximates
+   one recording but not reliably one fish, so "unseen fish" is exact only
+diff --git a/manuscript.typ b/manuscript.typ
+index ed33417..a2a31dd 100644
+--- a/manuscript.typ
++++ b/manuscript.typ
+@@ -1896,12 +1896,32 @@ spectrograms form the red, green and blue channels of one image
+ few hertz apart, the short windows resolve the time course of chirps. Recordings
+ were cut into tiles of 3.2~s overlapping by 1~s, and each tile was converted to
+ decibels and mapped to a fixed 60-dB range ending 10~dB above the median
+-per-frame maximum of the long-window channel. In a front-end ablation, a
+-detector trained identically but with the long window in all three channels
+-performed as well on simulated and real data, so the short windows gave no
+-measurable benefit. #notecl[P3: ablation report
+-  `experiments/ablation/REPORT.md`; one training run per arm. Say more, or
+-  less?]
++per-frame maximum of the long-window channel. #toreview[In a front-end
++  ablation (#link(<sec:supp_frontend_ablation>)[Appendix]), a detector trained
++  identically and for the same number of epochs but with the long window in all
++  three channels detected chirps as well when the chirps of a fish were at least
++  150~ms apart (the shortest interval in the training data was 200~ms). In
++  simulated chirp trains with shorter intervals, the short windows recovered
++  chirps that merged in the long window: of the chirps that followed another
++  chirp of the same fish within 125~ms, the three-window detector found
++  #stat("v2_frontend_ablation.recall.pooled.below_125_ms.rgb.p", digits: 0, percent: true)
++  and the single-window detector
++  #stat("v2_frontend_ablation.recall.pooled.below_125_ms.single.p", digits: 0, percent: true)
++  (@fig:frontend_ablation). Such trains are rare in the competitions but do
++  occur (@fig:failure_modes~C):
++  #stat("v2_frontend_ablation.analysed.fraction_below_150_ms", digits: 1, percent: true)
++  of the detected chirps of the analyzed trials had a chirp of the same fish
++  within 150~ms, up to
++  #stat("v2_frontend_ablation.analysed.max_trial_fraction_below_150_ms", digits: 0, percent: true)
++  in one trial. The short windows did not improve the assignment of chirps
++  between fish close in #box[EOD$f$]: of the chirps of simulated fish
++  0.5--20~Hz apart, the single-window detector assigned
++  #stat("v2_frontend_ablation.assign.pooled.all.single.p", digits: 0, percent: true)
++  correctly and the three-window detector
++  #stat("v2_frontend_ablation.assign.pooled.all.rgb.p", digits: 0, percent: true).]
++#notecl[F1: replaces "the short windows gave no measurable benefit" (P3). The
++  first ablation compared the released detector with an early-stopped
++  single-window detector; see TODO F.]
+ 
+ === Chirp detection
+ 
+@@ -3624,7 +3644,9 @@ models, priors and windows (@tab:threshold).
+       fish spanned two to #stat("v2_failure_modes.dense.events.events_per_box.max", digits: 0)
+       chirps, and #stat("v2_failure_modes.dense.n_below_threshold") boxes scored
+       below the operating threshold. In such chirp trains, the chirp rate is
+-      underestimated.] Scale bars: 1~s (*A*--*C*), 200~ms (*A*, right).
++      underestimated\; a detector with a single 205-ms window detected fewer of
++      these chirps (@fig:frontend_ablation~A).] Scale bars: 1~s (*A*--*C*),
++    200~ms (*A*, right).
+   ],
+ ) <fig:failure_modes>
+ 
+@@ -3790,3 +3812,99 @@ models, priors and windows (@tab:threshold).
+     $#stat("re_analysis.design.winners.n")$ winners appeared in $>= 2$ trials).
+   ],
+ ) <fig:re_analysis>
++
++= Front-end ablation of the chirp detector <sec:supp_frontend_ablation>
++
++#toreview[The detector reads three spectrograms of the recording as the red,
++  green and blue channels of one image (#link(<met:chirp_detection>)[Methods]).
++  To test what the two short windows add, we trained a second detector with the
++  205-ms spectrogram in all three channels and otherwise identically (the same
++  simulated training scenes, seed and schedule). Early stopping had ended its
++  training after
++  #stat("v2_frontend_ablation.training.single_early_epochs_run") epochs
++  (best epoch
++  #stat("v2_frontend_ablation.training.single_early_best_epoch")), whereas the
++  released detector trained for
++  #stat("v2_frontend_ablation.training.rgb_epochs_run") epochs (best epoch
++  #stat("v2_frontend_ablation.training.rgb_best_epoch")) and improved its
++  emitter estimate only in the later ones; we therefore continued the
++  single-window detector's training on the same schedule and compared both at
++  epoch #stat("v2_frontend_ablation.training.single_epoch"). Both detectors ran
++  on a benchmark of simulated scenes with chirps of unseen fish on real
++  background recordings: chirp trains of two fish whose chirps followed each
++  other at intervals of
++  #stat("v2_frontend_ablation.bench.rate.slowest_level_ms", digits: 0) down to
++  #stat("v2_frontend_ablation.bench.rate.fastest_level_ms", digits: 0)~ms, and
++  pairs of fish
++  #stat("v2_frontend_ablation.bench.df.closest_level_hz", digits: 1)--#stat("v2_frontend_ablation.bench.df.widest_level_hz", digits: 0)~Hz
++  apart (@fig:frontend_ablation).]
++
++#figure(
++  image("figures/plot_v2_frontend_ablation.pdf", width: 100%),
++  caption: [
++    #toreview[*The short analysis windows recover chirps in fast chirp trains,
++      but do not improve assignment between fish close in
++      #box[EOD$f$].* The released detector (three Hann windows of 205, 51
++      and 13~ms as the red, green and blue channels of one image; indigo)
++      against a detector trained identically and for the same number of epochs
++      on the 205-ms window in all three channels (gray). *A*,~the dense chirp
++      train of @fig:failure_modes~C (the
++      #stat("v2_frontend_ablation.real.emitter_hz", digits: 0)-Hz fish), a 3-s
++      excerpt as each detector receives it: top, the single window (three
++      identical channels, gray)\; bottom, the three windows. White circles,
++      detections at the operating threshold at their predicted emitter
++      #box[EOD$f$]\; black triangles, the fish's chirps counted without the
++      detector (as in @fig:failure_modes~C)\; black lines, frequency tracks.
++      Over the whole
++      #stat("v2_frontend_ablation.real.duration_s", digits: 0)-s train, the
++      three-window detector detected
++      #stat("v2_frontend_ablation.real.rgb.n_matched") and the single-window
++      detector #stat("v2_frontend_ablation.real.single.n_matched") of the
++      #stat("v2_frontend_ablation.real.n_events") chirps. *B*,~recall on
++      simulated chirp trains
++      (#stat("v2_frontend_ablation.bench.rate.n_labels") chirps of two fish
++      40--80~Hz apart in
++      #stat("v2_frontend_ablation.bench.rate.n_scenes") scenes) against the
++      interval to the nearest chirp of the same fish\; a chirp counted as
++      detected if a box center lay within 25~ms. Gray band, interquartile range
++      of the intervals of the train in *A*\; dashed line, the shortest interval
++      in the training data. For chirps less than 125~ms apart, recall was
++      #stat("v2_frontend_ablation.recall.pooled.below_125_ms.rgb.p", digits: 1, percent: true)
++      with three windows and
++      #stat("v2_frontend_ablation.recall.pooled.below_125_ms.single.p", digits: 1, percent: true)
++      with one (difference
++      #stat("v2_frontend_ablation.recall.pooled.below_125_ms.single_minus_rgb", digits: 1, times: 100, sign: true)
++      percentage points, 95% CI
++      $[#stat("v2_frontend_ablation.recall.pooled.below_125_ms.single_minus_rgb_lo", digits: 1, times: 100, sign: true), #stat("v2_frontend_ablation.recall.pooled.below_125_ms.single_minus_rgb_hi", digits: 1, times: 100, sign: true)]$\;
++      at score $>= 0.5$:
++      #stat("v2_frontend_ablation.recall_t0_5.pooled.below_125_ms.single_minus_rgb", digits: 1, times: 100, sign: true)
++      points)\; for chirps 150~ms or more apart,
++      #stat("v2_frontend_ablation.recall.pooled.150_ms_up.rgb.p", digits: 1, percent: true)
++      and
++      #stat("v2_frontend_ablation.recall.pooled.150_ms_up.single.p", digits: 1, percent: true).
++      *C*,~correct emitter against the emitter's $Delta f$ to the nearest other
++      fish (#stat("v2_frontend_ablation.bench.df.n_labels") chirps of pairs of
++      fish in #stat("v2_frontend_ablation.bench.df.n_scenes") scenes\; chirps
++      both detectors detected, a box center within 100~ms)\; dashed line,
++      chance for two fish. Overall, the single-window detector assigned
++      #stat("v2_frontend_ablation.assign.pooled.all.single.p", digits: 1, percent: true)
++      and the three-window detector
++      #stat("v2_frontend_ablation.assign.pooled.all.rgb.p", digits: 1, percent: true)
++      correctly (difference
++      #stat("v2_frontend_ablation.assign.pooled.all.single_minus_rgb", digits: 1, times: 100, sign: true)
++      points, 95% CI
++      $[#stat("v2_frontend_ablation.assign.pooled.all.single_minus_rgb_lo", digits: 1, times: 100, sign: true), #stat("v2_frontend_ablation.assign.pooled.all.single_minus_rgb_hi", digits: 1, times: 100, sign: true)]$).
++      *B*, *C*: detections at score
++      $>= #stat("v2_frontend_ablation.operating_threshold", digits: 1)$ (true
++      positives at score $>= 0.5$ with a score at or above the operating
++      threshold, as in @fig:performance)\; points, bin medians with Wilson 95%
++      intervals\; differences single minus three windows, paired bootstrap
++      over scenes (#stat("v2_frontend_ablation.bench.n_boot") resamples). At
++      epoch 22, the single-window detector gave the same differences (chirps
++      less than 125~ms apart:
++      #stat("v2_frontend_ablation.epoch22.recall_pooled.below_125_ms.single_minus_rgb", digits: 1, times: 100, sign: true)
++      points\; assignment:
++      #stat("v2_frontend_ablation.epoch22.assign_pooled.all.single_minus_rgb", digits: 1, times: 100, sign: true)
++      points). Scale bar: 0.5~s.]
++  ],
++) <fig:frontend_ablation>
+-- 
+2.56.0
+
