@@ -69,7 +69,7 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | chirps within agonistic windows (no figure; `res:chirps_status`) | agonistic | `print_chirps_in_agonistic_windows` (full-trial and ±600 s shifts) | `chirps_in_agonistic_windows{,_maxshift_600s}.csv` |
 | `fig:event_correlations` (`plot_event_time_rates_winner_loser_chirp`) | rates | `analyze_event_time_rates_trial` (default and `--ag-events`), plot (`_src_paper` variant prints the extrema the text quotes), `offset_window` (the window around chase offsets, from the loser peak) | `event_time_rates/*.json`, `stats/offset_window.json` |
 | `fig:chirp_coupling` (`plot_chirp_coupling`) | interchase, coupling | `summarize_submissive_chirp_effect_on_dominant`, `stats_chirp_coupling`, plot | `chirp_effect_on_dominant_adaptive_window/data/`, `chirp_coupling/negbin/` |
-| `fig:receiver_before_after` (`plot_receiver_before_after`, main-text Fig. 8; new 2026-11-26, label proposed) | interchase, receiver (window from rates) | plot (reads obs.csv: the previous and next inter-chase intervals of the complete-window chasing events with and without a loser chirp, the Gamma GLMMs' rows; curves averaged over competitions, each weighted by n_chirp n_none / (n_chirp + n_none) in both groups; per competition the ratio of the median intervals) | `chirp_effect_on_dominant_adaptive_window/data/` |
+| `fig:receiver_before_after` (`plot_receiver_before_after`, main-text Fig. 8; new 2026-11-26, label proposed; B and C replaced by the re-attack hazard the same day) | interchase, reattack (window from rates) | `stats_reattack_hazard` (Bayesian re-attack hazard: piecewise-exponential Poisson GLMMs on the person-period table of `reattack_hazard.py`, 9 fits, ~1 h on 4 cores), plot (A: obs.csv, the previous inter-chase interval of all chases with a previous one, with and without a loser chirp in the offset window (M2's predictor), curves averaged over competitions with weight n_chirp n_none / (n_chirp + n_none) in both groups; B: re-attacks per min at risk in each piece of time since the offset, with and without the time-varying `chirped`, competitions averaged with weight X1 X0 / (X1 + X0) of their time at risk (Mantel-Haenszel), and the primary model's rates; C: per competition the Mantel-Haenszel rate ratio, with the model's hazard ratio) | `reattack_hazard/`, `chirp_effect_on_dominant_adaptive_window/data/` |
 | `fig:winner_behavior_predicts_chirp` (`plot_obliterate_receiver_effect`; moves to the supplement) | interchase, gamma, receiver (window from rates) | `stats_chirp_affects_chasing` (59 fits), plot | `…/gamma_glmm_binary/` |
 | `fig:re_analysis` (`plot_re_analysis`) | gamma, receiver | plot | `…/gamma_glmm_binary/` |
 | `fig:hurdle_model` (`plot_hurdle_decomposition`) | hurdle | `summarize_chirp_event_correlation_around_chasing`, `stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets`, plot | `chirp_event_correlations_offset_window/` |
@@ -151,8 +151,9 @@ chirp-rate curve. Now the window is one parameter, derived by a rule
   the window before each of them): `interchase` (obs.csv: counts in the
   window, its chase-tail and post-offset parts), `coupling` (counts and
   exposure, full-width subset), `gamma` (predictor `loser_chirped_offset_window`,
-  untruncated subset, decomposition), `receiver` (interval figure, window
-  schematic, forest, RE figure), `hurdle` (counts in the unclipped window, the offset logistic
+  untruncated subset, decomposition), `receiver` (window
+  schematic, forest, RE figure), `reattack` (the hazard's `chirped` counts from the window's
+  left edge; its placebo and Fig. 8 A use `loser_chirped_offset_window`), `hurdle` (counts in the unclipped window, the offset logistic
   regressions; the before/after regression uses 10-s windows but its input
   copies the window columns), `posteriors`. So in the primary run `rates`
   comes first (as in `ALL`); after the window changes, rerun these chains in
@@ -168,6 +169,26 @@ chirp-rate curve. Now the window is one parameter, derived by a rule
   `loser_chirped_offset_window`; directory `chirp_event_correlations_m3p13/` →
   `chirp_event_correlations_offset_window/` (and the hurdle files in it);
   stats `hurdle.n_chirps_fixed_m3p13.*` → `hurdle.n_chirps_offset_window.*`.
+
+**The re-attack hazard (Fig. 8, chain `reattack`, 2026-11-26).** Does a loser chirp change the
+hazard of the winner's next chase onset after a chase offset? The windowed Gamma GLMMs
+(`stats_chirp_affects_chasing.py`) relate the next inter-chase interval to a loser chirp in the offset window,
+which is clipped at the next onset (the predictor depends on the response); their complete-window check keeps
+only chases whose window is complete (762 of 1957 at 0.8) and so conditions on the outcome.
+`reattack_hazard.py` builds every interval from a chase offset to the next onset with the windowed models'
+own loaders and filters (and checks them against obs.csv number for number); the last interval of a trial is
+censored at 3 h, or ends at the onset of a chase that starts before 3 h and ends after it (2 trials; the
+windowed filter drops such chases). The intervals are split into person-period rows at the baseline pieces
+of time since the offset (0-2, 2-5, 5-10, 10-20, 20-50, 50-100, 100-200, 200-500, 500+ s; no interval is
+shorter than 1.7 s) and wherever the chirp covariate switches: `chirped` is 1 from the loser's first chirp at
+or after max(offset - 5 s, onset) on (the windowed predictor's left part, without the right-side clip).
+`stats_reattack_hazard.py` fits Poisson GLMMs with `offset(log exposure)` (bambi; random intercept and
+`chirped` slope per competition; M1/M3/M4-like adjustments for the log previous interval and the log chase
+duration; recency (1 s, 5 s) and lag-guarded (0.5-1.5 s) sensitivity covariates; a placebo, the next chase's
+windowed predictor, measured after the event: the hazard analogue of M2). The earlier frequentist
+discrete-time hazard analysis (`scripts/hazard/`) shares the data layer's choices except two: it keeps an
+unpaired BORIS onset as an interval of unknown chase state (2020-05-13, 59 s) where the paper's loader merges
+it into the next chase, and it merges same-sender detections closer than 50 ms (one loser chirp).
 
 Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun), `REPORT_hazard_v2.md` (the event-level hazard analysis of loser chirps vs chasing, `scripts/hazard/`, v1 vs v2, and the BORIS/LED converter check; chain `hazard`, not in the default `run_all.sh`).
 
@@ -210,7 +231,8 @@ script owns each namespace:
 | `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers |
 | `coupling` | `stats_chirp_coupling` | data anchors, overdispersion, LOO, Pareto k |
 | `receiver_effect_fits`, `receiver_effect_figure` | `stats_chirp_affects_chasing`, `plot_obliterate_receiver_effect` | n and divergences per fit; window disagreement |
-| `receiver_before_after` | `plot_receiver_before_after` | complete windows (plotted) and all chasing events: events and competitions, medians of the previous and next intervals with and without a loser chirp (competition-averaged as plotted, pooled, relative to the competition median), per competition the median ratios below and above 1 |
+| `reattack_hazard` | `stats_reattack_hazard` | intervals, events, censored intervals, competitions, person-period rows, events and exposure per baseline piece and per covariate state; per fit the hazard ratio (median, 95 % HDI, P(HR < 1)), covariate slopes, group SDs, divergences, R-hat, ESS, run time |
+| `receiver_before_after` | `plot_receiver_before_after` | A: chases with a previous interval with and without a loser chirp, competitions, medians of the previous interval (competition-averaged as plotted, pooled, relative to the competition median), per competition the median ratios below and above 1; B: re-attacks per min at risk per piece with and without a chirp, events and time at risk; C: per-competition rate ratios (above / below 1, range, pooled Mantel-Haenszel ratio); the plotted model hazard ratio |
 | `re_analysis` | `plot_re_analysis` | replication, grouping levels, HDI overlap |
 | `posteriors` | `summarize_reported_posteriors` | median and 95 % HDI of every reported posterior |
 | `v2_performance`, `v2_failure_modes`, `v2_pipeline_explainer` | the three v2 figures | the numbers of their panels and captions |

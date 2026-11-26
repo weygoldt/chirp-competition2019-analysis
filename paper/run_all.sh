@@ -80,9 +80,14 @@ chain_rates() {        # Fig. event_time_rates_winner_loser_chirp (+ the offset 
 }
 
 chain_receiver() {     # needs chain_gamma and the offset window (chain_rates)
-  step plot_receiver_before_after.py      # main text: intervals before / after chases with and without loser chirps (reads obs.csv)
   step plot_obliterate_receiver_effect.py # supplement: window schematic, forest plot of the Gamma GLMM slopes
   step plot_re_analysis.py
+}
+
+chain_reattack() {     # main text Fig. 8 (receiver_before_after): Bayesian re-attack hazard after loser chirps
+                       # (needs chain interchase's obs.csv and the offset window; ~1 h, 4 cores, < 2 GB)
+  heavy reattack-hazard 8G stats_reattack_hazard.py   # piecewise-exponential Poisson GLMMs (9 fits)
+  step plot_receiver_before_after.py      # previous intervals (A), re-attack rates (B), rate ratios (C)
 }
 
 chain_hurdle() {       # Fig. hurdle_decomposition (+ offset logistic regressions)
@@ -154,14 +159,14 @@ chain_hazard() {       # event-level hazard of chase offsets/onsets after loser 
 # the primary run (offset_window.py, written by its chain rates), so in the
 # primary run they come after rates; before each of them the window is checked,
 # and a sensitivity run stops there if the primary's window is missing.
-WINDOW_CHAINS=" interchase coupling gamma receiver hurdle posteriors "
+WINDOW_CHAINS=" interchase coupling gamma receiver reattack hurdle posteriors "
 check_window() { tagged check step offset_window.py --check; }
 
 # rates before the chains that use the offset window (see WINDOW_CHAINS).
 # v2figs last: its extraction knows only the runs in v2_fig_extract.RUNS (the
 # pipeline figures belong to the primary run), so on a sensitivity run such as
 # rtdetr_gapfill_t090 it stops the script after all analyses are done.
-ALL=(counts status agonistic rates interchase coupling gamma receiver hurdle validation echo descriptive allocation posteriors v2figs)
+ALL=(counts status agonistic rates interchase coupling gamma receiver reattack hurdle validation echo descriptive allocation posteriors v2figs)
 chains=("$@")
 (( ${#chains[@]} )) || chains=("${ALL[@]}")
 for c in "${chains[@]}"; do
