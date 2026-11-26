@@ -180,7 +180,7 @@ own loaders and filters (and checks them against obs.csv number for number); the
 censored at 3 h, or ends at the onset of a chase that starts before 3 h and ends after it (2 trials; the
 windowed filter drops such chases). The intervals are split into person-period rows at the baseline pieces
 of time since the offset (0-2, 2-5, 5-10, 10-20, 20-50, 50-100, 100-200, 200-500, 500+ s; no interval is
-shorter than 1.7 s) and wherever the chirp covariate switches: `chirped` is 1 from the loser's first chirp at
+shorter than 1.66 s) and wherever the chirp covariate switches: `chirped` is 1 from the loser's first chirp at
 or after max(offset - 5 s, onset) on (the windowed predictor's left part, without the right-side clip).
 `stats_reattack_hazard.py` fits Poisson GLMMs with `offset(log exposure)` (bambi; random intercept and
 `chirped` slope per competition; M1/M3/M4-like adjustments for the log previous interval and the log chase

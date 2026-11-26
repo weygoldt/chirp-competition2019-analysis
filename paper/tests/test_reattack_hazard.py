@@ -216,3 +216,17 @@ def test_check_sampler_and_diagnostics():
     d = srh.diagnostics(fake_posterior(), "chirped")
     assert d["divergences"] == 0 and d["ok"] == 1 and d["chirp_ok"] == 1
     assert d["chirp_ess_bulk"] > 4000 and d["chirp_rhat"] < 1.01
+    # chains that disagree on the slope SD fail the chirp terms (the refit rule's trigger)
+    bad = fake_posterior()
+    bad.posterior["chirped|recording_sigma"][:4] += 1.0
+    assert srh.diagnostics(bad, "chirped")["chirp_ok"] == 0
+
+
+def test_parametrization_is_read_from_the_saved_posterior():
+    import stats_reattack_hazard as srh
+
+    tr = fake_posterior()
+    assert srh.parametrization(tr, srh.FITS["primary"]) == int(srh.NONCENTERED)  # older posteriors
+    assert srh.parametrization(tr, srh.FITS["placebo"]) == 1
+    tr.posterior.attrs["noncentered"] = 1  # a refit
+    assert srh.parametrization(tr, srh.FITS["primary"]) == 1

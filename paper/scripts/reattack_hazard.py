@@ -53,7 +53,7 @@ import numpy as np
 import pandas as pd
 
 # Baseline pieces of time since the offset (s), log-spaced (1-2-5 steps): the re-attack hazard changes fastest
-# just after an offset; the last piece is open. No interval is shorter than 1.7 s (chases closer than that were
+# just after an offset; the last piece is open. No interval is shorter than 1.66 s (chases closer than that were
 # annotated as one), so 0-1 s would hold no event and 0-2 s is one piece; the long tail (99th percentile
 # 600 s) is split at 500 s. Events and exposure per piece are in the stats (reattack_hazard.pieces).
 PIECES_S = (0.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, np.inf)

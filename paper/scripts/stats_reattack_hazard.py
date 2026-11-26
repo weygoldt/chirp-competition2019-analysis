@@ -28,7 +28,8 @@ Fits (as the windowed Gamma GLMMs M1-M4 of ``stats_chirp_affects_chasing.py``, t
 
 Priors as the paper's GLMMs: slopes Normal(0, 2); the baseline log hazard (per s) of each piece Normal(0, 5)
 (the GLMMs' intercept prior; cell-means coding, so no separate intercept); group-level SDs bambi's defaults
-(HalfNormal, printed in the log); group-level effects centred (``NONCENTERED``). Sampler as the paper's
+(HalfNormal, printed in the log); group-level effects centred (``NONCENTERED``; a fit whose chirp terms fail
+the diagnostics, R-hat > 1.01 or ESS < 400 or divergences, is refitted noncentred). Sampler as the paper's
 GLMMs (tune 3000, draws 1000, 8 chains, target_accept 0.99, seed 42) on 4 cores (they used 8). Rows that
 share every model column are summed first
 (``reattack_hazard.aggregate``; the Poisson posterior depends only on these sums).
@@ -40,6 +41,7 @@ Outputs under ``$PAPER_OUT/data/processed/reattack_hazard/``: ``intervals.csv`` 
     paper/run.sh stats_reattack_hazard.py                      # all fits (chain reattack)
     paper/run.sh stats_reattack_hazard.py --fits primary --tune 300 --draws 200 --chains 4   # timing only
     paper/run.sh stats_reattack_hazard.py --report-only    # summaries and stats from the saved posteriors
+    paper/run.sh stats_reattack_hazard.py --reuse          # saved posteriors where present, then the refit rule
 """
 
 from __future__ import annotations
@@ -71,7 +73,8 @@ HDI_PROB = 0.95
 OK_RHAT, OK_ESS = 1.01, 400  # the windowed fits' flags
 # Centred group-level effects: every competition contributes many events, so the likelihood pins each
 # competition's effects and the noncentred form (bambi's default) mixes poorly (short chains of the primary:
-# half the speed, step sizes differing 4-fold between chains). A fit can override it with "noncentered".
+# half the speed, step sizes differing 4-fold between chains). A fit can override it with "noncentered", and a
+# centred fit whose chirp terms fail the diagnostics is refitted noncentred (the refit rule in main).
 NONCENTERED = False
 
 X, D = "log_prev_c", "log_dur_c"
@@ -135,17 +138,24 @@ def formula(spec: dict) -> str:
 # ---------------------------------------------------------------------------
 # fitting and summaries
 # ---------------------------------------------------------------------------
-def fit(name: str, spec: dict, rows: pd.DataFrame, sampler: dict):
+def fit(name: str, spec: dict, rows: pd.DataFrame, sampler: dict, noncentered: bool | None = None):
+    """Sample one fit; ``noncentered`` overrides the fit's parametrization (recorded in the trace's attrs)."""
     import bambi as bmb
 
+    nc = spec.get("noncentered", NONCENTERED) if noncentered is None else noncentered
     priors = {"piece_label": bmb.Prior("Normal", mu=PRIOR_PIECE[0], sigma=PRIOR_PIECE[1]),
               "common": bmb.Prior("Normal", mu=PRIOR_SLOPE[0], sigma=PRIOR_SLOPE[1])}
-    model = bmb.Model(formula(spec), data=rows, family="poisson", priors=priors,
-                      noncentered=spec.get("noncentered", NONCENTERED))
-    print(f"\n=== {name}: {formula(spec)}\n{model}", flush=True)
+    model = bmb.Model(formula(spec), data=rows, family="poisson", priors=priors, noncentered=nc)
+    print(f"\n=== {name} ({'noncentred' if nc else 'centred'}): {formula(spec)}\n{model}", flush=True)
     t0 = time.time()
     trace = model.fit(**sampler)
+    trace.posterior.attrs["noncentered"] = int(nc)
     return model, trace, time.time() - t0
+
+
+def parametrization(trace, spec: dict) -> int:
+    """1 if a saved fit is noncentred (recorded since the refit rule; older posteriors: the fit's default)."""
+    return int(trace.posterior.attrs.get("noncentered", spec.get("noncentered", NONCENTERED)))
 
 
 def _flat(trace, var: str) -> np.ndarray:
@@ -263,6 +273,8 @@ def main(
     seed: int = SAMPLER["random_seed"],
     report_only: bool = typer.Option(False, help="no sampling: rebuild the tables, summaries and stats from the "
                                      "saved posteriors of a full run (<fit>.nc; run times from hr_summary.csv)"),
+    reuse: bool = typer.Option(False, help="load a fit's saved posterior (default sampler only) instead of "
+                               "sampling it, sample the missing ones, then apply the refit rule"),
 ) -> None:
     names = [f.strip() for f in fits.split(",") if f.strip()]
     unknown = sorted(set(names) - set(FITS))
@@ -273,11 +285,11 @@ def main(
     full_run = sampler == SAMPLER and set(names) == set(FITS)
     out_dir = processed_dir(NAMESPACE)
     tag = "" if sampler == SAMPLER else "__test"  # never overwrite the real posteriors with a timing run
-    if report_only:
-        if sampler != SAMPLER or set(names) != set(FITS):
-            raise typer.BadParameter("--report-only reads the posteriors of a full run (all fits, default "
-                                     "sampler settings)")
-        previous = pd.read_csv(out_dir / "hr_summary.csv").set_index("fit")["seconds"]
+    if (report_only or reuse) and (sampler != SAMPLER or set(names) != set(FITS)):
+        raise typer.BadParameter("--report-only and --reuse read the posteriors of a full run (all fits, "
+                                 "default sampler settings)")
+    previous = (pd.read_csv(out_dir / "hr_summary.csv").set_index("fit")
+                if (report_only or reuse) and (out_dir / "hr_summary.csv").exists() else None)
 
     window = offset_window()
     print(f"offset window {window}; pieces {rh.piece_labels()}; sampler {sampler}")
@@ -292,18 +304,33 @@ def main(
     for name in names:
         spec = FITS[name]
         rows = fit_rows(pp, spec)
-        if report_only:
-            trace = az.from_netcdf(out_dir / f"{name}.nc")
+        nc_path = out_dir / f"{name}{tag}.nc"
+        refit, extra = 0, {}
+        if report_only or (reuse and nc_path.exists()):
+            trace = az.from_netcdf(nc_path)
             check_sampler(trace, name)
             if int(trace.posterior.sizes[f"{rh.COMP}__factor_dim"]) != rows[rh.COMP].nunique():
                 raise ValueError(f"{name}: the saved posterior does not match the table's competitions")
-            secs = float(previous.loc[name])
+            if previous is None or name not in previous.index:
+                raise ValueError(f"{name}: no run time in hr_summary.csv for the saved posterior")
+            secs = float(previous.loc[name, "seconds"])
+            refit = int(previous.loc[name, "refit"]) if "refit" in previous.columns else 0
         else:
             _, trace, secs = fit(name, spec, rows, sampler)
-            az.to_netcdf(trace, out_dir / f"{name}{tag}.nc")
+            az.to_netcdf(trace, nc_path)
+        diag = diagnostics(trace, spec["chirp"])
+        # Refit rule: a centred fit whose chirp terms do not pass (a slope SD near 0 puts the centred form in a
+        # funnel) is refitted noncentred, and the refit is kept; the centred fit's diagnostics are reported.
+        if not report_only and not diag["chirp_ok"] and not parametrization(trace, spec):
+            print(f"    {name}: chirp terms fail the diagnostics when centred ({json.dumps(diag)}); "
+                  "refit noncentred", flush=True)
+            extra = {"diagnostics_centred": diag, "seconds_centred": float(secs)}
+            _, trace, secs = fit(name, spec, rows, sampler, noncentered=True)
+            az.to_netcdf(trace, nc_path)
+            diag, refit = diagnostics(trace, spec["chirp"]), 1
         r = {**interval_counts(iv, pp, spec), "n_rows": int(len(rows)), "hr": hr_summary(trace, spec),
-             "diagnostics": diagnostics(trace, spec["chirp"]), "seconds": float(secs),
-             "random_slope": int(spec["slope"]), "noncentered": int(spec.get("noncentered", NONCENTERED))}
+             "diagnostics": diag, "seconds": float(secs), "random_slope": int(spec["slope"]),
+             "noncentered": parametrization(trace, spec), "refit": refit, **extra}
         results[name] = r
         print(f"--- {name}: HR {r['hr']['median']:.3f} [{r['hr']['hdi'][0]:.3f}, {r['hr']['hdi'][1]:.3f}], "
               f"P(HR<1) {r['hr']['p_lt_1']:.3f}; {json.dumps(r['diagnostics'])}; {secs:.0f} s", flush=True)
@@ -313,7 +340,8 @@ def main(
         pd.concat(rates).to_csv(out_dir / f"model_rates{tag}.csv", index=False)
     summary = pd.DataFrame([{"fit": k, "as": FITS[k]["as"], "covariate": FITS[k]["chirp"],
                              "adjust": "+".join(FITS[k]["adjust"]) or "-", "random_slope": FITS[k]["slope"],
-                             **{f: v[f] for f in ("n_intervals", "n_events", "n_rows", "seconds")},
+                             **{f: v[f] for f in ("n_intervals", "n_events", "n_rows", "seconds", "noncentered",
+                                                  "refit")},
                              "hr": v["hr"]["median"], "hdi_lo": v["hr"]["hdi"][0], "hdi_hi": v["hr"]["hdi"][1],
                              "p_lt_1": v["hr"]["p_lt_1"], **v["diagnostics"]} for k, v in results.items()])
     summary.to_csv(out_dir / f"hr_summary{tag}.csv", index=False)
