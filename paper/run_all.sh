@@ -85,7 +85,7 @@ chain_receiver() {     # needs chain_gamma and the offset window (chain_rates)
 }
 
 chain_reattack() {     # main text Fig. 8 (receiver_before_after): Bayesian re-attack hazard after loser chirps
-                       # (needs chain interchase's obs.csv and the offset window; ~35 min on 4 cores, ~1 GB)
+                       # (needs chain interchase's obs.csv and the offset window; 30-45 min on 4 cores, ~1 GB)
   heavy reattack-hazard 8G stats_reattack_hazard.py   # piecewise-exponential Poisson GLMMs (9 fits)
   step plot_receiver_before_after.py      # previous intervals (A), re-attack rates (B), rate ratios (C)
 }
