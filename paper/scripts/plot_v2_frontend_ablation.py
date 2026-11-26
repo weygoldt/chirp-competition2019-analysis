@@ -8,7 +8,7 @@ the released detector's best epoch; ``experiments/ablation_scenarios``).
 
 A   The dense chirp train of the failure-mode figure C (2020-03-18-10_34,
     the ~702-Hz fish of a draw; ``v2_fig_extract.SNIPPETS["f3_dense"]``), a
-    6-s excerpt (``EXCERPT``) as each detector receives it: top, the
+    window and band of that panel (``panel_window``) as each detector receives it: top, the
     single-window input (one spectrogram in all three channels: grey);
     bottom, the RGB input. White circles: each detector's detections at the
     operating threshold, at their predicted emitter EOD$f$ (both detectors run
@@ -75,8 +75,7 @@ BUNDLES = {
 }
 BENCH_KEY = {"rgb": "A", "single": "B16", "single_e22": "B22"}
 SNIPPET = "f3_dense"
-EXCERPT = (11406.0, 11412.0)  # [s] the 6-s excerpt of A (the chosen candidate of Fig. S4C)
-BAND = (600.0, 1040.0)  # [Hz] of A: every box of both detectors in the excerpt (616-1039 Hz)
+# A shows the window and band of the failure-mode figure C (``panel_window``)
 N_BOOT = 4000
 DT_EDGES_MS = [0.0, 80.0, 100.0, 125.0, 150.0, 200.0, 300.0, 500.0, 1000.0, np.inf]
 DT_KEYS = ["below_80_ms", "80_to_100_ms", "100_to_125_ms", "125_to_150_ms", "150_to_200_ms",
@@ -95,7 +94,8 @@ SERIES = {
                "label": "Single 205-ms window"},
 }
 LW, EB_LW, PT_MS = 1.0, 0.8, 3.3  # as the performance figure
-DET_MS = 2.6  # detection circles in A
+DET_MS = 2.2  # detection circles in A (17 s: chirps can be 40 ms apart)
+EVENT_MS = 2.2  # chirp triangles above A
 
 # layout [cm]
 W = 17.4
@@ -295,9 +295,16 @@ def analysed_intervals() -> dict:
 # ---------------------------------------------------------------------------
 # drawing
 # ---------------------------------------------------------------------------
+def panel_window(snip: dict) -> tuple[float, float, float, float]:
+    """A's time window and band: those of the failure-mode figure C (the
+    snippet's window and ``band_hz``, set in ``v2_fig_extract.SNIPPETS``)."""
+    m = snip["meta"]
+    f0, f1 = m["band_hz"]
+    return float(m["t_start_s"]), float(m["t_end_s"]), float(f0), float(f1)
+
+
 def strip(ax, snip: dict, drawn: dict, model: str, label: str, real: dict) -> None:
-    a, b = EXCERPT
-    f0, f1 = BAND
+    a, b, f0, f1 = panel_window(snip)
     if model == "rgb":
         C.show_rgb(ax, snip, a, b, f0, f1)
     else:
@@ -319,7 +326,7 @@ def strip(ax, snip: dict, drawn: dict, model: str, label: str, real: dict) -> No
             mew=0.8, zorder=5)
     ev = drawn["events"]
     ev = ev[(ev >= a) & (ev <= b)]
-    ax.plot(ev - a, np.full(len(ev), f1 + 0.06 * (f1 - f0)), "v", ms=2.6, color="k", mec="none",
+    ax.plot(ev - a, np.full(len(ev), f1 + 0.06 * (f1 - f0)), "v", ms=EVENT_MS, color="k", mec="none",
             clip_on=False, zorder=6)
     ax.text(0.012, 0.93, label, transform=ax.transAxes, ha="left", va="top", **C.ANNOT, **C.DARK_BACK)
     k = real[model]["n_matched"]
@@ -398,8 +405,8 @@ def main() -> None:
     ax_a2 = C.axes_cm(fig, L, y_a2, R - L, STRIP_H)
     strip(ax_a1, snip, drawn, "single", r"Single window: 205~ms in all three channels", real)
     strip(ax_a2, snip, drawn, "rgb", r"Three windows: 205 (R), 51 (G) and 13~ms (B)", real)
-    C.scalebar(ax_a2, EXCERPT[1] - EXCERPT[0] - 0.1, BAND[0] + 0.05 * (BAND[1] - BAND[0]), 1.0,
-               "1~s", above=True)
+    a, b, f0, f1 = panel_window(snip)
+    C.scalebar(ax_a2, b - a - 0.15, f0 + 0.05 * (f1 - f0), 1.0, "1~s", above=True)
     fig.text((L - 1.32) / W, (y_a2 + STRIP_H + STRIP_GAP / 2) / H, "Frequency [Hz]", rotation=90,
              ha="center", va="center")
 
