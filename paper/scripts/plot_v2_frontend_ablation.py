@@ -8,7 +8,7 @@ the released detector's best epoch; ``experiments/ablation_scenarios``).
 
 A   The dense chirp train of the failure-mode figure C (2020-03-18-10_34,
     the ~702-Hz fish of a draw; ``v2_fig_extract.SNIPPETS["f3_dense"]``), a
-    3-s excerpt (``EXCERPT``) as each detector receives it: top, the
+    6-s excerpt (``EXCERPT``) as each detector receives it: top, the
     single-window input (one spectrogram in all three channels: grey);
     bottom, the RGB input. White circles: each detector's detections at the
     operating threshold, at their predicted emitter EOD$f$ (both detectors run
@@ -75,8 +75,8 @@ BUNDLES = {
 }
 BENCH_KEY = {"rgb": "A", "single": "B16", "single_e22": "B22"}
 SNIPPET = "f3_dense"
-EXCERPT = (11406.0, 11409.0)  # [s] the 3-s excerpt of A (inside the 6-s candidate)
-BAND = (625.0, 900.0)  # [Hz] of A (room below the fish for the scale bar)
+EXCERPT = (11406.0, 11412.0)  # [s] the 6-s excerpt of A (the chosen candidate of Fig. S4C)
+BAND = (600.0, 1040.0)  # [Hz] of A: every box of both detectors in the excerpt (616-1039 Hz)
 N_BOOT = 4000
 DT_EDGES_MS = [0.0, 80.0, 100.0, 125.0, 150.0, 200.0, 300.0, 500.0, 1000.0, np.inf]
 DT_KEYS = ["below_80_ms", "80_to_100_ms", "100_to_125_ms", "125_to_150_ms", "150_to_200_ms",
@@ -100,7 +100,7 @@ DET_MS = 2.6  # detection circles in A
 # layout [cm]
 W = 17.4
 L, R = 1.5, 17.0
-STRIP_H, STRIP_GAP = 2.0, 0.45
+STRIP_H, STRIP_GAP = 2.7, 0.45
 TOP = 0.75  # above the first strip: the event triangles and the letter
 ROW_GAP = 1.45  # from the second strip to the plots (scale bar, letters)
 PLOT_H = 4.0
@@ -163,6 +163,23 @@ def compare(boot: Bootstrap, mask, num: dict, den: dict, x=None) -> dict:
     out["single_minus_rgb_lo"], out["single_minus_rgb_hi"] = boot.diff(
         num["rgb"], den["rgb"], num["single"], den["single"], mask)
     return out
+
+
+def composition(b: pd.DataFrame, thr: float) -> dict:
+    """Why recall dips at intervals >= 500 ms in B: most of those chirps come
+    from the 20 scenes of the 1000-ms trains, whose chirps have the lowest SNR
+    of all levels; within those scenes recall does not fall with the interval."""
+    rate = b[b["sweep"] == "rate"]
+    long = rate["dt_same_s"] >= 0.5
+    slowest = rate["level"] == rate.loc[rate["level_value"].idxmax(), "level"]
+    det = detected(rate, "rgb", thr)
+    return {
+        "share_slowest_level_of_500_ms_up": float(slowest[long].mean()),
+        "snr_median_db_slowest_level": float(rate.loc[slowest, "snr_db"].median()),
+        "snr_median_db_other_levels": float(rate.loc[~slowest, "snr_db"].median()),
+        "slowest_level_recall_rgb_below_500_ms": float(det[slowest.to_numpy() & ~long.to_numpy()].mean()),
+        "slowest_level_recall_rgb_500_ms_up": float(det[slowest.to_numpy() & long.to_numpy()].mean()),
+    }
 
 
 def interval_sweep(b: pd.DataFrame, boot: Bootstrap, thr: float, models=("rgb", "single")) -> dict:
@@ -308,7 +325,7 @@ def strip(ax, snip: dict, drawn: dict, model: str, label: str, real: dict) -> No
     k = real[model]["n_matched"]
     ax.text(0.988, 0.93, f"{k} of {real['n_events']} chirps detected", transform=ax.transAxes,
             ha="right", va="top", **C.ANNOT, **C.DARK_BACK)
-    C.spec_yaxis(ax, ticks=[700, 800], ylabel=False)
+    C.spec_yaxis(ax, ticks=[700, 800, 900, 1000], ylabel=False)
 
 
 def proportion_series(ax, table: dict, model: str) -> None:
@@ -365,6 +382,7 @@ def main() -> None:
                      "single_early_best_epoch": epochs["single_early"]["best_epoch"],
                      "single_early_epochs_run": epochs["single_early"]["epochs_run"]},
         "recall": rate,
+        "recall_composition": composition(bench, THR),
         "recall_t0_5": {"pooled": rate_05["pooled"]},
         "assign": df,
         "epoch22": {"recall_pooled": rate_e22["pooled"], "assign_pooled": df_e22["pooled"]},
@@ -380,9 +398,9 @@ def main() -> None:
     ax_a2 = C.axes_cm(fig, L, y_a2, R - L, STRIP_H)
     strip(ax_a1, snip, drawn, "single", r"Single window: 205~ms in all three channels", real)
     strip(ax_a2, snip, drawn, "rgb", r"Three windows: 205 (R), 51 (G) and 13~ms (B)", real)
-    C.scalebar(ax_a2, EXCERPT[1] - EXCERPT[0] - 0.08, BAND[0] + 0.05 * (BAND[1] - BAND[0]), 0.5,
-               "0.5~s", above=True)
-    fig.text((L - 1.05) / W, (y_a2 + STRIP_H + STRIP_GAP / 2) / H, "Frequency [Hz]", rotation=90,
+    C.scalebar(ax_a2, EXCERPT[1] - EXCERPT[0] - 0.1, BAND[0] + 0.05 * (BAND[1] - BAND[0]), 1.0,
+               "1~s", above=True)
+    fig.text((L - 1.32) / W, (y_a2 + STRIP_H + STRIP_GAP / 2) / H, "Frequency [Hz]", rotation=90,
              ha="center", va="center")
 
     ax_b = C.axes_cm(fig, L, y_plot, PLOT_W, PLOT_H)
