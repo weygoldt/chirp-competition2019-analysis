@@ -112,6 +112,8 @@ in [ablation_scenarios/README.md](ablation_scenarios/README.md).
 | `bench_build.py A\|B`, `bench_run.sh build\|predict` | `datasets/ablation_bench_v1_{A,B}`, `runs/ablation_frontend/scenarios/bench/{A,B}` | both front ends; each arm on its own, before/after post-processing, 100 / 25 ms matching |
 | `bench_analyse.py`, `bench_figure.py` | `runs/ablation_frontend/scenarios/bench/analysis/` | A-vs-B by emitter ΔF and by same-fish interval, paired scene bootstrap, figure |
 | `prepare_longonly_cont.py`, `continue_longonly.sh` | `runs/dualhead_r18_sim_v4_longonly_r1c` | arm B resumed after epoch 10 and stopped after 22 (A's budget): arm `Bc` |
+| `make_bc_bundles.py`, `bench_bc.sh EPOCH` | `runs/dualhead_r18_sim_v4_longonly_r1c/bundles/`, `runs/ablation_frontend/scenarios/bench/Bc{16,22}` | Bc bundles with the resume's emitter-unit bug repaired; Bc on the benchmark |
+| `tile_rapid.py` | `runs/ablation_frontend/scenarios/tile_rapid.png` | one rapid-train tile as both models see it (single window vs RGB, A's channels) |
 
 ### Decoder (`decoder/`)
 

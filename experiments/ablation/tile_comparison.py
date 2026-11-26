@@ -69,14 +69,15 @@ def main() -> None:
     for r, (name, img, titles) in enumerate(rows):
         for ch in range(3):
             ax = axes[r, ch]
-            ax.imshow(img[..., ch], origin="lower", aspect="auto", cmap="magma", vmin=0, vmax=255, extent=extent, interpolation="nearest")
+            # image row 0 is the highest frequency (dataset contract); "lower" flipped the band
+            ax.imshow(img[..., ch], origin="upper", aspect="auto", cmap="magma", vmin=0, vmax=255, extent=extent, interpolation="nearest")
             ax.set_title(f"{name}channel {ch}, {titles[ch]}", fontsize=10, loc="left")
     diff_max = []
     for ch in range(3):
         d = np.abs(ia[..., ch] - ib[..., ch])
         diff_max.append(int(d.max()))
         ax = axes[2, ch]
-        ax.imshow(d, origin="lower", aspect="auto", cmap="gray_r", vmin=0, vmax=255, extent=extent, interpolation="nearest")
+        ax.imshow(d, origin="upper", aspect="auto", cmap="gray_r", vmin=0, vmax=255, extent=extent, interpolation="nearest")
         ax.set_title(f"|A - B|, channel {ch}: max {d.max()}, mean {d.mean():.2f} (of 255)", fontsize=10, loc="left")
     for ax in axes[:2, 0]:
         for bx in boxes.itertuples(index=False):
