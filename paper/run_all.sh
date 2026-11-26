@@ -80,7 +80,8 @@ chain_rates() {        # Fig. event_time_rates_winner_loser_chirp (+ the offset 
 }
 
 chain_receiver() {     # needs chain_gamma and the offset window (chain_rates)
-  step plot_obliterate_receiver_effect.py
+  step plot_receiver_before_after.py      # main text: intervals before / after chases with and without loser chirps (reads obs.csv)
+  step plot_obliterate_receiver_effect.py # supplement: window schematic, forest plot of the Gamma GLMM slopes
   step plot_re_analysis.py
 }
 

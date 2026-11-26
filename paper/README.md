@@ -69,7 +69,8 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | chirps within agonistic windows (no figure; `res:chirps_status`) | agonistic | `print_chirps_in_agonistic_windows` (full-trial and ±600 s shifts) | `chirps_in_agonistic_windows{,_maxshift_600s}.csv` |
 | `fig:event_correlations` (`plot_event_time_rates_winner_loser_chirp`) | rates | `analyze_event_time_rates_trial` (default and `--ag-events`), plot (`_src_paper` variant prints the extrema the text quotes), `offset_window` (the window around chase offsets, from the loser peak) | `event_time_rates/*.json`, `stats/offset_window.json` |
 | `fig:chirp_coupling` (`plot_chirp_coupling`) | interchase, coupling | `summarize_submissive_chirp_effect_on_dominant`, `stats_chirp_coupling`, plot | `chirp_effect_on_dominant_adaptive_window/data/`, `chirp_coupling/negbin/` |
-| `fig:winner_behavior_predicts_chirp` (`plot_obliterate_receiver_effect`) | interchase, gamma, receiver (window from rates) | `stats_chirp_affects_chasing` (59 fits), plot | `…/gamma_glmm_binary/` |
+| `fig:receiver_before_after` (`plot_receiver_before_after`, main-text Fig. 8; new 2026-11-26, label proposed) | interchase, receiver (window from rates) | plot (reads obs.csv: the previous and next inter-chase intervals of the complete-window chasing events with and without a loser chirp, the Gamma GLMMs' rows; curves averaged over competitions, each weighted by n_chirp n_none / (n_chirp + n_none) in both groups; per competition the ratio of the median intervals) | `chirp_effect_on_dominant_adaptive_window/data/` |
+| `fig:winner_behavior_predicts_chirp` (`plot_obliterate_receiver_effect`; moves to the supplement) | interchase, gamma, receiver (window from rates) | `stats_chirp_affects_chasing` (59 fits), plot | `…/gamma_glmm_binary/` |
 | `fig:re_analysis` (`plot_re_analysis`) | gamma, receiver | plot | `…/gamma_glmm_binary/` |
 | `fig:hurdle_model` (`plot_hurdle_decomposition`) | hurdle | `summarize_chirp_event_correlation_around_chasing`, `stats_bayesian_hurdle_glmm_chirprate_deviation_during_chasing_offsets`, plot | `chirp_event_correlations_offset_window/` |
 | `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
@@ -150,8 +151,8 @@ chirp-rate curve. Now the window is one parameter, derived by a rule
   the window before each of them): `interchase` (obs.csv: counts in the
   window, its chase-tail and post-offset parts), `coupling` (counts and
   exposure, full-width subset), `gamma` (predictor `loser_chirped_offset_window`,
-  untruncated subset, decomposition), `receiver` (window schematic, forest,
-  RE figure), `hurdle` (counts in the unclipped window, the offset logistic
+  untruncated subset, decomposition), `receiver` (interval figure, window
+  schematic, forest, RE figure), `hurdle` (counts in the unclipped window, the offset logistic
   regressions; the before/after regression uses 10-s windows but its input
   copies the window columns), `posteriors`. So in the primary run `rates`
   comes first (as in `ALL`); after the window changes, rerun these chains in
@@ -209,6 +210,7 @@ script owns each namespace:
 | `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers |
 | `coupling` | `stats_chirp_coupling` | data anchors, overdispersion, LOO, Pareto k |
 | `receiver_effect_fits`, `receiver_effect_figure` | `stats_chirp_affects_chasing`, `plot_obliterate_receiver_effect` | n and divergences per fit; window disagreement |
+| `receiver_before_after` | `plot_receiver_before_after` | complete windows (plotted) and all chasing events: events and competitions, medians of the previous and next intervals with and without a loser chirp (competition-averaged as plotted, pooled, relative to the competition median), per competition the median ratios below and above 1 |
 | `re_analysis` | `plot_re_analysis` | replication, grouping levels, HDI overlap |
 | `posteriors` | `summarize_reported_posteriors` | median and 95 % HDI of every reported posterior |
 | `v2_performance`, `v2_failure_modes`, `v2_pipeline_explainer` | the three v2 figures | the numbers of their panels and captions |

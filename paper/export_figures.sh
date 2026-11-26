@@ -21,6 +21,7 @@ FIGS=(
   plot_chirp_winner_loser_trial_summary
   plot_event_time_rates_winner_loser_chirp
   plot_chirp_coupling
+  plot_receiver_before_after
   plot_obliterate_receiver_effect
   plot_hurdle_decomposition
   plot_re_analysis
