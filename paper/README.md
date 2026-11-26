@@ -190,6 +190,15 @@ discrete-time hazard analysis (`scripts/hazard/`) shares the data layer's choice
 unpaired BORIS onset as an interval of unknown chase state (2020-05-13, 59 s) where the paper's loader merges
 it into the next chase, and it merges same-sender detections closer than 50 ms (one loser chirp).
 
+**Draft of a more didactic Fig. 8 (2026-11-26, not in the manuscript).** `plot_receiver_didactic_draft.py` draws
+candidate panels for the author to choose from: a raster of real inter-chase intervals showing how the model splits
+time at risk at the loser's first chirp; the chirp-triggered re-attack rate and the "not yet re-attacked" curves
+against matched moments (same competition, same time since the offset, still at risk and not yet chirped; controls
+censored at their own chirp, never required to stay silent); and checks (all chirps as triggers, the "never chirps"
+selection trap, shuffled and simulated surrogates). The trigger/control logic is `reattack_matched.py`
+(tests: `tests/test_reattack_matched.py`). It writes figures and a JSON of its numbers to the figure directory only
+(no `write_stats`); run it with a scratch `PAPER_OUT` and `--primary-out` pointing at a copy of the primary's stats.
+
 Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 0.5 and 0.9 sensitivity runs and the published v1 values), `REPORT_gapfill_threshold.md` (0.5 vs 0.9, gap filling), `REPORT_rtdetr.md` (first v2 rerun), `REPORT_hazard_v2.md` (the event-level hazard analysis of loser chirps vs chasing, `scripts/hazard/`, v1 vs v2, and the BORIS/LED converter check; chain `hazard`, not in the default `run_all.sh`).
 
 ## Figures into the manuscript
