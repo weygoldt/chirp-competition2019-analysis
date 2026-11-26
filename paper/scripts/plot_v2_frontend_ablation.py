@@ -32,6 +32,8 @@ performance figure), Wilson 95 % intervals; the differences (single minus
 three windows) with a paired bootstrap over scenes (``N_BOOT``) go to the
 stats, also pooled (intervals < 125 ms, 125-150 ms, >= 150 ms; ΔF < 4 Hz;
 all), at threshold 0.5, and for the single-window detector at epoch 22.
+Also (stats ``analysed``): how many chirps of the 33 analysed trials have a
+chirp of the same fish within 150 ms (125 ms), a lower bound.
 
 Inputs: the benchmark's per-label table
 (``$CHIRP_DATA/runs/ablation_frontend/scenarios/paper/bench_labels.parquet``,
@@ -246,6 +248,33 @@ def real_train(snip: dict) -> tuple[dict, dict]:
     return out, drawn
 
 
+def analysed_intervals() -> dict:
+    """How often a chirp of the 33 analysed trials has a chirp of the same fish
+    within 150 ms (125 ms): the run's chirps (score >= the operating threshold,
+    kept) assigned to a track. A lower bound: in dense trains one box often
+    spans several chirps (failure-mode figure C)."""
+    total, per_trial = 0, []
+    counts = {"150": 0, "125": 0}
+    for rec in sorted(C.analysed_recordings()):
+        d = C.detections(rec)
+        d = d[d.chirp.astype(bool) & (d.track_id >= 0)].sort_values(["track_id", "t_center_s"])
+        t, f = d.t_center_s.to_numpy(), d.track_id.to_numpy()
+        same = f[1:] == f[:-1]
+        prev = np.r_[np.inf, np.where(same, np.diff(t), np.inf)]
+        nxt = np.r_[np.where(same, np.diff(t), np.inf), np.inf]
+        dt = np.minimum(prev, nxt)
+        total += len(dt)
+        counts["150"] += int((dt < 0.150).sum())
+        counts["125"] += int((dt < 0.125).sum())
+        per_trial.append(float((dt < 0.150).mean()) if len(dt) else 0.0)
+    per_trial = np.array(per_trial)
+    return {"n_trials": len(per_trial), "n_chirps": total,
+            "n_below_150_ms": counts["150"], "fraction_below_150_ms": counts["150"] / total,
+            "n_below_125_ms": counts["125"], "fraction_below_125_ms": counts["125"] / total,
+            "max_trial_fraction_below_150_ms": float(per_trial.max()),
+            "n_trials_above_5_percent_below_150_ms": int((per_trial > 0.05).sum())}
+
+
 # ---------------------------------------------------------------------------
 # drawing
 # ---------------------------------------------------------------------------
@@ -340,6 +369,7 @@ def main() -> None:
         "assign": df,
         "epoch22": {"recall_pooled": rate_e22["pooled"], "assign_pooled": df_e22["pooled"]},
         "real": real,
+        "analysed": analysed_intervals(),
     }
 
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
