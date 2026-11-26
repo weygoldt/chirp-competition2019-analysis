@@ -69,7 +69,7 @@ N_ROWS = 44  # A
 RASTER_XLIM = (-10.0, 60.0)
 
 # Layout [cm]. A on top with its key on the right; B and C below, the same size.
-W_CM, H_CM = 17.4, 13.3
+W_CM, H_CM = 17.4, 13.6  # 0.3 cm headroom above A (its letter sits above the -5 s / offset labels)
 ROW2_BOTTOM, ROW2_H = 1.15, 3.7
 ROW1_BOTTOM, ROW1_H = 6.55, 6.1
 A_X, A_W = 1.25, 9.6
