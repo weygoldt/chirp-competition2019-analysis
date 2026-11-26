@@ -27,6 +27,7 @@ FIGS=(
   plot_v2_pipeline_explainer
   plot_v2_performance
   plot_v2_failure_modes
+  plot_v2_frontend_ablation
   plot_chase_validation
 )
 [[ -d $DST ]] || { echo "no $DST (git submodule update --init manuscript)" >&2; exit 2; }

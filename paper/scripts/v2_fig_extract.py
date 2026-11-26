@@ -30,6 +30,12 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     windows of ``CASE_HEIGHT_SNIPPETS`` (failure-mode figure B, long chirps),
     from the same harvest extraction, next to the decoder's estimates.
     ``<snippet>_trace_heights.json``.
+``frontends``
+    The detections of the failure-mode figure's dense chirp train by the
+    released detector (three windows) and by the single-window detector of
+    the front-end ablation at the same training budget, each with
+    ``predict_span`` on the production tile grid (``FRONTEND_BUNDLES``), for
+    the ablation figure. ``f3_dense_frontends.parquet`` and ``.json``.
 ``raw``
     The raw voltage of the electrode with the largest RMS during the
     front-end example (``f1_fe_e``), for the "recording" thumbnail of the
@@ -144,6 +150,19 @@ SNIPPETS: dict[str, tuple] = {
 # height from the raw recording (``case-heights``), to check the decoder's
 # heights of long chirps
 CASE_HEIGHT_SNIPPETS = ("f3_long",)
+
+# front-end ablation figure (``frontends``): the dense chirp train of the
+# failure-mode figure C, detected by the released detector (three windows)
+# and by the single-window detector at the same training budget (the 205-ms
+# window in all three channels, epoch 16 of the continued ablation arm B;
+# experiments/ablation_scenarios), both with ``predict_span`` on the
+# production run's tile grid (tiles every 2.2 s from the recording's start)
+FRONTEND_SNIPPET = "f3_dense"
+FRONTEND_BUNDLES = {
+    "rgb": BUNDLE,
+    "single": CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_longonly_r1c" / "bundles" / "epoch_16",
+}
+FRONTEND_MARGIN_S = 2.0  # the predicted span reaches this far beyond the snippet
 
 # pipeline figure D: chirps of the f1_tile recording whose traces are extracted
 TRACE_CHIRPS: dict[str, tuple[str, int]] = {
@@ -557,10 +576,60 @@ def assign_baseline() -> None:
     print(out[["head_correct", "edge_correct", "edge_offset_correct"]].mean())
 
 
+def frontends() -> None:
+    """Detections of the failure-mode figure's dense chirp train by both front
+    ends (``FRONTEND_BUNDLES``): ``predict_span`` over the snippet plus
+    ``FRONTEND_MARGIN_S``, the span's start on the production run's tile grid,
+    score >= 0.05, post-processing flagged (rows kept), no tracks (the plot
+    assigns both models' detections alike). Also compares the released
+    detector's rows with the production run's (the plot reports the check).
+    ``<snippet>_frontends.parquet`` and ``.json``.
+    """
+    from chirpdetector.bundle import load_bundle
+    from chirpdetector.inference.spans import predict_span
+    from gridtools.io import open_recording
+
+    rec_name, t0, t1, _ = snippet_window(SNIPPETS[FRONTEND_SNIPPET])
+    recording = open_recording(REC_2019 / rec_name)
+    stride = None
+    frames, meta = [], {"snippet": FRONTEND_SNIPPET, "recording": rec_name, "models": {}}
+    for model, path in FRONTEND_BUNDLES.items():
+        bundle = load_bundle(path)
+        tiling = bundle.tiling
+        stride = tiling.tile_duration_s - tiling.overlap_s
+        a = np.floor((t0 - FRONTEND_MARGIN_S) / stride) * stride
+        b = t1 + FRONTEND_MARGIN_S
+        det = predict_span(bundle, recording, float(a), float(b), name=rec_name,
+                           score_threshold=0.05, device="cpu", postprocess=True,
+                           keep_dropped=True)
+        det = det.assign(model=model)
+        frames.append(det)
+        meta["models"][model] = {"bundle": str(path), "weights_sha256": bundle.weights_sha256,
+                                 "windows_s": list(bundle.spectrogram.window_durations_s),
+                                 "span_s": [float(a), float(b)], "n_rows": len(det)}
+        log.info("frontends %s: %d detections in %.2f-%.2f s", model, len(det), a, b)
+    out = pd.concat(frames, ignore_index=True)
+    # the released detector here vs the production run, inside the snippet
+    prod = pd.read_parquet(RUN / rec_name / PARQUET)
+    inside = (lambda d: d[((d.t_start_s + d.t_end_s) / 2 >= t0)
+                          & ((d.t_start_s + d.t_end_s) / 2 <= t1) & (d.score >= 0.5)])
+    p, r = inside(prod), inside(out[out.model == "rgb"])
+    pc, rc = np.sort((p.t_start_s + p.t_end_s).to_numpy() / 2), np.sort((r.t_start_s + r.t_end_s).to_numpy() / 2)
+    meta["check_rgb_vs_production"] = {
+        "n_production": len(p), "n_here": len(r),
+        "max_centre_diff_s": float(np.max(np.abs(pc - rc))) if len(pc) == len(rc) and len(pc) else None,
+    }
+    log.info("frontends: released detector here %d vs production %d boxes (score >= 0.5) in the snippet",
+             len(r), len(p))
+    out.to_parquet(OUT / f"{FRONTEND_SNIPPET}_frontends.parquet")
+    (OUT / f"{FRONTEND_SNIPPET}_frontends.json").write_text(json.dumps(meta, indent=1) + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("steps", nargs="+",
-                        choices=["snippets", "traces", "raw", "case-heights", "assign-baseline"])
+                        choices=["snippets", "traces", "raw", "case-heights", "assign-baseline",
+                                 "frontends"])
     parser.add_argument("--only", nargs="*", help="snippet names (default: all)")
     parser.add_argument(
         "--window", nargs="+", action="append", default=[],
@@ -590,6 +659,8 @@ def main() -> None:
             raw()
         elif step == "case-heights":
             case_heights()
+        elif step == "frontends":
+            frontends()
         else:
             assign_baseline()
 
