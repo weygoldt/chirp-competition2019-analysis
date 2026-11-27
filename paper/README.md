@@ -247,7 +247,7 @@ script owns each namespace:
 | `chase_validation` | `chase_validation` | the author's re-labelling of BORIS chases: reviews, matched chases, onset / offset shifts (median, IQR, share earlier, dependence on duration and recording), segmentation |
 | `offset_chirp_start` | `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset` | loser chirping starts before chasing offset vs symmetric timing: BORIS, author and shifted offsets, windows 1-10 s (replaced `before_offset_logreg`) |
 | `chase_validation_figure` | `plot_chase_validation` | the numbers of the validation figure's panels |
-| `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers |
+| `hurdle`, `hurdle_decomposition` | hurdle stats script, `plot_hurdle_decomposition` | presence and intensity multipliers, contrasts; combined multipliers; rows of the positive-count part and those of them whose window no surrogate hit (null mean count set to 1) |
 | `coupling` | `stats_chirp_coupling` | data anchors, overdispersion, LOO, Pareto k |
 | `receiver_effect_fits`, `receiver_effect_figure` | `stats_chirp_affects_chasing`, `plot_obliterate_receiver_effect` | n and divergences per fit; window disagreement |
 | `reattack_hazard` | `stats_reattack_hazard` | intervals, events, censored intervals, competitions, person-period rows, events and exposure per baseline piece and per covariate state; per fit the hazard ratio (median, 95 % HDI, P(HR < 1)), covariate slopes, group SDs, divergences, R-hat, ESS, run time |

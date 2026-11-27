@@ -4,6 +4,8 @@
 # digest also goes to write_stats ("hurdle", one entry per response variable). The window is the offset
 # window of offset_window.py (was -3, +13 s); its directory, response and stats key are named offset_window
 # (were chirp_event_correlations_m3p13 and n_chirps_fixed_m3p13).
+# 2026-11-27: where no surrogate has a chirp in a row's window, mu_null_pos is 1 (was 0, which entered the
+# positive-count model as an offset of log(1e-6) = -13.8 for the one such row with chirps at threshold 0.8).
 """
 Hurdle / two-part Bayesian GLMM for chirp activity around chase offsets,
 comparing observed activity against a shuffle-time null.
@@ -21,6 +23,10 @@ two row-aligned shuffle-null statistics:
 
   * `p_null_pos[j]`  : P(>=1 chirp in this row's window) under the null
   * `mu_null_pos[j]` : E[chirp count | >0] under the null
+
+Where no surrogate has a chirp in the window, `mu_null_pos` is 1: a window
+with chirps holds at least one, and E[count | >0] tends to 1 as the null
+probability of a chirp goes to 0 (see `conditional_null_mean`).
 
 These enter as offsets (logit and log) so the hurdle-model coefficients
 estimate the *residual* deviation of observed activity from what
@@ -48,7 +54,7 @@ Inputs (from `summarize_chirp_event_correlation_around_chasing.py`):
 
   data/processed/chirp_event_correlations_offset_window/data/chasing/
       chirps_around_chasing_obs.csv
-      chirps_around_chasing_perm_{0..299}.csv
+      chirps_around_chasing_perm_{0..999}.csv
 
 Outputs:
   data/processed/chirp_event_correlations_offset_window/hurdle_shuffle_baseline/
@@ -207,6 +213,28 @@ def assert_row_alignment(
             )
 
 
+def conditional_null_mean(pos_sum: np.ndarray, pos_count: np.ndarray) -> np.ndarray:
+    """Null mean count among the permutations with a chirp in the window.
+
+    ``pos_sum[j]`` is the summed count over the ``pos_count[j]`` permutations
+    with at least one chirp in row j's window. Where ``pos_count`` is 0 the
+    mean is undefined; it is set to 1, its lower bound (a window with chirps
+    holds at least one) and its limit as the null probability of a chirp goes
+    to 0. It enters the positive-count model as log(mu_null_pos), so it must
+    be positive.
+    """
+    pos_sum = np.asarray(pos_sum, dtype=np.float64)
+    pos_count = np.asarray(pos_count)
+    if np.any(pos_count < 0) or np.any((pos_count == 0) & (pos_sum != 0)):
+        raise ValueError("inconsistent permutation tallies: a count sum without positive permutations")
+    mu = np.ones(pos_sum.shape, dtype=np.float64)
+    mask = pos_count > 0
+    mu[mask] = pos_sum[mask] / pos_count[mask]
+    if np.any(mu < 1.0):
+        raise ValueError("conditional null mean below 1: a positive permutation count must be >= 1")
+    return mu
+
+
 def compute_shuffle_baselines(
     df_obs: pd.DataFrame,
     perm_files: list[Path],
@@ -215,11 +243,14 @@ def compute_shuffle_baselines(
 ) -> pd.DataFrame:
     """Compute per-row null statistics from B permutation files.
 
-    Returns df_obs with three new columns:
+    Returns df_obs with new columns:
       null_mean    : mean of shuffled chirp counts at this row
+      null_sd      : their standard deviation
+      n_perm_pos   : number of permutations with a positive count (c_i)
       p_null_pos   : P(shuffled count > 0) at this row, Jeffreys-smoothed
-      mu_null_pos  : E[shuffled count | shuffled count > 0]; defaults to 0
-                     where no permutation produced a positive count
+      mu_null_pos  : E[shuffled count | shuffled count > 0]; 1 where no
+                     permutation produced a positive count
+                     (``conditional_null_mean``)
     """
     if resp not in df_obs.columns:
         raise ValueError(
@@ -267,13 +298,12 @@ def compute_shuffle_baselines(
     # Jeffreys-style smoothing keeps logit() finite at the boundaries.
     p_null_pos = (pos_count + 0.5) / (B + 1.0)
 
-    mu_null_pos = np.zeros(n, dtype=np.float64)
-    mask = pos_count > 0
-    mu_null_pos[mask] = pos_sum[mask] / pos_count[mask]
+    mu_null_pos = conditional_null_mean(pos_sum, pos_count)
 
     out = df_obs.copy()
     out["null_mean"] = null_mean
     out["null_sd"] = null_sd
+    out["n_perm_pos"] = pos_count
     out["p_null_pos"] = p_null_pos
     out["mu_null_pos"] = mu_null_pos
     return out
@@ -322,8 +352,12 @@ def quick_sanity_plots(df: pd.DataFrame, resp: str, outdir: Path) -> None:
     fig.savefig(outdir / f"{resp}_p_null_pos_by_status.png", dpi=200)
     plt.close(fig)
 
-    n0 = int((df["mu_null_pos"].to_numpy() == 0).sum())
-    print(f"Rows with mu_null_pos == 0 (never positive in shuffles): {n0} / {len(df)}")
+    zero = df["n_perm_pos"].to_numpy() == 0
+    n_pos_zero = int((zero & (df[resp].to_numpy() > 0)).sum())
+    print(
+        f"Rows never positive in shuffles (mu_null_pos set to 1): {int(zero.sum())} / {len(df)}, "
+        f"{n_pos_zero} of them with chirps (in the positive-count part)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -351,8 +385,10 @@ def fit_hurdle_models_with_bambi(
     df["is_chirp"] = (df[resp] > 0).astype(int)
     df["logit_p_null_pos"] = logit(df["p_null_pos"].to_numpy())
 
-    eps = 1e-6
-    df["log_mu_null_pos"] = np.log(df["mu_null_pos"].to_numpy() + eps)
+    mu_null = df["mu_null_pos"].to_numpy(dtype=np.float64)
+    if not np.all(mu_null >= 1.0):
+        raise ValueError("mu_null_pos must be >= 1 in every row (see conditional_null_mean)")
+    df["log_mu_null_pos"] = np.log(mu_null)
     df["sex_c"] = np.where(df["focal_sex"] == "m", 0.5, -0.5)
 
     categorical = [
@@ -527,7 +563,12 @@ def print_hurdle_summary(
     print("\n" + "=" * 72)
     print(f"Hurdle-model digest for {resp}")
     print("=" * 72)
+    positive = df_scored[resp].to_numpy() > 0
     digest: dict = {"n_chases": df_scored["interaction_id"].nunique(),
+                    # rows of the positive-count part, and those of them whose window held a
+                    # chirp in no surrogate (mu_null_pos set to 1, conditional_null_mean)
+                    "n_positive": int(positive.sum()),
+                    "n_positive_zero_baseline": int((positive & (df_scored["n_perm_pos"] == 0)).sum()),
                     "observed": {}, "presence": {}, "intensity": {}}
 
     # Dataset anchors per status.
@@ -556,7 +597,7 @@ def print_hurdle_summary(
         sub = df_scored[df_scored["status"] == status]
         median_p_null[status] = float(sub["p_null_pos"].median())
         median_mu_null[status] = float(
-            sub.loc[sub["mu_null_pos"] > 0, "mu_null_pos"].median()
+            sub.loc[sub["n_perm_pos"] > 0, "mu_null_pos"].median()
         )
         digest["observed"][_status_label(status)].update(
             null_p_any_median=median_p_null[status], null_mu_median=median_mu_null[status]
