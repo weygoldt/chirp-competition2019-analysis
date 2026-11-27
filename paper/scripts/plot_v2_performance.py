@@ -58,8 +58,16 @@ I-K Chirp-parameter decoder for boxes at the operating threshold on the
     simulated test chirps of unseen fish (fish-disjoint template splits):
     calibrated estimate vs per-period truth of height (I), FWHM (J) and 10 %
     width (K) (``params/.../eval/predictions.parquet`` of the bundle
-    recalibrated without the octave-error template of the validation split;
-    density). The test split's octave-error template
+    recalibrated without the octave-error template of the validation split).
+    Every chirp is a point coloured by its local density (author, 2026-11-27,
+    variant 2 of five drafts: no pixels, raw data visible): a Gaussian KDE of
+    the points in log10 space (Scott's bandwidth), the colour its rank among
+    the points' densities (densest on top; the scale starts above the
+    palest mint so that sparse points stay visible); a very thin light-grey
+    dashed contour encloses the densest 95 % of the chirps (the KDE level
+    that 95 % of the points exceed). Limits fit the data after the octave
+    fix: I 20-800 Hz, J 1.5-600 ms, K 3-700 ms (``n_beyond_axes``: 0). The
+    test split's octave-error template
     (``v2_fig_common.OCTAVE_TEMPLATES``: a frequency trace at twice the
     baseline EODf, true "height" ~770 Hz) is left out (author, 2026-11-27);
     its count is ``decoder.n_octave_excluded``. The former
@@ -98,7 +106,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from matplotlib.colors import LogNorm
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, NullFormatter, NullLocator
 
@@ -637,16 +644,36 @@ def series_handles(series: dict) -> list:
 # ---------------------------------------------------------------------------
 # chirp parameters
 # ---------------------------------------------------------------------------
+DECODER_DOT = 0.6        # marker area of the decoder panels' points [pt^2]
+DECODER_VMIN = -0.35     # colour scale of the density rank (0..1) starts above the palest mint
+DECODER_REGION = 0.95    # the contour encloses this share of the chirps (densest first)
+DECODER_GRID = 220       # KDE grid per axis for the contour
+REGION_LW = 0.35
+REGION_COLOR = "0.6"
+REGION_LS = (0, (2.5, 1.5))
+
+
 def decoder_panel(ax, sim, param, scale, unit, lims, ticks, report):
+    """Estimate vs truth: points coloured by local density, the 95 % region dashed."""
+    from scipy.stats import gaussian_kde
+
     true = sim[f"true_{param}"].to_numpy() * scale
     est = sim[f"cal_{param}"].to_numpy() * scale
-    edges = np.geomspace(*lims, 56)
-    h, _, _ = np.histogram2d(true, est, bins=[edges, edges])
-    h = np.where(h > 0, h, np.nan)
-    ax.pcolormesh(edges, edges, h.T, cmap=C.DENSITY_CMAP,
-                  norm=LogNorm(vmin=1, vmax=np.nanmax(h)), rasterized=True, zorder=1,
-                  linewidth=0)
-    ax.plot(lims, lims, color="k", lw=REF_LW, ls=(0, (3, 2)), zorder=2)
+    points = np.vstack([np.log10(true), np.log10(est)])
+    kde = gaussian_kde(points)  # Scott's bandwidth, in log10 units
+    density = kde(points)
+    order = np.argsort(density, kind="stable")  # densest drawn last (on top)
+    rank = np.empty(len(order))
+    rank[order] = np.arange(len(order)) / max(len(order) - 1, 1)
+    ax.scatter(true[order], est[order], c=rank[order], cmap=C.DENSITY_CMAP,
+               vmin=DECODER_VMIN, vmax=1, s=DECODER_DOT, lw=0, rasterized=True, zorder=1)
+    g = np.linspace(np.log10(lims[0]), np.log10(lims[1]), DECODER_GRID)
+    gx, gy = np.meshgrid(g, g)
+    grid = kde(np.vstack([gx.ravel(), gy.ravel()])).reshape(gx.shape)
+    level = float(np.quantile(density, 1 - DECODER_REGION))
+    ax.contour(10 ** gx, 10 ** gy, grid, levels=[level], colors=REGION_COLOR,
+               linewidths=REGION_LW, linestyles=[REGION_LS], zorder=2)
+    ax.plot(lims, lims, color="k", lw=REF_LW, ls=(0, (3, 2)), zorder=3)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(*lims)
@@ -658,9 +685,14 @@ def decoder_panel(ax, sim, param, scale, unit, lims, ticks, report):
     ax.set_aspect("equal")
     despine(ax)
     err = np.abs(est - true)
+    beyond = int(((true < lims[0]) | (true > lims[1]) | (est < lims[0]) | (est > lims[1])).sum())
+    if beyond:
+        print(f"decoder panel {param}: {beyond} points beyond the axes {lims}")
     out = {  # errors in `unit`
         "threshold": THR,
         "n_sim": int(len(true)),
+        "n_beyond_axes": beyond,
+        "region_share": DECODER_REGION,
         "median_abs_error": float(np.median(err)),
         "median_rel_error": float(np.median(err / true)),
         "median_signed_error": float(np.median(est - true)),
@@ -725,9 +757,9 @@ def main() -> None:
     sim = sim[sim["score"] >= THR]
     octave = sim["template_id"].isin(C.OCTAVE_TEMPLATES)
     sim = sim[~octave]
-    decoder_panel(ax_i, sim, "height_hz", 1.0, "Hz", (15, 1000),
-                  [30, 100, 300, 1000], report)
-    decoder_panel(ax_j, sim, "fwhm_s", 1e3, "ms", (2, 500),
+    decoder_panel(ax_i, sim, "height_hz", 1.0, "Hz", (20, 800),
+                  [30, 100, 300], report)
+    decoder_panel(ax_j, sim, "fwhm_s", 1e3, "ms", (1.5, 600),
                   [3, 10, 30, 100, 300], report)
     decoder_panel(ax_k, sim, "width10_s", 1e3, "ms", (3, 700),
                   [3, 10, 30, 100, 300], report)
