@@ -144,12 +144,14 @@ def missed() -> pd.DataFrame:
 def main() -> None:
     pd.set_option("display.width", 200)
     print(f"run {C.RUN} (operating threshold {C.OPERATING})")
-    print("\nharmonic copies (one per recording, best first):")
-    print(harmonics().head(12).to_string())
-    print("\nduplicates (one per recording, best first):")
-    print(duplicates().head(12).to_string())
-    print("\nmissed labelled chirps (best windows first):")
-    print(missed().head(15).to_string())
+    out = C.SNIPPETS
+    out.mkdir(parents=True, exist_ok=True)
+    for kind, fn, n in (("harmonics", harmonics, 12), ("duplicates", duplicates, 12),
+                        ("missed", missed, 15)):
+        t = fn()
+        t.to_csv(out / f"candidates_{kind}.csv", index=False)
+        print(f"\n{kind} (best first; all in {out / f'candidates_{kind}.csv'}):")
+        print(t.head(n).to_string())
 
 
 if __name__ == "__main__":

@@ -10,9 +10,9 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     `span_spectrogram` with the pipeline's detector bundle,
     ``paper_config.PIPELINE["detector"]``: click removal on grids of at
     least 9 electrodes, then the front end: a 205-ms Hann window, 5-ms hop,
-    4.88-Hz bins, 500-1500 Hz, power summed over electrodes, in all three
-    channels for the single-window detector; pipeline v2's adds 51- and 13-ms
-    windows on the same grid as the second and third channel), normalised
+    4.88-Hz bins, 500-1500 Hz, power summed over electrodes: one channel for
+    the single-window detector; pipeline v2's adds 51- and 13-ms windows on
+    the same grid as the second and third channel), normalised
     to [0, 1] over the snippet
     with the front end's own rule (60 dB range ending 10 dB above the median
     per-frame peak of the reference channel; ``img``, clipped to [0, 1] as

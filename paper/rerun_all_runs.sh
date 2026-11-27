@@ -29,6 +29,10 @@ read -r -a ALL <<< "$(sed -n 's/^ALL=(\(.*\))$/\1/p' "$PAPER/run_all.sh")"
 (( ${#ALL[@]} )) || { log "FAILED: no ALL=(...) in run_all.sh"; exit 1; }
 SENS_CHAINS=()
 for c in "${ALL[@]}"; do [[ $c == v2figs ]] || SENS_CHAINS+=("$c"); done
+# PAPER_PRIMARY_SKIP_V2FIGS=1: the primary without v2figs too (its inputs not ready
+# yet: figure examples, benchmark, real-data session); run it later with
+# `PAPER_DETECTIONS=<primary> paper/run_all.sh v2figs`
+if [[ ${PAPER_PRIMARY_SKIP_V2FIGS:-0} == 1 ]]; then ALL=("${SENS_CHAINS[@]}"); fi
 
 runs=("$@")
 (( ${#runs[@]} )) || runs=("$PRIMARY" "${SENS[@]}")
