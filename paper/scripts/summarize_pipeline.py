@@ -30,6 +30,7 @@ REAL = pipeline_path("real_session")
 PRODUCTION = pipeline_path("source_run")
 DECODER = pipeline_path("decoder")
 TRAIN_SCENES = pipeline_path("train_scenes")
+DETECTOR_RUN = pipeline_path("detector").parents[1]  # runs/<run> (final/bundle inside)
 # the template-library flags the simulator excludes (scenes' chirps.exclude)
 EXCLUDE = ("has_nan", "truncated", "step_flag", "too_short", "brief_cycles", "ripple_flag",
            "multi_peak", "line_in_span", "baseline_drift", "low_snr", "decay_interrupted")
@@ -86,15 +87,17 @@ def real_session() -> dict:
     candidates = m["retest"]["candidates"]
     with (REAL / "emitter_agreement.csv").open() as f:
         rows = {(r["source"], r["model"]): r for r in csv.DictReader(f) if r["df_bin"] == "all"}
-    # all labelled candidates (2019/2020 and 2022) with the production assignment; the
-    # candidates of the 2019/2020 trials with the gap-filled assignment the analyses use;
-    # the chirps the expert marked in the windows
-    rows = {"candidates": rows["candidates", "t001 (= production)"],
+    # all labelled candidates (v2: 2019/2020 and 2022; the single-window detector's
+    # report, experiments/real_labels/sw_session.py: 2019/2020) with the production
+    # assignment; the candidates of the 2019/2020 trials with the gap-filled
+    # assignment the analyses use; the chirps the expert marked in the windows
+    prod = "t001 (= production)" if ("candidates", "t001 (= production)") in rows else "production"
+    rows = {"candidates": rows["candidates", prod],
             "candidates_gapfilled": rows["candidates", "gap-filled (2019 trials)"],
-            "window_marks": rows["window marks (t>=0.5)", "t001 (= production)"]}
+            "window_marks": rows["window marks (t>=0.5)", prod]}
     agreement = {key: {"n_assigned": int(r["assigned"]), "agreement": float(r["agreement"])}
                  for key, r in rows.items()}
-    return {
+    out = {
         "candidates": m["progress"]["candidates_labelled"],
         "windows": m["progress"]["windows_done"],
         "marks": m["progress"]["marks"],
@@ -102,6 +105,14 @@ def real_session() -> dict:
                    "kappa": candidates["kappa"]},
         "emitter_agreement": agreement,
     }
+    if "frame" in m:  # the single-window detector: real_v1's verdicts (P) + session real_sw (N)
+        p = m["progress"]
+        out["sw"] = {"old_items_in_P": p["old_items_in_P"], "new_items": p["new_items_labelled"],
+                     "frame_rows": m["frame"]["new_frame_rows"], "frame_P": m["frame"]["P"],
+                     "frame_N": m["frame"]["N"],
+                     "N_share_score_ge_0_5": m["frame"]["N_share_score_ge_0.5"],
+                     "cross_session": m["cross_session"]}
+    return out
 
 
 def production() -> dict:
@@ -184,9 +195,25 @@ def decoder() -> dict:
     }
 
 
+def detector() -> dict:
+    """The production detector's training (its run's final/fit.json): epochs run,
+    the epoch kept (highest validation fitness), tiles, and the scenes with rapid
+    chirp trains among the training scenes (groups ``*_rapid_*``; the
+    single-window detector's training data train_v4r = train_v4 + those)."""
+    fit = read_json(DETECTOR_RUN / "final" / "fit.json")
+
+    def rapid(groups):
+        return sum("_rapid_" in g for g in groups)
+
+    return {"epochs_run": fit["epochs_run"], "best_epoch": fit["best_epoch"],
+            "train_tiles": fit["n_train_images"], "val_tiles": fit["n_val_images"],
+            "rapid_scenes": {"train": rapid(fit["train_groups"]), "val": rapid(fit["val_groups"])}}
+
+
 def main() -> None:
     stats = {"templates": templates(), "scenes": scenes(), "benchmark": benchmark(),
-             "real_session": real_session(), "production": production(), "decoder": decoder()}
+             "real_session": real_session(), "production": production(), "decoder": decoder(),
+             "detector": detector()}
     print(json.dumps(stats, indent=1, default=float))
     write_stats("pipeline", stats)
 
