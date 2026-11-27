@@ -156,9 +156,9 @@ def octave_templates() -> dict:
         "n": len(octave),
         "template_ids": octave,
         "per_split": {s: len(v) for s, v in in_split.items()},
-        "ratio": {"min": min(ratio[i] for i in octave), "max": max(ratio[i] for i in octave)},
+        "ratio": [min(ratio[i] for i in octave), max(ratio[i] for i in octave)],  # pairs for #stat-range
         "ratio_others_max": float(values[values <= OCTAVE_RATIO].max()),
-        "excursion_hz": {"min": float(excursion.min()), "max": float(excursion.max())},
+        "excursion_hz": [float(excursion.min()), float(excursion.max())],
         "train_scene_chirps": {"n": int(on_train.sum()), "of": len(train),
                                "share": float(on_train.mean())},
     }
