@@ -91,7 +91,8 @@ log = logging.getLogger("v2_assign_params")
 CHIRP_DATA = paper_config.CHIRP_DATA
 SIM_V4 = Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser() / "datasets" / "sim_v4"
 PP_EVAL = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess"
-DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2" / "bundle" / "eval"
+# the recalibrated bundle (v2_fig_common.DECODER_EVAL); its true_* columns are the same
+DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" / "bundle" / "eval"
 
 KEYS = ["recording", "label_row", "pred_row"]  # a true positive of assign_baseline.csv
 DETECT_KEYS = ["recording", "label_row"]  # a chirp label (a visible simulated chirp)

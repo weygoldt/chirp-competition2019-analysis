@@ -55,17 +55,22 @@ CHIRP_DATA = Path("/mnt/data1/chirp_v2")
 # at another operating threshold. Per run: directory, chirp table, and the run
 # whose tracks_gapfill.npz holds the patched trial-fish tracks (None: the
 # wavetracker tracks as they are)
+# The chirp tables are those of the *_recal1 runs (2026-11-27): the same
+# detections with the chirp parameters of the decoder recalibrated without the
+# octave-error templates (experiments/production/recalibrate_params.py; the
+# trial directories hold copies of them).
 RUNS = {
-    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet", None),
-    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill",
+    "rtdetr": ("competition2019_v2_20261113_recal1", "chirps_rtdetr.parquet", None),
+    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill_recal1",
                        "chirps_rtdetr_gapfill.parquet",
                        "competition2019_v2_20261113_gapfill"),
-    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080",
+    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080_recal1",
                             "chirps_rtdetr_gapfill_t080.parquet",
                             "competition2019_v2_20261113_gapfill"),
 }
 DETECTIONS = paper_config.DETECTIONS
-SOURCE_RUN = CHIRP_DATA / "detections" / RUNS["rtdetr"][0]
+# the production run itself (track_gaps/, qc/, windows/ live only there)
+SOURCE_RUN = CHIRP_DATA / "detections" / "competition2019_v2_20261113"
 RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
 PARQUET = RUNS[DETECTIONS][1]
 TRACKS_RUN = (CHIRP_DATA / "detections" / RUNS[DETECTIONS][2]) if RUNS[DETECTIONS][2] else None
@@ -115,7 +120,16 @@ PP_EVAL = {
     "yolo26s": CHIRP_DATA / "runs" / "yolo26s_sim_v4_r1" / "eval_postprocess",
 }
 BENCHMARK = CHIRP_DATA / "labels" / "benchmark" / "report_v2"
-DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2" / "bundle" / "eval"
+# The chirp-parameter decoder's evaluation: the bundle recalibrated without the
+# octave-error template of the validation split (same weights as
+# v4-dualhead-sim-v4-r2; chirpdetector train params-recalibrate, 2026-11-27).
+DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" / "bundle" / "eval"
+# Template library v4: chirp-chamber templates whose zero-crossing frequency
+# trace reads twice the baseline EODf during the chirp (octave error; plateau /
+# baseline 1.006-1.014, every other big template 0.2-0.78): 61 (train split),
+# 1598 (val; left out of the decoder's calibration) and 391 (test; left out of
+# the decoder panels of Fig. 10). The library fix follows after submission.
+OCTAVE_TEMPLATES = (61, 1598, 391)
 TRIAL_SUMMARY = Path("/mnt/data2/2019_tube_competition/trial_summary.csv")
 
 SNIPPETS = paper_config.PROCESSED / "v2_figures"

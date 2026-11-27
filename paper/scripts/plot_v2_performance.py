@@ -57,7 +57,12 @@ G,H Detection and assignment by the chirp's TRUE 10 % width (G; octave bins
 I-K Chirp-parameter decoder for boxes at the operating threshold on the
     simulated test chirps of unseen fish (fish-disjoint template splits):
     calibrated estimate vs per-period truth of height (I), FWHM (J) and 10 %
-    width (K) (``params/.../eval/predictions.parquet``; density). The former
+    width (K) (``params/.../eval/predictions.parquet`` of the bundle
+    recalibrated without the octave-error template of the validation split;
+    density). The test split's octave-error template
+    (``v2_fig_common.OCTAVE_TEMPLATES``: a frequency trace at twice the
+    baseline EODf, true "height" ~770 Hz) is left out (author, 2026-11-27);
+    its count is ``decoder.n_octave_excluded``. The former
     real long-chirp comparison (``real_agreement.csv``) is dropped: 429 of
     its 533 chirps come from fish whose templates were in the decoder's
     training split.
@@ -718,12 +723,15 @@ def main() -> None:
     # --- chirp parameters --------------------------------------------------------
     sim = pd.read_parquet(C.DECODER_EVAL / "predictions.parquet")
     sim = sim[sim["score"] >= THR]
+    octave = sim["template_id"].isin(C.OCTAVE_TEMPLATES)
+    sim = sim[~octave]
     decoder_panel(ax_i, sim, "height_hz", 1.0, "Hz", (15, 1000),
                   [30, 100, 300, 1000], report)
     decoder_panel(ax_j, sim, "fwhm_s", 1e3, "ms", (2, 500),
                   [3, 10, 30, 100, 300], report)
     decoder_panel(ax_k, sim, "width10_s", 1e3, "ms", (3, 700),
                   [3, 10, 30, 100, 300], report)
+    report["decoder"]["n_octave_excluded"] = int(octave.sum())
     ax_i.set_xlabel("True height [Hz]")
     ax_i.set_ylabel("Estimated height [Hz]")
     ax_j.set_xlabel("True FWHM [ms]")

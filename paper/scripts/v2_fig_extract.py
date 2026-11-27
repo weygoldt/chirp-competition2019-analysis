@@ -84,12 +84,16 @@ log = logging.getLogger("v2_fig_extract")
 CHIRP_DATA = paper_config.CHIRP_DATA
 # the detections follow PAPER_DETECTIONS (paper_config): the production run,
 # or its dataset patch with the trial fish's track gaps filled
+# The chirp tables are those of the *_recal1 runs (2026-11-27): the same
+# detections with the chirp parameters of the decoder recalibrated without the
+# octave-error templates (experiments/production/recalibrate_params.py; the
+# trial directories hold copies of them).
 RUNS = {  # run directory, chirp table, run holding tracks_gapfill.npz (or None)
-    "rtdetr": ("competition2019_v2_20261113", "chirps_rtdetr.parquet", None),
-    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill",
+    "rtdetr": ("competition2019_v2_20261113_recal1", "chirps_rtdetr.parquet", None),
+    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill_recal1",
                        "chirps_rtdetr_gapfill.parquet",
                        "competition2019_v2_20261113_gapfill"),
-    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080",
+    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080_recal1",
                             "chirps_rtdetr_gapfill_t080.parquet",
                             "competition2019_v2_20261113_gapfill"),
 }
