@@ -10,7 +10,7 @@ chirping around chases.
 
 Writes numbered PNGs, ``README.txt`` and ``led_alignment_trials.csv`` (the
 per-trial numbers) to ``paper/output/led_alignment/`` (not a run folder; the
-chirp check reads the primary detections, ``rtdetr_gapfill_t080``). Figure 03
+chirp check reads the primary detections, ``paper_config.PRIMARY``). Figure 03
 reads the start of the 2020-06-09 video with ``ffmpeg``.
 
     paper/run.sh plot_led_alignment.py          # all figures
@@ -39,12 +39,12 @@ from analyze_event_time_rates_trial import (  # noqa: E402
 )
 from chirps import load_chirp_table  # noqa: E402
 from led_alignment import LedAlignment, _nn_resid, fit_led_alignment  # noqa: E402
-from paper_config import DATA_ROOT, PAPER  # noqa: E402
+from paper_config import DATA_ROOT, PAPER, PRIMARY  # noqa: E402
 
 OUT = PAPER / "output" / "led_alignment"
 SR = 20_000  # grid sampling rate (Hz), as the paper scripts pass it
 WINDOW_S = 3 * 3600.0  # the analysed part of each trial (first 3 h)
-DETECTIONS = "rtdetr_gapfill_t080"  # primary detections, for the chirp check
+DETECTIONS = PRIMARY  # primary detections, for the chirp check
 BAD = ("2020-05-13-10_00", "2020-06-09-10_00")
 OLD_COLOR, NEW_COLOR = "tab:red", "tab:blue"
 

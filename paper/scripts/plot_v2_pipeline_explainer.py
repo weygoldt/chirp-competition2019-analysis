@@ -2,39 +2,34 @@
 
 Replaces ``plot_assignment_feature_extraction.pdf`` (the v1 assignment
 features). A rail of thumbnails on top previews the stages (recording ->
-A spectrograms -> B detection -> B assignment -> C post-processing -> D
-parameters); below, one real example per stage, all from the production
-run ``competition2019_v2_20261113`` (dual-head RT-DETR detector, weights
-9fcdef3c; chirp-parameter decoder c0801c56). Drawn to the manuscript's
-figure standard (17.4 cm wide; no colour or line style for fish identity
-on the spectrograms: tracks as thin black lines labelled EOD$f_1$ /
-EOD$f_2$, every detection a solid white box whose emitter marker (white
-circle) sits on the track of the fish it was assigned to; see
-``v2_fig_common``):
+A detection -> A assignment -> B post-processing -> C parameters); below,
+one real example per stage, all from the production run of the selected
+pipeline (``paper_config.PIPELINES``; the single-window detector since
+2026-11-27, whose input is the plain 205-ms spectrogram the panels show).
+The former panel A (the three analysis windows of pipeline v2's front end
+and their RGB stack) is dropped with the switch (author, 2026-11-27). The
+examples are named by their pipeline-v2 chirp ids (the author chose them
+there); ``v2_examples.example_id`` finds the selected run's box at the same
+place and fails if there is none. Drawn to the manuscript's figure standard
+(17.4 cm wide; no colour or line style for fish identity on the
+spectrograms: tracks as thin black lines labelled EOD$f_1$ / EOD$f_2$, every
+detection a solid white box whose emitter marker (white circle) sits on the
+track of the fish it was assigned to; see ``v2_fig_common``):
 
-A   one snippet (2020-06-05-10_00, 89.9-91.1 s: two fish 29 Hz apart, a
-    small chirp of the lower and a big, short chirp of the upper fish) in the
-    three analysis windows of the front end (205, 51 and 13 ms, on the long
-    window's 4.88-Hz grid; the window drawn to scale in the corner), and the
-    three stacked as the R, G, B channels of the image the detector receives
-    (the detector's own 0-1 levels, a fixed 60-dB range; the red, green and
-    blue dots name the channels). The multi-window input is a design choice:
-    a front-end ablation found it comparable to the long window alone (see
-    v2_figures.md);
-B   detection and assignment on 8.2 s of one recording (2020-06-02-10_00,
+A   detection and assignment on 8.2 s of one recording (2020-06-02-10_00,
     2245.2-2253.4 s, ``DETECT``; the author's choice among three candidates,
     2026-11-24): every detection at the operating threshold as a box with the
     predicted emitter EOD$f$ (circle), assigned to the track nearest the
     predicted emitter (if within 20 Hz; not drawn since round 3);
-C   post-processing removes a box on the second harmonic (2020-05-29-10_00,
-    the tile of the former panel B: chirp 2084 on the second harmonic of
-    chirp 2085) and a duplicate box on one chirp (2019-12-02-10_00, chirps
-    244 kept / 245 removed, both above the operating threshold of 0.8):
-    kept boxes solid, removed ones dashed and translucent;
-D   the decoder's estimates (calibrated) of a small and a big chirp of the
-    2020-05-29 tile (2085, the fundamental of C's harmonic copy, and 2086) as
-    double-headed arrows, next to their instantaneous-frequency traces
-    extracted from the raw recording: two independent estimates. The
+B   post-processing removes a box on the second harmonic (2020-05-29-10_00,
+    one detector tile: v2 chirp 2084 on the second harmonic of v2 chirp 2085)
+    and a duplicate box on one chirp (2019-12-02-10_00, v2 chirps 244 kept /
+    245 removed, both above the operating threshold of 0.8): kept boxes
+    solid, removed ones dashed and translucent;
+C   the decoder's estimates (calibrated) of a small and a big chirp of the
+    2020-05-29 tile (v2 chirps 2085, the fundamental of B's harmonic copy,
+    and 2086) as double-headed arrows, next to their instantaneous-frequency
+    traces extracted from the raw recording: two independent estimates. The
     decoder outputs four scalars per box (height, FWHM, 10 % width,
     undershoot), each with a calibrated SD (``chirpdetector.params``:
     ``ParamNet`` predicts a mean and a log-variance per target); the SDs are
@@ -48,7 +43,7 @@ parameters as double-headed arrows with a gap to the trace, and every row
 on one left and right edge (``L``, ``R``; the script prints the axes'
 extents).
 
-Spectrograms (A's three windows, B, C and the thumbnails): power in dB re
+Spectrograms (A, B and the thumbnails; the 205-ms window): power in dB re
 1 V^2 (summed over electrodes), display levels the 2nd and 98th percentile
 of each panel's crop (``C.CLIP_PCT``).
 
@@ -68,7 +63,6 @@ from __future__ import annotations
 
 import json
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -78,12 +72,14 @@ from matplotlib.patches import FancyArrowPatch
 
 import v2_fig_common as C
 from manuscript_stats import write_stats
+from v2_examples import example_id, example_ids
 from style import other_color, set_light_style
 
 NAME = "plot_v2_pipeline_explainer"
 
-# B: detection and assignment, 8.2 s of one recording (snippet ``f1_detect``
-# of v2_fig_extract). ``example``: the chirp of the detection thumbnail and of
+# A: detection and assignment, 8.2 s of one recording (snippet ``f1_detect``
+# of v2_fig_extract). Chirps by their pipeline-v2 ids (v2_examples).
+# ``example``: the chirp of the detection thumbnail and of
 # the "box" (above the box, pointing down at its top edge) and "predicted
 # emitter" (left of the box) annotations, text positions in s from the window
 # start and Hz; ``pair``: a chirp of each fish for the assignment thumbnail;
@@ -100,68 +96,54 @@ DETECT = {
     "scalebar": (7.6, 662.0),
 }
 
-# C and D: the tile of the former panel B (2020-05-29-10_00, 10850.4-10853.6 s)
+# B and C: one detector tile (2020-05-29-10_00, 10850.4-10853.6 s); v2 ids
 TILE_SNIPPET = "f1_tile"
 TILE = (10850.4, 10853.6)
 SMALL, BIG, HARMONIC = 2085, 2086, 2084
-# duplicate example (author's choice 2026-11-16): both boxes >= 0.8
+# duplicate example (author's choice 2026-11-16): both boxes >= 0.8; v2 ids
 DUP_SNIPPET, DUP_KEPT, DUP_DROPPED = "f1_dup", 244, 245
-FRONT_END = "f1_fe_e"  # 2020-06-05-10_00, 89.9-91.1 s: fish 29 Hz apart
 
-# channels of the detector's RGB input (R, G, B = 205, 51, 13 ms): seaborn's
-# "deep" red, green and blue
-CHANNEL_COLORS = ("#c44e52", "#55a868", "#4c72b0")
 TRACE_COLOR = other_color  # the measured frequency trace (indigo of Figs. 5-7)
 TRACE_LW = 0.9
 DOT_COLOR = "#8c8c8c"  # single EOD periods
 DOT_MS = 2.4
 SCHEMA_COLOR = "#6e6e6e"  # the schematic chirp of the "Parameters" thumbnail
 SCHEMA_FILL = "#e6e6e6"
-# D: the height arrow this far [ms] after the trace's peak (the big chirp's
+# C: the height arrow this far [ms] after the trace's peak (the big chirp's
 # peak sits on its steep rising flank, which would hide an arrow there)
 HEIGHT_ARROW_DT_MS = {"small": 0.0, "big": 7.0}
 ARROW_GAP_PT = 1.2  # white gap between an arrowhead's tip and the trace [pt]
-DIM_LW, DIM_MS = 0.7, 5.5  # double-headed arrows of D: line width, head size
+DIM_LW, DIM_MS = 0.7, 5.5  # double-headed arrows of C: line width, head size
 
 # ---------------------------------------------------------------------------
 # layout [cm]: every row from L to R; groups separated by GROUP_GAP
 # ---------------------------------------------------------------------------
-W, H = 17.4, 16.4  # figure size
+W = 17.4  # figure width; the height follows from the rows (H)
 L, R = 1.5, 17.0  # left edge of the leftmost, right edge of the rightmost axes
-GROUP_GAP = 0.85  # free space between the rows (rail, A, B, C/D)
-# rail: six thumbnails from L to R
-RAIL_W, RAIL_H, RAIL_TOP = 1.6, 0.95, H - 0.2
-# A: three windows (gap A_GAP) and, after the arrow (gap A_ARROW_GAP), the
-# detector input; four panels of one size
-A_GAP, A_ARROW_GAP, A_H = 0.25, 1.3, 2.55
-A_W = (R - L - 2 * A_GAP - A_ARROW_GAP) / 4
-A_X = [L, L + A_W + A_GAP, L + 2 * (A_W + A_GAP), R - A_W]
-# C, D: two narrow spectrograms (from L) and two trace panels aligned with
-# the right two columns of A (the y-label of D right sits under A's arrow)
+GROUP_GAP = 0.85  # free space between the rows (rail, A, B/C)
+# rail: five thumbnails from L to R
+RAIL_W, RAIL_H = 1.6, 0.95
+# B, C: two narrow spectrograms (from L) and two trace panels in the right two
+# columns of a four-column grid (the former front-end row's: gaps COL_GAP,
+# and COL_ARROW_GAP before the last column, where C right's y-label sits)
+COL_GAP, COL_ARROW_GAP = 0.25, 1.3
+COL_W = (R - L - 2 * COL_GAP - COL_ARROW_GAP) / 4
+COL_X = [L, L + COL_W + COL_GAP, L + 2 * (COL_W + COL_GAP), R - COL_W]
 CD_H, CD_BOTTOM = 3.3, 1.12
 C_W, C_GAP = 2.65, 0.25
 C_X = [L, L + C_W + C_GAP]
-D_X, D_W = [A_X[2], A_X[3]], A_W
-# vertical positions from the bottom: room for titles above C, the notes
-# under A and the labels under the rail
+D_X, D_W = [COL_X[2], COL_X[3]], COL_W
+# vertical positions from the bottom: room for titles above B and the labels
+# under the rail
 CD_TOP = CD_BOTTOM + CD_H
 B_H = 3.8
 B_BOTTOM = CD_TOP + 0.45 + GROUP_GAP
 B_TOP = B_BOTTOM + B_H
-A_NOTES = 0.7  # the two notes under A
-A_BOTTOM = B_TOP + GROUP_GAP + A_NOTES
-A_TOP = A_BOTTOM + A_H
-RAIL_Y0 = RAIL_TOP - RAIL_H
+RAIL_LABELS = 0.65  # the stage labels under the rail
+RAIL_Y0 = B_TOP + GROUP_GAP + RAIL_LABELS
+RAIL_TOP = RAIL_Y0 + RAIL_H
+H = RAIL_TOP + 0.2  # figure height
 LETTER_DX = 1.2  # letters centred this far left of their axes
-
-
-def window_glyph(ax, x0, y0, dur_s, height, color="white"):
-    """The analysis window (Hann) drawn to scale on the time axis."""
-    x = np.linspace(0, dur_s, 60)
-    y = 0.5 * (1 - np.cos(2 * np.pi * x / dur_s))
-    ax.plot(x0 + x, y0 + height * y, color=color, lw=0.8, zorder=20,
-            solid_capstyle="round")
-    ax.plot([x0 - 0.01, x0 + dur_s + 0.01], [y0, y0], color=color, lw=0.5, zorder=20)
 
 
 def dim_arrow(ax, xy0, xy1, *, shrink_a=0.0, shrink_b=0.0, zorder=1.5, transform=None,
@@ -176,7 +158,7 @@ def dim_arrow(ax, xy0, xy1, *, shrink_a=0.0, shrink_b=0.0, zorder=1.5, transform
 
 
 class DoubleArrowHandler(HandlerBase):
-    """Legend handle: a double-headed arrow as drawn in D."""
+    """Legend handle: a double-headed arrow as drawn in C."""
 
     def create_artists(self, legend, orig_handle, xdescent, ydescent, width, height,
                        fontsize, trans):
@@ -192,16 +174,20 @@ class DoubleArrowKey:
 
 
 def detect_data() -> dict:
-    """B's snippet, its operating rows, the panel's fish and their order."""
+    """A's snippet, its operating rows, the panel's fish and their order, and
+    the selected run's ids of the example chirps (``ids``)."""
     snip = C.load_snippet(DETECT["snippet"])
     t0, t1 = DETECT["window"]
     rows = C.window(snip, t0, t1)
     cut = rows[rows.operating & ((rows.t_start_s < t0) | (rows.t_end_s > t1))]
     if len(cut):
-        msg = f"B window {DETECT['window']} cuts boxes {cut.chirp_id.tolist()}"
+        msg = f"A window {DETECT['window']} cuts boxes {cut.chirp_id.tolist()}"
         raise ValueError(msg)
     fish, order = C.fish_styles(snip, t0, t1)
-    return {"snip": snip, "rows": rows, "fish": fish, "order": order}
+    rec = snip["meta"]["recording"]
+    example, *pair = example_ids(rows, rec, [DETECT["example"], *DETECT["pair"]])
+    return {"snip": snip, "rows": rows, "fish": fish, "order": order,
+            "ids": {"example": example, "pair": tuple(pair)}}
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +211,7 @@ def parameter_schematic(ax):
 
 
 def rail(fig, det, tile):
-    xs = np.linspace(L, R - RAIL_W, 6)
+    xs = np.linspace(L, R - RAIL_W, 5)
     axs = [C.axes_cm(fig, x, RAIL_Y0, RAIL_W, RAIL_H) for x in xs]
 
     # recording: raw voltage of one electrode (60 ms)
@@ -237,43 +223,38 @@ def rail(fig, det, tile):
     axs[0].set_xlim(0, len(seg) / fs)
     pad = 0.15 * np.ptp(seg)
     axs[0].set_ylim(seg.min() - pad, seg.max() + pad)
-    # A: the detector's RGB input
-    fe = C.load_snippet(FRONT_END)
-    C.show_rgb(axs[1], fe, fe["meta"]["t_start_s"] + 0.15, fe["meta"]["t_end_s"] - 0.15,
-               770, 1250)
-    # B detection: one box and its emitter
+    # A detection: one box and its emitter
     snip, by, fish = det["snip"], det["rows"].set_index("chirp_id"), det["fish"]
-    ex = by.loc[DETECT["example"]]
+    ex = by.loc[det["ids"]["example"]]
     t0, t1 = ex.t_center_s - 0.32, ex.t_center_s + 0.32
     f0, f1 = ex.f_low_hz - 30, ex.f_high_hz + 30
     # thumbnails: the display rule of the panels, on each thumbnail's own crop
-    C.show_power(axs[2], snip, t0, t1, f0, f1)
-    C.draw_tracks(axs[2], snip, fish, t0, t1, lw=0.5)
-    C.fish_box(axs[2], ex, t0, fish, ms=2.4)
-    # B assignment: a chirp of each fish, each emitter marker on its track
-    a, b = (by.loc[c] for c in DETECT["pair"])
+    C.show_power(axs[1], snip, t0, t1, f0, f1)
+    C.draw_tracks(axs[1], snip, fish, t0, t1, lw=0.5)
+    C.fish_box(axs[1], ex, t0, fish, ms=2.4)
+    # A assignment: a chirp of each fish, each emitter marker on its track
+    a, b = (by.loc[c] for c in det["ids"]["pair"])
     t0 = min(a.t_start_s, b.t_start_s) - 0.06
     t1 = max(a.t_end_s, b.t_end_s) + 0.06
     f0 = min(a.f_low_hz, b.f_low_hz) - 20
     f1 = max(a.f_high_hz, b.f_high_hz) + 20
-    C.show_power(axs[3], snip, t0, t1, f0, f1)
-    C.draw_tracks(axs[3], snip, fish, t0, t1, lw=0.5)
+    C.show_power(axs[2], snip, t0, t1, f0, f1)
+    C.draw_tracks(axs[2], snip, fish, t0, t1, lw=0.5)
     for r in (a, b):
-        C.fish_box(axs[3], r, t0, fish, ms=2.4)
-    # C post-processing: the harmonic copy, removed
+        C.fish_box(axs[2], r, t0, fish, ms=2.4)
+    # B post-processing: the harmonic copy, removed
     tby, tfish = tile["rows"].set_index("chirp_id"), tile["fish"]
-    s, h = tby.loc[SMALL], tby.loc[HARMONIC]
+    s, h = tby.loc[tile["ids"]["small"]], tby.loc[tile["ids"]["harmonic"]]
     t0, t1 = s.t_center_s - 0.3, s.t_center_s + 0.3
-    C.show_power(axs[4], tile["snip"], t0, t1, 590, 1510)
-    C.fish_box(axs[4], s, t0, tfish, marker=False)
-    C.dropped_box(axs[4], h, t0)
-    # D parameters: scalars (height, widths), drawn as a schematic
-    parameter_schematic(axs[5])
+    C.show_power(axs[3], tile["snip"], t0, t1, 590, 1510)
+    C.fish_box(axs[3], s, t0, tfish, marker=False)
+    C.dropped_box(axs[3], h, t0)
+    # C parameters: scalars (height, widths), drawn as a schematic
+    parameter_schematic(axs[4])
     for ax in axs:
         C.rounded_clip(ax)
-    labels = ["Recording", r"\textbf{A}\, Spectrograms", r"\textbf{B}\, Detection",
-              r"\textbf{B}\, Assignment", r"\textbf{C}\, Post-processing",
-              r"\textbf{D}\, Parameters"]
+    labels = ["Recording", r"\textbf{A}\, Detection", r"\textbf{A}\, Assignment",
+              r"\textbf{B}\, Post-processing", r"\textbf{C}\, Parameters"]
     tr = C.fig_cm(fig)
     for x, lab in zip(xs, labels, strict=True):
         fig.text(x + RAIL_W / 2, RAIL_Y0 - 0.1, lab, ha="center", va="top", transform=tr)
@@ -286,69 +267,7 @@ def rail(fig, det, tile):
 
 
 # ---------------------------------------------------------------------------
-# A: front end
-# ---------------------------------------------------------------------------
-def channel_title(fig, ax, title, color):
-    """Window length above the panel, led by a dot of its channel's colour."""
-    ax.text(0.5, 1.04, title, transform=ax.transAxes, ha="center", va="bottom")
-    w = C.text_width_cm(fig, title, fontsize="medium")
-    ax_w = ax.get_position().width * W
-    # dot centred on the text's x-height, 0.17 cm left of the text
-    tr = mpl.transforms.offset_copy(ax.transAxes, fig=fig, y=4.6, units="points")
-    ax.plot(0.5 - (w / 2 + 0.17) / ax_w, 1.04, "o", ms=4.6, mfc=color, mec="none",
-            transform=tr, clip_on=False)
-
-
-def panel_front_end(fig, axs, report):
-    snip = C.load_snippet(FRONT_END)
-    m = snip["meta"]
-    t0, t1 = m["t_start_s"], m["t_end_s"]
-    f0, f1 = 740, 1380
-    wins = m["windows_s"]
-    levels = []
-    for ch, ax in enumerate(axs[:3]):
-        # power [dB], levels of this panel's crop (2nd-98th percentile)
-        _, lv = C.show_power(ax, snip, t0, t1, f0, f1, channel=ch)
-        levels.append(lv)
-        window_glyph(ax, 0.04, 1255, wins[ch], 85)
-    # the detector's input: its own 0-1 levels (a fixed 60-dB range)
-    C.show_rgb(axs[3], snip, t0, t1, f0, f1)
-    C.spec_yaxis(axs[0], ticks=[800, 1000, 1200])
-    for ax in axs[1:]:
-        C.no_yaxis(ax)
-    # titles: window length, led by the dot of its channel in the RGB image
-    for k, ax in enumerate(axs[:3]):
-        channel_title(fig, ax, f"{round(wins[k] * 1e3):d} ms", CHANNEL_COLORS[k])
-    axs[3].text(0.5, 1.04, "detector input", transform=axs[3].transAxes, ha="center",
-                va="bottom")
-    # the trade-off, under the two extreme windows
-    for ax, note in ((axs[0], "fish resolved,\nchirps blurred"),
-                     (axs[2], "fish merged,\nchirps sharp")):
-        off = mpl.transforms.offset_copy(ax.transAxes, fig=fig, y=-0.12 / 2.54,
-                                         units="inches")
-        ax.text(0.5, 0, note, transform=off, ha="center", va="top", fontsize="small",
-                linespacing=1.15)
-    order = C.fish_order(snip, t0, t1)
-    hz = [C.track_median(snip, tid, t0, t1) for tid in order]
-    C.eod_label(axs[0], 0.02, hz[0] + 40, 1)
-    C.eod_label(axs[0], 0.02, hz[1] - 46, 2, **C.DARK_BACK)
-    axs[0].text(0.04 + wins[0] + 0.03, 1300, "window", ha="left", va="center", **C.ANNOT)
-    C.scalebar(axs[2], t1 - t0 - 0.04, 1290, 0.2, "200 ms")
-    rows = C.window(snip, t0, t1)
-    rows = rows[rows.chirp]
-    report["A"] = {
-        "recording": m["recording"], "window_s": [t0, t1], "windows_s": wins,
-        "levels_db": [[round(a, 1), round(b, 1)] for a, b in levels],
-        "tracks_hz": [round(h, 1) for h in hz], "df_hz": round(hz[0] - hz[1], 1),
-        "chirps": rows[["chirp_id", "t_center_s", "score", "track_id", "track_hz",
-                        "height_hz", "fwhm_s"]].round(3).to_dict(orient="records"),
-    }
-    return {"tracks_hz": hz, "df_hz": hz[0] - hz[1], "windows_ms": [1e3 * w for w in wins],
-            "snippet_s": t1 - t0}
-
-
-# ---------------------------------------------------------------------------
-# B: detection and assignment
+# A: detection and assignment
 # ---------------------------------------------------------------------------
 def panel_detection(ax, det, report) -> dict:
     snip, rows, fish, order = det["snip"], det["rows"], det["fish"], det["order"]
@@ -364,7 +283,7 @@ def panel_detection(ax, det, report) -> dict:
     # what the detector returns for each chirp: a box (arrow down onto its top
     # edge, at right angles, so that the tip stays visible) and the emitter
     # EODf (arrow from the left onto the marker)
-    ex = rows.set_index("chirp_id").loc[DETECT["example"]]
+    ex = rows.set_index("chirp_id").loc[det["ids"]["example"]]
     xc = ex.t_center_s - t0
     C.annotate(ax, "box", xy=(xc, ex.f_high_hz), xytext=(xc, DETECT["box_text"]),
                ha="center", va="bottom", rad=0.0, shrink_a=1.5, shrink_b=3.0)
@@ -375,13 +294,14 @@ def panel_detection(ax, det, report) -> dict:
 
     kept = drawn[drawn.drawn_as == "assigned"]
     if (drawn.drawn_as == "unassigned").any() or len(kept) != int(rows.chirp.sum()):
-        msg = "B: every chirp of the window must be drawn as assigned"
+        msg = "A: every chirp of the window must be drawn as assigned"
         raise ValueError(msg)
     per_fish = [int((kept.track_id == tid).sum()) for tid in order]
     spans_both = int(((kept.f_low_hz < min(hz)) & (kept.f_high_hz > max(hz))).sum())
     dist = np.abs(kept.emitter_hz - kept.track_hz)
-    report["B"] = {
+    report["A"] = {
         "recording": snip["meta"]["recording"], "window_s": [t0, t1], "levels_db": lv,
+        "example_ids": det["ids"],
         "tracks_hz": [round(h, 1) for h in hz], "track_ids": order,
         "interpolated_track_pieces": dashed,
         "chirps": kept[["chirp_id", "t_center_s", "score", "track_id", "emitter_hz",
@@ -405,11 +325,11 @@ def panel_detection(ax, det, report) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# C: post-processing
+# B: post-processing
 # ---------------------------------------------------------------------------
 def panel_harmonic(ax, tile):
     snip, by, fish = tile["snip"], tile["rows"].set_index("chirp_id"), tile["fish"]
-    h, f = by.loc[HARMONIC], by.loc[SMALL]
+    h, f = by.loc[tile["ids"]["harmonic"]], by.loc[tile["ids"]["small"]]
     t0, t1 = f.t_center_s - 0.3, f.t_center_s + 0.3
     _, lv = C.show_power(ax, snip, t0, t1, 580, 1520)
     C.draw_tracks(ax, snip, fish, t0, t1)
@@ -422,7 +342,7 @@ def panel_harmonic(ax, tile):
             va="center", **C.ANNOT)
     C.spec_yaxis(ax, ticks=[600, 800, 1000, 1200, 1400])
     C.scalebar(ax, 0.51, 960, 0.1, "100 ms")
-    return {"harmonic": HARMONIC, "harmonic_box": [float(h.f_low_hz), float(h.f_high_hz)],
+    return {"harmonic": int(h.name), "harmonic_box": [float(h.f_low_hz), float(h.f_high_hz)],
             "harmonic_emitter_hz": float(h.emitter_hz),
             "fundamental_track_hz": float(f.track_hz), "score": float(h.score),
             "levels_db": lv}
@@ -432,7 +352,8 @@ def panel_duplicate(ax):
     snip = C.load_snippet(DUP_SNIPPET)
     rows = C.window(snip, snip["meta"]["t_start_s"], snip["meta"]["t_end_s"])
     by = rows.set_index("chirp_id")
-    k, d = by.loc[DUP_KEPT], by.loc[DUP_DROPPED]
+    kept, dropped = example_ids(rows, snip["meta"]["recording"], [DUP_KEPT, DUP_DROPPED])
+    k, d = by.loc[kept], by.loc[dropped]
     t0, t1 = k.t_center_s - 0.3, k.t_center_s + 0.3
     fish, _ = C.fish_styles(snip, t0 - 2, t1 + 2)
     _, lv = C.show_power(ax, snip, t0, t1, 580, 1520)
@@ -440,16 +361,16 @@ def panel_duplicate(ax):
     C.fish_box(ax, k, t0, fish)
     C.dropped_box(ax, d, t0)
     C.no_yaxis(ax)
-    return {"recording": snip["meta"]["recording"], "kept": DUP_KEPT,
+    return {"recording": snip["meta"]["recording"], "kept": kept,
             "kept_score": float(k.score), "kept_box": [float(k.f_low_hz), float(k.f_high_hz)],
-            "dropped": DUP_DROPPED, "dropped_score": float(d.score),
+            "dropped": dropped, "dropped_score": float(d.score),
             "dropped_box": [float(d.f_low_hz), float(d.f_high_hz)],
             "separation_ms": 1e3 * abs(float(k.t_center_s - d.t_center_s)),
             "levels_db": lv}
 
 
 # ---------------------------------------------------------------------------
-# D: decoder estimates next to the frequency trace
+# C: decoder estimates next to the frequency trace
 # ---------------------------------------------------------------------------
 def crossings(t, df, ipk, level):
     """Trace times where it falls below ``level`` on either side of the peak."""
@@ -559,12 +480,16 @@ def panel_trace(ax, traces, meta, key, row, xlim_ms, report):
 
 
 def tile_data() -> dict:
-    """The 2020-05-29 tile of C (harmonic) and D (decoder examples)."""
+    """The 2020-05-29 tile of B (harmonic) and C (decoder examples), with the
+    selected run's ids of its example chirps (``ids``)."""
     snip = C.load_snippet(TILE_SNIPPET)
     rows = C.window(snip, *TILE)
     rows = rows[rows.operating]
     fish, order = C.fish_styles(snip, *TILE)
-    return {"snip": snip, "rows": rows, "fish": fish, "order": order}
+    rec = snip["meta"]["recording"]
+    small, big, harmonic = example_ids(rows, rec, [SMALL, BIG, HARMONIC])
+    return {"snip": snip, "rows": rows, "fish": fish, "order": order,
+            "ids": {"small": small, "big": big, "harmonic": harmonic}}
 
 
 def main() -> None:
@@ -577,35 +502,37 @@ def main() -> None:
     z = np.load(C.SNIPPETS / "traces.npz")
     traces = {k: z[k] for k in z.files if k != "meta"}
     tmeta = json.loads(str(z["meta"]))
+    # the traces must be those of the chirps drawn (v2_fig_extract traces resolves
+    # the same v2 ids in the same run)
+    for key in ("small", "big"):
+        if int(tmeta[key]["chirp_id"]) != tile["ids"][key]:
+            msg = (f"traces.npz {key}: chirp {tmeta[key]['chirp_id']}, the run's is "
+                   f"{tile['ids'][key]}: re-run v2_fig_extract.py traces")
+            raise ValueError(msg)
 
     fig = plt.figure(figsize=(W * C.CM, H * C.CM))
     ax_rail = rail(fig, det, tile)
 
-    # --- A: front end ------------------------------------------------------
-    ax_a = [C.axes_cm(fig, x, A_BOTTOM, A_W, A_H) for x in A_X]
-    front_end = panel_front_end(fig, ax_a, report)
-    ym = A_BOTTOM + A_H / 2
-    gap = 0.5 * (A_ARROW_GAP - 0.55)
-    C.flow_arrow(fig, A_X[2] + A_W + gap, ym, A_X[3] - gap, ym, color="k", lw=0.7, ms=5)
-
-    # --- B: detection and assignment (full width) ----------------------------
+    # --- A: detection and assignment (full width) ----------------------------
     ax_b = C.axes_cm(fig, L, B_BOTTOM, R - L, B_H)
     detection = panel_detection(ax_b, det, report)
 
-    # --- C, D: post-processing and decoder -----------------------------------
+    # --- B, C: post-processing and decoder -----------------------------------
     ax_c1 = C.axes_cm(fig, C_X[0], CD_BOTTOM, C_W, CD_H)
     ax_c2 = C.axes_cm(fig, C_X[1], CD_BOTTOM, C_W, CD_H)
     ax_d1 = C.axes_cm(fig, D_X[0], CD_BOTTOM, D_W, CD_H)
     ax_d2 = C.axes_cm(fig, D_X[1], CD_BOTTOM, D_W, CD_H)
     report["C_harmonic"] = panel_harmonic(ax_c1, tile)
     report["C_duplicate"] = panel_duplicate(ax_c2)
-    # panel titles at the 8-pt base, as the window titles of A
+    # panel titles at the 8-pt base
     for ax, title in ((ax_c1, "harmonic"), (ax_c2, "duplicate")):
         ax.text(0.5, 1.04, title, transform=ax.transAxes, ha="center", va="bottom")
     ax_d1.set_ylim(-14, 86)
     ax_d2.set_ylim(-90, 475)
-    panel_trace(ax_d1, traces, tmeta, "small", by_tile.loc[SMALL], (-40, 40), report)
-    panel_trace(ax_d2, traces, tmeta, "big", by_tile.loc[BIG], (-100, 150), report)
+    panel_trace(ax_d1, traces, tmeta, "small", by_tile.loc[tile["ids"]["small"]], (-40, 40),
+                report)
+    panel_trace(ax_d2, traces, tmeta, "big", by_tile.loc[tile["ids"]["big"]], (-100, 150),
+                report)
     ax_d1.set_xticks([-40, -20, 0, 20, 40])
     ax_d2.set_xticks([-100, -50, 0, 50, 100, 150])
     for ax in (ax_d1, ax_d2):
@@ -617,19 +544,18 @@ def main() -> None:
         Line2D([], [], ls="none", marker=".", ms=DOT_MS + 1.2, mfc=DOT_COLOR, mec="none"),
         key,
     ]
-    # one line above both D panels, at the height of C's titles
+    # one line above both C panels, at the height of B's titles
     ax_d1.legend(handles=handles, labels=["trace", "single EOD periods", "estimate"],
                  handler_map={DoubleArrowKey: DoubleArrowHandler()},
                  loc="lower left", bbox_to_anchor=(-0.02, 1.0), frameon=False, ncol=3,
                  handlelength=1.6, columnspacing=1.6, borderaxespad=0.15,
                  borderpad=0.0)
 
-    C.letters_cm(fig, [(ax_a[0], "A", LETTER_DX, 0.4), (ax_b, "B", LETTER_DX, 0.25),
-                       (ax_c1, "C", LETTER_DX, 0.4), (ax_d1, "D", LETTER_DX, 0.4)])
+    C.letters_cm(fig, [(ax_b, "A", LETTER_DX, 0.25), (ax_c1, "B", LETTER_DX, 0.4),
+                       (ax_d1, "C", LETTER_DX, 0.4)])
 
     named = ([(f"rail{k}", ax) for k, ax in enumerate(ax_rail)]
-             + [(f"A{k + 1}", ax) for k, ax in enumerate(ax_a)]
-             + [("B", ax_b), ("C1", ax_c1), ("C2", ax_c2), ("D1", ax_d1), ("D2", ax_d2)])
+             + [("A", ax_b), ("B1", ax_c1), ("B2", ax_c2), ("C1", ax_d1), ("C2", ax_d2)])
     extents = C.axes_extents(fig, named)
     paths = C.save(fig, NAME)
     # every stored row of the tile at score >= 0.5 (the operating column says
@@ -648,10 +574,10 @@ def main() -> None:
     print(json.dumps(report, indent=1, default=float))
     print(extents)
     print("\n".join(map(str, paths)))
-    write_stats("v2_pipeline_explainer", caption_stats(front_end, detection, report))
+    write_stats("v2_pipeline_explainer", caption_stats(detection, report))
 
 
-def caption_stats(front_end, detection, report) -> dict:
+def caption_stats(detection, report) -> dict:
     """The numbers of the caption: snippets, boxes, scores and estimates of the panels."""
     harm, dup = report["C_harmonic"], report["C_duplicate"]
 
@@ -662,7 +588,6 @@ def caption_stats(front_end, detection, report) -> dict:
 
     return {
         "operating_threshold": C.OPERATING,
-        "front_end": front_end,
         "tile": {"duration_s": C.tile_duration_s()},
         "detection": detection,
         "harmonic": {"box_hz": harm["harmonic_box"], "emitter_hz": harm["harmonic_emitter_hz"],

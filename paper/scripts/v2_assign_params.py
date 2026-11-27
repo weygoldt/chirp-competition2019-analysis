@@ -14,7 +14,8 @@ The join
 --------
 1. ``label_row`` -> label. The evaluation's ground truth is
    ``chirpdetector.data.dataset_ground_truth`` of the test tiles of
-   ``datasets/sim_v4`` (``GroundTruth`` sorts it by tile and box midpoint).
+   the pipeline's dataset (``datasets/sim_v4``, or ``sim_v4r_longonly`` for
+   the single-window detector; ``GroundTruth`` sorts it by tile and box midpoint).
    Every row of the evaluation's ``items.csv`` that names a label is checked
    against it (tile, label kind, box midpoint, emitter); any mismatch stops
    the script.
@@ -89,10 +90,13 @@ import paper_config
 log = logging.getLogger("v2_assign_params")
 
 CHIRP_DATA = paper_config.CHIRP_DATA
-SIM_V4 = Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser() / "datasets" / "sim_v4"
-PP_EVAL = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess"
-# the recalibrated bundle (v2_fig_common.DECODER_EVAL); its true_* columns are the same
-DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" / "bundle" / "eval"
+# the pipeline's simulated dataset (paper_config.PIPELINE: datasets/sim_v4 for
+# v2, sim_v4r_longonly for the single-window detector; the same test scenes),
+# its detector's evaluation and its decoder's (v2_fig_common.DECODER_EVAL)
+SIM_V4 = (Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser()
+          / paper_config.PIPELINE["sim_dataset"])
+PP_EVAL = paper_config.pipeline_path("sim_eval")
+DECODER_EVAL = paper_config.pipeline_path("decoder") / "eval"
 
 KEYS = ["recording", "label_row", "pred_row"]  # a true positive of assign_baseline.csv
 DETECT_KEYS = ["recording", "label_row"]  # a chirp label (a visible simulated chirp)

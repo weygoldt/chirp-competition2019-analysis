@@ -7,7 +7,8 @@ choose the operating threshold); only the simulator gives absolute
 performance (model and human expert vs simulator truth). One row per
 pipeline stage (author, 2026-11-16; assignment by chirp size and the 10 %
 width added 2026-11-24): detection (A-D), assignment (E-H), chirp
-parameters (I-K). Only the production detector (RT-DETR dual-head) is shown;
+parameters (I-K). Only the production detector (RT-DETR dual-head; the
+pipeline's, ``paper_config.PIPELINE``) is shown;
 YOLO26s has no emitter head and is no like-for-like comparison. The
 operating threshold is the run's (``meta.json`` of PAPER_DETECTIONS' run;
 0.8 for rtdetr_gapfill_t080); every operating point follows it.
@@ -15,11 +16,11 @@ operating threshold is the run's (``meta.json`` of PAPER_DETECTIONS' run;
 A   Simulated held-out test scenes (unseen fish on unseen background
     recordings; 9,401 visible chirps), after post-processing: precision
     against recall over the score threshold,
-    ``runs/dualhead_r18_sim_v4_r1/eval_postprocess/sim_test_after``;
+    ``<detector run>/eval_postprocess/sim_test_after`` (``C.PP_EVAL``);
     operating point from the curve's row at the operating threshold.
 B   Blind benchmark on 1,010 simulated items (536 scored true chirps):
     recall of the human expert and of RT-DETR dual-head (score >= operating
-    threshold, kept), by chirp SNR (``labels/benchmark/report_v2/items.csv``;
+    threshold, kept), by chirp SNR (``C.BENCHMARK/items.csv``;
     unweighted, Wilson 95 % intervals).
 C   Real recordings (2019/2020 competitions), agreement with one expert
     (blind labelling session real_v1), drawn like A as one detector curve
@@ -120,7 +121,12 @@ NAME = "plot_v2_performance"
 # like the other full-width figures); at most 15.05 cm tall
 W, H = L.W, L.H
 THR = C.OPERATING
-REAL_V1 = C.CHIRP_DATA / "labels" / "real_v1" / "report"
+# the expert's session on the real recordings, scored for the pipeline's
+# detector (labels/real_v1/report for v2, report_sw for the single-window one)
+REAL_V1 = C.REAL_SESSION
+# the production detector's name in the blind benchmark's report; its series
+# and stats keys stay "dualhead" (the production detector of either pipeline)
+BM = C.BENCHMARK_MODEL
 REAL_DATASET = "2019"  # the 2019/2020 tube competitions (the paper's data)
 MARKED = (0.5, 0.9)  # thresholds marked in C besides the operating one
 # bins as labelled in the input tables, and as keys of the stats
@@ -379,9 +385,10 @@ def benchmark_panel(ax, report):
     b = pd.read_csv(C.BENCHMARK / "items.csv", low_memory=False)
     t = b[(b["truth"] == "chirp") & b["scored"].astype(bool)].copy()
     # the model at the operating threshold: kept and score >= threshold
-    # (``dualhead_chirp`` is kept and score >= 0.5)
-    t["model_chirp"] = t["dualhead_chirp"].astype(bool) & (t["dualhead_score"] >= THR)
-    t["model_emitter_ok"] = t["dualhead_emitter_ok"].astype(bool) & t["model_chirp"]
+    # (``<model>_chirp`` is kept and score >= 0.5; the production detector's
+    # name in the report is C.BENCHMARK_MODEL)
+    t["model_chirp"] = t[f"{BM}_chirp"].astype(bool) & (t[f"{BM}_score"] >= THR)
+    t["model_emitter_ok"] = t[f"{BM}_emitter_ok"].astype(bool) & t["model_chirp"]
     out = {}
     for name, key, dx in (("human_chirp", "human", -0.9), ("model_chirp", "dualhead", 0.9)):
         g = t.groupby("snr_bin")[name].agg(["sum", "size"]).reindex(SNR_BINS)
@@ -468,9 +475,9 @@ def benchmark_emitter_panel(ax, report):
     t = t[t["df_bin"].notna()]
     called = {
         "human": t["human_chirp"].astype(bool),
-        "dualhead": t["dualhead_chirp"].astype(bool) & (t["dualhead_score"] >= THR),
+        "dualhead": t[f"{BM}_chirp"].astype(bool) & (t[f"{BM}_score"] >= THR),
     }
-    ok = {"human": "human_emitter_ok", "dualhead": "dualhead_emitter_ok"}
+    ok = {"human": "human_emitter_ok", "dualhead": f"{BM}_emitter_ok"}
     out = {}
     for key, dx in (("human", -0.025), ("dualhead", 0.025)):
         d = t[called[key]]

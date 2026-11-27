@@ -50,12 +50,26 @@ DATA_ROOT = Path(os.environ.get("CHIRP_REC_2019", "/mnt/data2/2019_tube_competit
 CHIRP_DATA = Path(os.environ.get("CHIRP_DATA", "/mnt/data1/chirp_v2"))
 INPUTS = Path(os.environ.get("PAPER_INPUTS", REPO / "paper" / "inputs"))  # git-ignored data inputs
 
-# detection threshold -> (name in the trial folders = PAPER_DETECTIONS, run folder under CHIRP_DATA/detections)
-RUNS = {
-    "0.5": ("rtdetr_gapfill", "competition2019_v2_20261113_gapfill_recal1"),
-    "0.8": ("rtdetr_gapfill_t080", "competition2019_v2_20261113_gapfill_t080_recal1"),
-    "0.9": ("rtdetr_gapfill_t090", "competition2019_v2_20261113_gapfill_t090_recal1"),
-}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_config  # noqa: E402  (standard library only, like this script)
+
+# The pipeline of the primary run (PAPER_PRIMARY; paper_config.PIPELINES: the
+# single-window detector "sw" since 2026-11-27, before it "v2")
+PIPELINE_NAME = "sw" if paper_config.PRIMARY.startswith("rtdetr_sw") else "v2"
+PIPE = paper_config.PIPELINES[PIPELINE_NAME]
+_PREFIX = "rtdetr_sw" if PIPELINE_NAME == "sw" else "rtdetr"
+
+
+def _run(name: str) -> tuple[str, str, str]:
+    """(name in the trial folders = PAPER_DETECTIONS, run folder under
+    CHIRP_DATA/detections, the stem of the run's own file names: chirps_<stem>.parquet)."""
+    run, table, _ = PIPE["runs"][name]
+    return name, run, table.removeprefix("chirps_").removesuffix(".parquet")
+
+
+# detection threshold -> _run(...)
+RUNS = {"0.5": _run(f"{_PREFIX}_gapfill"), "0.8": _run(f"{_PREFIX}_gapfill_t080"),
+        "0.9": _run(f"{_PREFIX}_gapfill_t090")}
 RECORDING = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{2}_\d{2}$")
 
 # top-level files of the data folder
@@ -91,34 +105,31 @@ class Item:
 
 # Globs relative to a root -> copied to the same relative path under the package folder
 # (CHIRP_DATA -> pipeline/, paper/inputs -> inputs/). A glob that matches nothing stops the build.
-_SOURCE_RUN = "detections/competition2019_v2_20261113"
-_SIM_TEST = "scenes/train_v4/test/*"
+_SOURCE_RUN = PIPE["source_run"]
+_SCENES = PIPE["train_scenes"]
+_SIM_TEST = f"{_SCENES}/test/*"
 PIPELINE = [  # (glob under CHIRP_DATA, kind)
     ("templates/v4/**/*", "chirp templates"),
     (f"{_SOURCE_RUN}/*/meta.json", "detection metadata (source run)"),
     (f"{_SOURCE_RUN}/track_gaps/gaps.csv", "track gaps"),
     (f"{_SOURCE_RUN}_gapfill/*/tracks_gapfill.npz", "gap-filled tracks"),
-    *[(f"detections/{run}/*/meta.json", "detection metadata") for _, run in RUNS.values()],
-    ("runs/dualhead_r18_sim_v4_r1/final/bundle/bundle.json", "detector configuration"),
-    ("runs/dualhead_r18_sim_v4_r1/final/bundle/metrics.json", "detector configuration"),
-    ("runs/dualhead_r18_sim_v4_longonly_r1/final/bundle/bundle.json", "front-end ablation"),
-    ("runs/dualhead_r18_sim_v4_longonly_r1c/bundles/epoch_16/bundle.json", "front-end ablation"),
-    ("runs/ablation_frontend/scenarios/paper/bench_labels.parquet", "front-end ablation"),
-    ("runs/dualhead_r18_sim_v4_r1/eval_postprocess/sim_test_predictions_flagged.parquet", "detector evaluation"),
-    ("runs/dualhead_r18_sim_v4_r1/eval_postprocess/sim_test_after/**/*", "detector evaluation"),
-    ("datasets/sim_v4/dataset.json", "simulated dataset"),
-    ("datasets/sim_v4/boxes.parquet", "simulated dataset"),
-    ("datasets/sim_v4/diagnostics/counts.json", "simulated dataset"),
+    *[(f"detections/{run}/*/meta.json", "detection metadata") for _, run, _ in RUNS.values()],
+    (f"{PIPE['detector']}/*.json", "detector configuration"),
+    (f"{PIPE['sim_eval']}/sim_test_predictions_flagged.parquet", "detector evaluation"),
+    (f"{PIPE['sim_eval']}/sim_test_after/**/*", "detector evaluation"),
+    *[(f"{PIPE['sim_dataset']}/{f}", "simulated dataset")
+      for f in ("dataset.json", "boxes.parquet", "diagnostics/counts.json")],
     *[(f"{_SIM_TEST}/{f}", "simulated test scenes") for f in (
         "times.npy", "fund_v.npy", "ident_v.npy", "idx_v.npy",
         "scene.json", "paths.npz", "chirp_traces.npz", "chirps.csv")],
-    ("scenes/train_v4/train/*/chirps.parquet", "simulated training chirps"),
-    ("params/runs/v4-dualhead-sim-v4-r2-recal1/bundle/bundle.json", "parameter network"),
-    ("params/runs/v4-dualhead-sim-v4-r2-recal1/bundle/eval/predictions.parquet", "parameter network"),
-    ("labels/benchmark/report_v2/**/*", "expert labels: blind benchmark"),
+    (f"{_SCENES}/train/*/chirps.parquet", "simulated training chirps"),
+    (f"{PIPE['decoder']}/bundle.json", "parameter network"),
+    (f"{PIPE['decoder']}/eval/predictions.parquet", "parameter network"),
+    (f"{PIPE['benchmark']}/**/*", "expert labels: blind benchmark"),
     ("labels/benchmark/human_benchmark_v*_truth.*", "expert labels: blind benchmark"),
-    *[(f"labels/real_v1/{g}", "expert labels: real recordings")  # not tracks_gapfill/ (display copies)
-      for g in ("README.md", "report/**/*", "truth/**/*", "review/**/*")],
+    *[(g, "expert labels: real recordings")  # not tracks_gapfill/ (display copies)
+      for g in ("labels/real_v1/README.md", f"{PIPE['real_session']}/**/*",
+                "labels/real_v1/truth/**/*", "labels/real_v1/review/**/*")],
     ("eval/real_labels_365/labels/**/*", "expert labels: real recordings"),
     ("background/v2/manifest.csv", "background segments (list)"),
 ]
@@ -148,9 +159,11 @@ def check_detections(recs: list[Path]) -> None:
     """The trial folders' detections must equal the run outputs (fail loudly otherwise)."""
     bad = []
     for rec in recs:
-        for name, run in RUNS.values():
-            for f in (f"chirps_{name}.parquet", f"chirp_times_{name}.npy", f"chirp_ids_{name}.npy"):
-                a, b = rec / f, CHIRP_DATA / "detections" / run / rec.name / f
+        for name, run, stem in RUNS.values():
+            for f, g in ((f"chirps_{name}.parquet", f"chirps_{stem}.parquet"),
+                         (f"chirp_times_{name}.npy", f"chirp_times_{stem}.npy"),
+                         (f"chirp_ids_{name}.npy", f"chirp_ids_{stem}.npy")):
+                a, b = rec / f, CHIRP_DATA / "detections" / run / rec.name / g
                 if not b.exists():
                     bad.append(f"{b}: missing")
                 elif not a.exists():
@@ -178,12 +191,12 @@ def items(recs: list[Path]) -> tuple[list[Item], list[str]]:
                 out.append(Item(src, f"recordings/{rec.name}/{name}", "trial"))
             elif required:
                 missing.append(str(src))
-        for name, run in RUNS.values():
+        for name, run, stem in RUNS.values():
             run_dir = CHIRP_DATA / "detections" / run / rec.name
             for f, dst in (
-                (f"chirps_{name}.parquet", f"chirps_{name}.parquet"),
-                (f"chirp_times_{name}.npy", f"chirp_times_{name}.npy"),
-                (f"chirp_ids_{name}.npy", f"chirp_ids_{name}.npy"),
+                (f"chirps_{stem}.parquet", f"chirps_{name}.parquet"),
+                (f"chirp_times_{stem}.npy", f"chirp_times_{name}.npy"),
+                (f"chirp_ids_{stem}.npy", f"chirp_ids_{name}.npy"),
                 ("meta.json", f"chirps_{name}_meta.json"),
             ):
                 out.append(Item(run_dir / f, f"recordings/{rec.name}/{dst}", "detections"))
@@ -265,8 +278,8 @@ pipeline/                      data of the chirp-detection pipeline, at the path
                                chirps) used for the hybrid simulations; see its report.md
 {pipeline_lines}```
 
-`<det>` names the detection run by its operating threshold: `rtdetr_gapfill` (0.5),
-`rtdetr_gapfill_t080` (0.8, the primary analysis) and `rtdetr_gapfill_t090` (0.9).
+`<det>` names the detection run by its operating threshold: `{det_05}` (0.5),
+`{det_08}` (0.8, the primary analysis) and `{det_09}` (0.9).
 All three hold the same detections (stored down to a score of 0.05, assigned
 with gap-filled tracks); only the operating threshold, and with it the
 `operating` and `chirp` columns and the chirp arrays, differ.
@@ -283,11 +296,11 @@ with gap-filled tracks); only the operating threshold, and with it the
   spectrograms and cannot run on this package: the example chirps of the
   chirp-parameter figure, the competition overview spectrogram, the video motion
   of the chase-timing figure, and the raw windows of the pipeline explainer,
-  failure-mode and front-end ablation figures. The recording durations, which
+  failure-mode figures. The recording durations, which
   the analysis otherwise reads from the raw files, are in
-  `recordings/recordings.csv`. `pipeline/datasets/sim_v4/dataset.json` records the
+  `recordings/recordings.csv`. `pipeline/{sim_dataset}/dataset.json` records the
   original absolute paths of the simulated scenes (they are part of its content
-  hash); the scenes themselves are under `pipeline/scenes/train_v4/`.
+  hash); the scenes themselves are under `pipeline/{train_scenes}/`.
 - **Running the analyses on this package.** Point the analysis code at it:
   `CHIRP_REC_2019=<package>/recordings`, `CHIRP_DATA=<package>/pipeline` and
   `PAPER_INPUTS=<package>/inputs`, then follow the analysis repository's README.
@@ -306,6 +319,8 @@ def write_readme(root: Path, info: dict, n_files: int) -> None:
         title=os.environ.get("PAPER_TITLE", "Signals That Reflect but Do Not Shape Social Competition"),
         built=info["built"], commit=info["code"]["analysis"][:10], n_rec=info["counts"]["recordings"],
         n_files=n_files, size=human(info["counts"]["bytes"]), pipeline_lines=pipeline_lines,
+        det_05=RUNS["0.5"][0], det_08=RUNS["0.8"][0], det_09=RUNS["0.9"][0],
+        sim_dataset=PIPE["sim_dataset"], train_scenes=PIPE["train_scenes"],
         excluded="; ".join(info["excluded"]),
         license=os.environ.get("PACKAGE_LICENSE", "To be decided by the authors (e.g. CC BY 4.0); cite the paper."),
     )
@@ -403,7 +418,8 @@ def main() -> None:
     info = {
         "built": dt.datetime.now().isoformat(timespec="seconds"),
         "sources": {"recordings": str(DATA_ROOT), "chirp_data": str(CHIRP_DATA), "inputs": str(INPUTS)},
-        "runs": {t: {"detections": name, "run": run} for t, (name, run) in RUNS.items()},
+        "pipeline": PIPELINE_NAME,
+        "runs": {t: {"detections": name, "run": run} for t, (name, run, _) in RUNS.items()},
         "excluded": list(EXCLUDED) + ["raw recordings (traces-grid1.raw)", "videos (*.avi)", "spectrogram caches"],
         "code": {
             "analysis": git_commit(REPO),

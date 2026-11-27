@@ -133,7 +133,7 @@ chain_allocation() {   # Figs. temporal allocation, all fish (+ supplement) and 
 }
 
 chain_v2figs() {       # new figures of pipeline v2 (replace the v1 assignment and performance figures)
-  ( cd "$PAPER" && PAPER_OUT="$PAPER_OUT" "$CHIRP_ROOT_PY" scripts/v2_fig_extract.py snippets traces raw case-heights frontends )
+  ( cd "$PAPER" && PAPER_OUT="$PAPER_OUT" "$CHIRP_ROOT_PY" scripts/v2_fig_extract.py snippets traces raw case-heights )
   ( cd "$PAPER" && "$REPO/scripts/guarded" --name paper-v2fig-assign --mem 16G --vram 0.2 -- \
       env PAPER_OUT="$PAPER_OUT" "$CHIRP_ROOT_PY" scripts/v2_fig_extract.py assign-baseline )
   # simulator truth (true 10 % width, height) of the simulated test chirps for Fig. 10 G, H:
@@ -144,7 +144,6 @@ chain_v2figs() {       # new figures of pipeline v2 (replace the v1 assignment a
   step plot_v2_pipeline_explainer.py
   step plot_v2_performance.py
   step plot_v2_failure_modes.py
-  step plot_v2_frontend_ablation.py   # front-end ablation (supplement; reads failure-mode C)
   step summarize_pipeline.py   # the pipeline's own evaluations, for the Methods
 }
 
@@ -166,9 +165,9 @@ WINDOW_CHAINS=" interchase coupling gamma receiver reattack hurdle posteriors "
 check_window() { tagged check step offset_window.py --check; }
 
 # rates before the chains that use the offset window (see WINDOW_CHAINS).
-# v2figs last: its extraction knows only the runs in v2_fig_extract.RUNS (the
-# pipeline figures belong to the primary run), so on a sensitivity run such as
-# rtdetr_gapfill_t090 it stops the script after all analyses are done.
+# v2figs last: the pipeline figures belong to the primary run, and on a
+# sensitivity run their examples need not hold (e.g. Fig. 9's duplicate box at
+# 0.9), so a failure there stops the script after all analyses are done.
 ALL=(counts status agonistic rates interchase coupling gamma receiver reattack hurdle validation echo descriptive allocation posteriors v2figs)
 chains=("$@")
 (( ${#chains[@]} )) || chains=("${ALL[@]}")

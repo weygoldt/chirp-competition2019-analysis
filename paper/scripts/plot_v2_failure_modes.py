@@ -74,9 +74,12 @@ import pandas as pd
 import v2_fig_common as C
 from manuscript_stats import write_stats
 from style import set_light_style
+from v2_examples import example_id, example_ids
 
 NAME = "plot_v2_failure_modes"
-MISSED_A = 4080  # 2019-12-09-10_00, score 0.33, on a hand-labelled chirp
+# example chirps by their pipeline-v2 ids (the author chose them there;
+# v2_examples.example_id finds the selected run's box at the same place)
+MISSED_A = 4080  # 2019-12-09-10_00, v2 score 0.33, on a hand-labelled chirp
 CLOSE_1 = 14783  # 2019-12-09-10_00
 CLOSE_2 = (2974, 2975)  # 2020-03-13-10_00
 DRAWN: set[str] = set()  # symbols drawn in the panels (the key lists only these)
@@ -184,9 +187,11 @@ def panel_labelled(ax, ax_zoom, fig, report, stats):
     kept = drawn[drawn.drawn_as.isin(["assigned", "unassigned"])]
     lab_c, unmatched_lab, unmatched_det = match_labels(labels, kept)
     C.label_marks(ax, lab_c - t0)
-    miss = rows.set_index("chirp_id").loc[MISSED_A]
+    missed_id = example_id(rows, m["recording"], MISSED_A)
+    miss = rows.set_index("chirp_id").loc[missed_id]
     if miss.operating:
-        msg = f"chirp {MISSED_A} (score {miss.score:.2f}) is not below the threshold {C.OPERATING}"
+        msg = (f"chirp {missed_id} (v2 {MISSED_A}; score {miss.score:.2f}) is not below the "
+               f"threshold {C.OPERATING}: panel A's missed chirp needs a new example")
         raise ValueError(msg)
     C.draw_missed(ax, miss, t0)
     DRAWN.add("missed")
@@ -226,7 +231,7 @@ def panel_labelled(ax, ax_zoom, fig, report, stats):
         "detections_without_label": unmatched_det[
             ["chirp_id", "t_center_s", "score", "track_id", "emitter_hz"]
         ].round(3).to_dict(orient="records"),
-        "missed": {"chirp_id": MISSED_A, "score": float(miss.score),
+        "missed": {"chirp_id": missed_id, "v2_chirp_id": MISSED_A, "score": float(miss.score),
                    "t_center_s": float(miss.t_center_s),
                    "box_hz": [float(miss.f_low_hz), float(miss.f_high_hz)]},
         "zoom_s": [zt0, zt1],
@@ -593,6 +598,7 @@ def close_numbers(name, ids, half, channel, report, stats, key):
     snip = C.load_snippet(name)
     rec = snip["meta"]["recording"]
     rows = C.window(snip, snip["meta"]["t_start_s"] - 1, snip["meta"]["t_end_s"] + 1)
+    ids = example_ids(rows, rec, ids)  # v2 ids -> the selected run's
     sel = rows.set_index("chirp_id").loc[list(ids)]
     tc = float(sel.t_center_s.mean())
     t0, t1 = tc - half, tc + half

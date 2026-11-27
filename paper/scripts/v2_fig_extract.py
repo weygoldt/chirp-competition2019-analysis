@@ -7,14 +7,20 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
 ``snippets``
     Spectrogram snippets of the 2019/2020 tube competition recordings,
     computed exactly as the production run did (chirpdetector's
-    `span_spectrogram` with the released detector bundle: click removal on
-    grids of at least 9 electrodes, then the three-window front end: 205,
-    51 and 13 ms Hann windows on one 4.88-Hz grid, 5-ms hop, 500-1500 Hz,
-    power summed over electrodes), normalised to [0, 1] over the snippet
+    `span_spectrogram` with the pipeline's detector bundle,
+    ``paper_config.PIPELINE["detector"]``: click removal on grids of at
+    least 9 electrodes, then the front end: a 205-ms Hann window, 5-ms hop,
+    4.88-Hz bins, 500-1500 Hz, power summed over electrodes, in all three
+    channels for the single-window detector; pipeline v2's adds 51- and 13-ms
+    windows on the same grid as the second and third channel), normalised
+    to [0, 1] over the snippet
     with the front end's own rule (60 dB range ending 10 dB above the median
     per-frame peak of the reference channel; ``img``, clipped to [0, 1] as
-    the detector sees it), the same spectrogram unclipped in dB
-    (``power_db``: 10 log10 of the calibrated linear power summed over the
+    the detector sees it), and an analysis spectrogram unclipped in dB
+    (``power_db``: always the three windows of pipeline v2's front end,
+    205, 51 and 13 ms, ``ANALYSIS_BUNDLE``, whatever the detector; the
+    figures draw its 205-ms channel, the same in both front ends; 10 log10
+    of the calibrated linear power summed over the
     electrodes, dB re 1 V^2; a sinusoid of amplitude A on a bin reads
     A^2 / 2 per electrode; float16, steps <= 0.125 dB), plus the
     wavetracker tracks around the snippet. One ``<name>.npz`` per snippet.
@@ -30,16 +36,10 @@ that needs them and writes it to ``$PAPER_OUT/data/processed/v2_figures/``:
     windows of ``CASE_HEIGHT_SNIPPETS`` (failure-mode figure B, long chirps),
     from the same harvest extraction, next to the decoder's estimates.
     ``<snippet>_trace_heights.json``.
-``frontends``
-    The detections of the failure-mode figure's dense chirp train by the
-    released detector (three windows) and by the single-window detector of
-    the front-end ablation at the same training budget, each with
-    ``predict_span`` on the production tile grid (``FRONTEND_BUNDLES``), for
-    the ablation figure. ``f3_dense_frontends.parquet`` and ``.json``.
 ``raw``
-    The raw voltage of the electrode with the largest RMS during the
-    front-end example (``f1_fe_e``), for the "recording" thumbnail of the
-    pipeline figure. ``raw.npz``.
+    The raw voltage of the electrode with the largest RMS in the window of
+    snippet ``f1_fe_e``, for the "recording" thumbnail of the pipeline
+    figure. ``raw.npz``.
 ``assign-baseline``
     Emitter assignment on the simulated test scenes after post-processing,
     per true positive at score >= 0.5: the emitter head (as evaluated) and
@@ -78,33 +78,32 @@ import numpy as np
 import pandas as pd
 
 import paper_config
+from v2_examples import example_id
 
 log = logging.getLogger("v2_fig_extract")
 
 CHIRP_DATA = paper_config.CHIRP_DATA
-# the detections follow PAPER_DETECTIONS (paper_config): the production run,
-# or its dataset patch with the trial fish's track gaps filled
-# The chirp tables are those of the *_recal1 runs (2026-11-27): the same
-# detections with the chirp parameters of the decoder recalibrated without the
-# octave-error templates (experiments/production/recalibrate_params.py; the
-# trial directories hold copies of them).
-RUNS = {  # run directory, chirp table, run holding tracks_gapfill.npz (or None)
-    "rtdetr": ("competition2019_v2_20261113_recal1", "chirps_rtdetr.parquet", None),
-    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill_recal1",
-                       "chirps_rtdetr_gapfill.parquet",
-                       "competition2019_v2_20261113_gapfill"),
-    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080_recal1",
-                            "chirps_rtdetr_gapfill_t080.parquet",
-                            "competition2019_v2_20261113_gapfill"),
-}
+# the detections follow PAPER_DETECTIONS (paper_config: the pipeline, v2 or
+# the single-window "sw", and its run: the production run, its patch with the
+# trial fish's track gaps filled, or that patch at another threshold)
+RUNS = paper_config.RUNS  # run directory, chirp table, run holding tracks_gapfill.npz (or None)
 DETECTIONS = paper_config.DETECTIONS
 RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
 PARQUET = RUNS[DETECTIONS][1]
 TRACKS_RUN = (CHIRP_DATA / "detections" / RUNS[DETECTIONS][2]) if RUNS[DETECTIONS][2] else None
-BUNDLE = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "final" / "bundle"
+BUNDLE = paper_config.pipeline_path("detector")  # the pipeline's detector
 REC_2019 = paper_config.DATA_ROOT
-SIM_V4 = Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser() / "datasets" / "sim_v4"
-PP_EVAL = CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess"
+# the simulated dataset the detector was trained and tested on, and its
+# test-set evaluation after post-processing (eval_postprocess.py)
+SIM_DATASET = (Path(os.environ.get("CHIRP_FAST", str(CHIRP_DATA))).expanduser()
+               / paper_config.PIPELINE["sim_dataset"])
+PP_EVAL = paper_config.pipeline_path("sim_eval")
+# the analysis spectrogram stored with every snippet (``power_db``): the
+# three-window front end of pipeline v2 (205, 51 and 13 ms on one 4.88-Hz grid),
+# whatever the detector, so that the figures' spectrograms (the 205-ms channel,
+# the same in both front ends) and the detector-free chirp count of the
+# failure-mode figure C (the 51-ms channel) do not depend on the detector's input
+ANALYSIS_BUNDLE = CHIRP_DATA / paper_config.PIPELINES["v2"]["detector"]
 
 OUT = paper_config.PROCESSED / "v2_figures"  # created by main(), not at import
 
@@ -115,7 +114,8 @@ OUT = paper_config.PROCESSED / "v2_figures"  # created by main(), not at import
 # spectrogram itself always covers the front end's 500-1500 Hz), so that a
 # window chosen for a figure is set here, in one place
 SNIPPETS: dict[str, tuple] = {
-    # pipeline figure A: front end; two fish 29 Hz apart, a small and a big chirp
+    # pipeline figure, "recording" thumbnail (raw voltage; the former front-end
+    # panel, dropped 2026-11-27): two fish 29 Hz apart, a small and a big chirp
     "f1_fe_e": ("2020-06-05-10_00", 89.9, 91.1),
     # pipeline figure B: detection and assignment, 8.2 s (2245.2-2253.4 s)
     # with 13 chirps of both fish (author's choice of three candidates,
@@ -155,20 +155,9 @@ SNIPPETS: dict[str, tuple] = {
 # heights of long chirps
 CASE_HEIGHT_SNIPPETS = ("f3_long",)
 
-# front-end ablation figure (``frontends``): the dense chirp train of the
-# failure-mode figure C, detected by the released detector (three windows)
-# and by the single-window detector at the same training budget (the 205-ms
-# window in all three channels, epoch 16 of the continued ablation arm B;
-# experiments/ablation_scenarios), both with ``predict_span`` on the
-# production run's tile grid (tiles every 2.2 s from the recording's start)
-FRONTEND_SNIPPET = "f3_dense"
-FRONTEND_BUNDLES = {
-    "rgb": BUNDLE,
-    "single": CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_longonly_r1c" / "bundles" / "epoch_16",
-}
-FRONTEND_MARGIN_S = 2.0  # the predicted span reaches this far beyond the snippet
-
-# pipeline figure D: chirps of the f1_tile recording whose traces are extracted
+# pipeline figure (decoder panel): chirps of the f1_tile recording whose
+# traces are extracted, by their pipeline-v2 chirp_id (v2_examples.example_id
+# finds the selected run's box)
 TRACE_CHIRPS: dict[str, tuple[str, int]] = {
     "small": ("2020-05-29-10_00", 2085),
     "big": ("2020-05-29-10_00", 2086),
@@ -267,6 +256,8 @@ def snippets(names: list[str] | None = None) -> None:
 
     bundle = load_bundle(BUNDLE)
     config = bundle.spectrogram
+    analysis = load_bundle(ANALYSIS_BUNDLE)
+    same = Path(ANALYSIS_BUNDLE).resolve() == Path(BUNDLE).resolve()
     track_cache: dict[str, object] = {}
     for name, entry in SNIPPETS.items():
         if names and name not in names:
@@ -277,7 +268,16 @@ def snippets(names: list[str] | None = None) -> None:
         start, stop = span_bounds(bundle, fs, recording.n_samples, t0, t1)
         spec = span_spectrogram(bundle, recording, start, stop, device="cpu")
         img = normalize(spec, config).cpu().numpy().astype(np.float16)
-        power_db = to_db(spec.power.cpu().numpy())
+        if same:
+            aspec = spec
+        else:
+            if span_bounds(analysis, fs, recording.n_samples, t0, t1) != (start, stop):
+                raise RuntimeError(f"{name}: the analysis front end spans other samples")
+            aspec = span_spectrogram(analysis, recording, start, stop, device="cpu")
+            if not (np.array_equal(aspec.times_s, spec.times_s)
+                    and np.array_equal(aspec.freqs_hz, spec.freqs_hz)):
+                raise RuntimeError(f"{name}: analysis and detector spectrograms on other grids")
+        power_db = to_db(aspec.power.cpu().numpy())
         if rec_name not in track_cache:
             track_cache[rec_name] = _run_tracks(rec_name)
         tw = _tracks_window(track_cache[rec_name], t0 - 15.0, t1 + 15.0)
@@ -292,7 +292,9 @@ def snippets(names: list[str] | None = None) -> None:
             "dynamic_range_db": float(config.dynamic_range_db),
             "headroom_db": float(config.headroom_db),
             "power_db_unit": "dB re 1 V^2 (calibrated one-sided power, summed over electrodes)",
-            "windows_s": list(config.window_durations_s),
+            "windows_s": list(analysis.spectrogram.window_durations_s),  # of power_db
+            "detector_windows_s": list(config.window_durations_s),  # of img
+            "analysis_bundle": str(ANALYSIS_BUNDLE),
             "click_removal": bundle.preprocessing.get("click_removal") is not None
             and int(recording.n_channels) >= 9,
             "bundle": str(BUNDLE),
@@ -324,8 +326,9 @@ def traces() -> None:
     cfg = HarvestConfig()
     out: dict[str, np.ndarray] = {}
     meta: dict[str, dict] = {}
-    for key, (rec_name, chirp_id) in TRACE_CHIRPS.items():
+    for key, (rec_name, v2_id) in TRACE_CHIRPS.items():
         table = pd.read_parquet(RUN / rec_name / PARQUET)
+        chirp_id = example_id(table, rec_name, v2_id)
         row = table.set_index("chirp_id").loc[chirp_id]
         # the harvest uses the wavetracker tracks; with the gap-filled run this
         # is only valid if the chirp does not lie in a filled gap of its fish
@@ -520,7 +523,7 @@ def assign_baseline() -> None:
     from chirpdetector.postprocess import COLUMNS
     from gridtools.io import load_tracks
 
-    dataset = load_dataset(SIM_V4, check_files=False)
+    dataset = load_dataset(SIM_DATASET, check_files=False)
     ids = list(dataset.manifest.image_ids("test"))
     cache, tracks = {}, {}
     for image_id in ids:
@@ -580,60 +583,10 @@ def assign_baseline() -> None:
     print(out[["head_correct", "edge_correct", "edge_offset_correct"]].mean())
 
 
-def frontends() -> None:
-    """Detections of the failure-mode figure's dense chirp train by both front
-    ends (``FRONTEND_BUNDLES``): ``predict_span`` over the snippet plus
-    ``FRONTEND_MARGIN_S``, the span's start on the production run's tile grid,
-    score >= 0.05, post-processing flagged (rows kept), no tracks (the plot
-    assigns both models' detections alike). Also compares the released
-    detector's rows with the production run's (the plot reports the check).
-    ``<snippet>_frontends.parquet`` and ``.json``.
-    """
-    from chirpdetector.bundle import load_bundle
-    from chirpdetector.inference.spans import predict_span
-    from gridtools.io import open_recording
-
-    rec_name, t0, t1, _ = snippet_window(SNIPPETS[FRONTEND_SNIPPET])
-    recording = open_recording(REC_2019 / rec_name)
-    stride = None
-    frames, meta = [], {"snippet": FRONTEND_SNIPPET, "recording": rec_name, "models": {}}
-    for model, path in FRONTEND_BUNDLES.items():
-        bundle = load_bundle(path)
-        tiling = bundle.tiling
-        stride = tiling.tile_duration_s - tiling.overlap_s
-        a = np.floor((t0 - FRONTEND_MARGIN_S) / stride) * stride
-        b = t1 + FRONTEND_MARGIN_S
-        det = predict_span(bundle, recording, float(a), float(b), name=rec_name,
-                           score_threshold=0.05, device="cpu", postprocess=True,
-                           keep_dropped=True)
-        det = det.assign(model=model)
-        frames.append(det)
-        meta["models"][model] = {"bundle": str(path), "weights_sha256": bundle.weights_sha256,
-                                 "windows_s": list(bundle.spectrogram.window_durations_s),
-                                 "span_s": [float(a), float(b)], "n_rows": len(det)}
-        log.info("frontends %s: %d detections in %.2f-%.2f s", model, len(det), a, b)
-    out = pd.concat(frames, ignore_index=True)
-    # the released detector here vs the production run, inside the snippet
-    prod = pd.read_parquet(RUN / rec_name / PARQUET)
-    inside = (lambda d: d[((d.t_start_s + d.t_end_s) / 2 >= t0)
-                          & ((d.t_start_s + d.t_end_s) / 2 <= t1) & (d.score >= 0.5)])
-    p, r = inside(prod), inside(out[out.model == "rgb"])
-    pc, rc = np.sort((p.t_start_s + p.t_end_s).to_numpy() / 2), np.sort((r.t_start_s + r.t_end_s).to_numpy() / 2)
-    meta["check_rgb_vs_production"] = {
-        "n_production": len(p), "n_here": len(r),
-        "max_centre_diff_s": float(np.max(np.abs(pc - rc))) if len(pc) == len(rc) and len(pc) else None,
-    }
-    log.info("frontends: released detector here %d vs production %d boxes (score >= 0.5) in the snippet",
-             len(r), len(p))
-    out.to_parquet(OUT / f"{FRONTEND_SNIPPET}_frontends.parquet")
-    (OUT / f"{FRONTEND_SNIPPET}_frontends.json").write_text(json.dumps(meta, indent=1) + "\n")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("steps", nargs="+",
-                        choices=["snippets", "traces", "raw", "case-heights", "assign-baseline",
-                                 "frontends"])
+                        choices=["snippets", "traces", "raw", "case-heights", "assign-baseline"])
     parser.add_argument("--only", nargs="*", help="snippet names (default: all)")
     parser.add_argument(
         "--window", nargs="+", action="append", default=[],
@@ -663,8 +616,6 @@ def main() -> None:
             raw()
         elif step == "case-heights":
             case_heights()
-        elif step == "frontends":
-            frontends()
         else:
             assign_baseline()
 

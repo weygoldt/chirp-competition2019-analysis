@@ -55,22 +55,13 @@ CHIRP_DATA = paper_config.CHIRP_DATA  # env CHIRP_DATA (default /mnt/data1/chirp
 # at another operating threshold. Per run: directory, chirp table, and the run
 # whose tracks_gapfill.npz holds the patched trial-fish tracks (None: the
 # wavetracker tracks as they are)
-# The chirp tables are those of the *_recal1 runs (2026-11-27): the same
-# detections with the chirp parameters of the decoder recalibrated without the
-# octave-error templates (experiments/production/recalibrate_params.py; the
-# trial directories hold copies of them).
-RUNS = {
-    "rtdetr": ("competition2019_v2_20261113_recal1", "chirps_rtdetr.parquet", None),
-    "rtdetr_gapfill": ("competition2019_v2_20261113_gapfill_recal1",
-                       "chirps_rtdetr_gapfill.parquet",
-                       "competition2019_v2_20261113_gapfill"),
-    "rtdetr_gapfill_t080": ("competition2019_v2_20261113_gapfill_t080_recal1",
-                            "chirps_rtdetr_gapfill_t080.parquet",
-                            "competition2019_v2_20261113_gapfill"),
-}
+# Both pipelines' runs (paper_config.PIPELINES: v2 = the released three-window
+# detector, its chirp tables those of the *_recal1 runs; sw = the single-window
+# detector since 2026-11-27); PAPER_DETECTIONS selects one.
+RUNS = paper_config.RUNS
 DETECTIONS = paper_config.DETECTIONS
 # the production run itself (track_gaps/, qc/, windows/ live only there)
-SOURCE_RUN = CHIRP_DATA / "detections" / "competition2019_v2_20261113"
+SOURCE_RUN = paper_config.pipeline_path("source_run")
 RUN = CHIRP_DATA / "detections" / RUNS[DETECTIONS][0]
 PARQUET = RUNS[DETECTIONS][1]
 TRACKS_RUN = (CHIRP_DATA / "detections" / RUNS[DETECTIONS][2]) if RUNS[DETECTIONS][2] else None
@@ -114,16 +105,20 @@ def tile_duration_s() -> float:
         raise ValueError(msg)
     return float(values.pop())
 REAL_EVAL = CHIRP_DATA / "eval" / "real_labels_365"
-REAL_LABELS = REAL_EVAL / "labels"
+REAL_LABELS = REAL_EVAL / "labels"  # the hand labels (detector-independent)
+# the selected pipeline's detector ("dualhead": the production detector, either
+# pipeline) and the YOLO26s reference: their simulated-test evaluations
 PP_EVAL = {
-    "dualhead": CHIRP_DATA / "runs" / "dualhead_r18_sim_v4_r1" / "eval_postprocess",
+    "dualhead": paper_config.pipeline_path("sim_eval"),
     "yolo26s": CHIRP_DATA / "runs" / "yolo26s_sim_v4_r1" / "eval_postprocess",
 }
-BENCHMARK = CHIRP_DATA / "labels" / "benchmark" / "report_v2"
-# The chirp-parameter decoder's evaluation: the bundle recalibrated without the
-# octave-error template of the validation split (same weights as
-# v4-dualhead-sim-v4-r2; chirpdetector train params-recalibrate, 2026-11-27).
-DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" / "bundle" / "eval"
+BENCHMARK = paper_config.pipeline_path("benchmark")
+BENCHMARK_MODEL = paper_config.PIPELINE["benchmark_model"]  # the detector's name in it
+REAL_SESSION = paper_config.pipeline_path("real_session")
+# The chirp-parameter decoder's evaluation (the pipeline's decoder; both are
+# calibrated without the octave-error template of the validation split,
+# chirpdetector train params-recalibrate, 2026-11-27).
+DECODER_EVAL = paper_config.pipeline_path("decoder") / "eval"
 # Template library v4: chirp-chamber templates whose zero-crossing frequency
 # trace reads twice the baseline EODf during the chirp (octave error; plateau /
 # baseline 1.006-1.014, every other big template 0.2-0.78): 61 (train split),

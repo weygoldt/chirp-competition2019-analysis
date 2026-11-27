@@ -2,9 +2,11 @@
 
 Reads the stats files that the analysis modules write (``write_stats``,
 ``paper/output/<run>/stats/<namespace>.json``) for several
-``PAPER_DETECTIONS`` values (``rtdetr`` = v2 as produced, ``rtdetr_gapfill`` =
-v2 with the trial fish's track gaps filled, ``rtdetr_gapfill_t080`` = the same
-at the manuscript's operating threshold 0.8, ``rtdetr_gapfill_t090`` = at 0.9)
+``PAPER_DETECTIONS`` values (``rtdetr_sw`` = the single-window detector as
+produced, ``rtdetr_sw_gapfill`` = with the trial fish's track gaps filled,
+``rtdetr_sw_gapfill_t080`` = the same at the manuscript's operating threshold
+0.8, ``rtdetr_sw_gapfill_t090`` = at 0.9; ``rtdetr*`` without ``_sw`` = the same
+for pipeline v2, the three-window detector before 2026-11-27)
 and writes ``paper/output/compare/comparison.md``: one table per namespace,
 one row per number, one column per run. The v1 chirp counts are in the
 ``counts`` namespace (written by ``compare_detection_counts.py``).
@@ -19,9 +21,13 @@ import json
 from pathlib import Path
 
 RUNS = [
+    ("rtdetr_sw", "single window, 0.5"),
+    ("rtdetr_sw_gapfill", "single window gap-filled, 0.5"),
+    ("rtdetr_sw_gapfill_t080", "single window gap-filled, 0.8 (primary)"),
+    ("rtdetr_sw_gapfill_t090", "single window gap-filled, 0.9"),
     ("rtdetr", "v2, 0.5"),
     ("rtdetr_gapfill", "v2 gap-filled, 0.5"),
-    ("rtdetr_gapfill_t080", "v2 gap-filled, 0.8 (primary)"),
+    ("rtdetr_gapfill_t080", "v2 gap-filled, 0.8 (primary until 2026-11-27)"),
     ("rtdetr_gapfill_t090", "v2 gap-filled, 0.9"),
 ]
 ROOT = Path(__file__).resolve().parents[1] / "output"

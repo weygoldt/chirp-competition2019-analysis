@@ -39,10 +39,10 @@ make paper-test                      # loader tests (from the repository root)
 | variable | default | meaning |
 |---|---|---|
 | `CHIRP_REC_2019` | `/mnt/data2/2019_tube_competition` | recordings, tracks, BORIS, LED files, `trial_summary.csv`, detections |
-| `PAPER_DETECTIONS` | `rtdetr` | which `chirp_{times,ids}_<x>.npy` the analysis reads (`rtdetr` = v2, `rcnn` = v1) |
+| `PAPER_DETECTIONS` | `rtdetr` | which `chirp_{times,ids}_<x>.npy` the analysis reads (`rtdetr_sw...` = the single-window detector, production since 2026-11-27; `rtdetr...` = pipeline v2, the three-window detector; `rcnn` = v1). The pipeline's models, runs and evaluations: `paper_config.PIPELINES` |
 | `PAPER_OUT` | `paper/output/$PAPER_DETECTIONS` | intermediates (`data/processed/`), figures (`figures/`), logs (`logs/`), `report/` |
 | `CHIRP_ROOT_PY` | `<repo>/.venv/bin/python` | root environment (chirpdetector, gridtools) for `v2_fig_extract.py` and `v2_assign_params.py` |
-| `PAPER_PRIMARY` | `rtdetr_gapfill_t080` | the primary run: its figures go into the manuscript, its loser chirp-rate peak sets the window around chase offsets for every run |
+| `PAPER_PRIMARY` | `rtdetr_sw_gapfill_t080` | the primary run: its figures go into the manuscript, its loser chirp-rate peak sets the window around chase offsets for every run |
 | `PAPER_OFFSET_WINDOW` | unset | **testing only**: e.g. `-3,13` replaces the window around chase offsets (s); stats written with it are refused by `collect` |
 
 `run.sh` runs a step in the paper environment with the output root as
@@ -77,7 +77,6 @@ Intermediates are under `$PAPER_OUT/data/processed/`. Chains are the
 | `fig:pipeline` (`plot_v2_pipeline_explainer`; replaced v1's `fig:chirp_assignment`) | v2figs | `v2_fig_extract snippets traces` (root env), plot | `v2_figures/` |
 | `fig:performance` (`plot_v2_performance`; replaced `fig:performances_supp_full`) | v2figs | `v2_fig_extract assign-baseline`, `v2_assign_params` (simulator truth of the simulated test chirps: the true positives, and every chirp label with whether it was detected at the operating threshold; both root env), plot | `v2_figures/`, evaluation outputs and simulated scenes under `$CHIRP_DATA` |
 | `fig:failure_modes` (`plot_v2_failure_modes`, Fig. S4; replaced `fig:performances_supp`) | v2figs | plot | `v2_figures/` |
-| `fig:frontend_ablation` (`plot_v2_frontend_ablation`, supplement; new 2026-11-26) | v2figs | `v2_fig_extract frontends` (root env: failure-mode C's chirp train detected by the released detector and by the single-window ablation detector at the same training budget), plot (reads the benchmark's per-label table `$CHIRP_DATA/runs/ablation_frontend/scenarios/paper/bench_labels.parquet`, sha256 checked; made by `experiments/ablation_scenarios/export_for_paper.py`, report `$CHIRP_DATA/runs/ablation_frontend/scenarios/REPORT.md`) | `v2_figures/f3_dense_frontends.parquet` |
 | `fig:chase_validation` (`plot_chase_validation`, supplement; new 2026-11-24) | validation | `chase_validation` (the author's re-labelled chases vs BORIS), `stats_bayesian_logreg_loser_chirping_starts_before_chasing_offset`, `chase_validation_motion` (reads the videos), `chase_validation_rates` (Fig. 6's loser rates, `chase_event_rates`, for the median-shifted and the re-labelled chases; needs chain rates), plot | `chase_validation/`, `offset_chirp_start/` |
 | pipeline numbers of the Methods (no figure) | v2figs | `summarize_pipeline` (templates, scenes, expert benchmark, real-data session, production run, from their result files under `$CHIRP_DATA`) | — |
 | reported posterior numbers (no figure) | echo, hurdle, posteriors | `summarize_chirp_event_correlation_around_{winner,loser}_chirps`, `stats_bayesian_logreg_echo_responses_new`, `stats_bayesian_logreg_loser_chirps_around_chasing_offset`, `make_chirps_around_chasing_obs` (reconstructed writer, audit O5; its only reader, the 10-s before/after regression, was replaced on 2026-11-24 by the chirping-starts-before-offset test of chain validation), `summarize_reported_posteriors` | `reported_posteriors_median_hdi.csv` |
@@ -214,11 +213,11 @@ Reports: `REPORT_t080.md` (primary run at the operating threshold 0.8, with the 
 ## Figures into the manuscript
 
 `paper/export_figures.sh [--dry-run]` copies the figure PDFs of the primary
-run (`PAPER_PRIMARY`, default `rtdetr_gapfill_t080`: gap-filled detections at
-the operating threshold 0.8) into `manuscript/figures/`. It is the only way
+run (`PAPER_PRIMARY`, default `rtdetr_sw_gapfill_t080`: gap-filled detections of
+the single-window detector at the operating threshold 0.8) into `manuscript/figures/`. It is the only way
 figures enter the manuscript: the analysis scripts cannot write there
-(`paper_config.py` refuses), and the sensitivity runs (`rtdetr_gapfill` at
-0.5, `rtdetr_gapfill_t090`) never do. Identical files are skipped; files in
+(`paper_config.py` refuses), and the sensitivity runs (`rtdetr_sw_gapfill` at
+0.5, `rtdetr_sw_gapfill_t090`) never do. Identical files are skipped; files in
 `manuscript/figures/` that are not in its list are left alone. Commit the
 result in the manuscript submodule, then the submodule pointer here.
 
@@ -262,11 +261,11 @@ script owns each namespace:
 
 ```sh
 paper/run_all.sh                                          # writes $PAPER_OUT/stats/
-python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t080   # -> manuscript/stats.json
+python3 paper/scripts/manuscript_stats.py collect rtdetr_sw_gapfill_t080   # -> manuscript/stats.json
 python3 paper/scripts/manuscript_stats.py check                         # what changed since
 # the sensitivity runs of Table S1 (detection thresholds 0.5 and 0.9)
-python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill --out manuscript/stats_t050.json
-python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t090 --out manuscript/stats_t090.json
+python3 paper/scripts/manuscript_stats.py collect rtdetr_sw_gapfill --out manuscript/stats_t050.json
+python3 paper/scripts/manuscript_stats.py collect rtdetr_sw_gapfill_t090 --out manuscript/stats_t090.json
 ```
 
 `collect` refuses stats written by uncommitted code in `paper/scripts`;

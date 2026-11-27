@@ -62,6 +62,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--data", type=Path, default=REC_2019)
     ap.add_argument("--out", type=Path, default=DATA / "detections" / "competition2019_v2_20261113" / "track_gaps")
+    ap.add_argument(
+        "--suffix",
+        default="",
+        help="read the copies chirps_rtdetr<suffix>.parquet / _meta.json of the recording "
+        "directories (default: the v2 production run's; _sw: the single-window run's, with "
+        "--out $CHIRP_DATA/detections/competition2019_v3/track_gaps)",
+    )
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -70,10 +77,10 @@ def main() -> None:
     for _, row in ts.iterrows():
         rec = row["recording"]
         rec_dir = args.data / rec
-        meta = json.loads((rec_dir / "chirps_rtdetr_meta.json").read_text())
+        meta = json.loads((rec_dir / f"chirps_rtdetr{args.suffix}_meta.json").read_text())
         duration = float(meta["inputs"]["duration_s"])
         analysed = (row["draw"] == 0) and rec not in BAD_RECORDINGS
-        chirps = pd.read_parquet(rec_dir / "chirps_rtdetr.parquet")
+        chirps = pd.read_parquet(rec_dir / f"chirps_rtdetr{args.suffix}.parquet")
         chirps = chirps[chirps["chirp"]]
         fish = {"winner": row["win_ID"], "loser": row["lose_ID"]}
         tracks = {k: track(rec_dir, v) for k, v in fish.items()}

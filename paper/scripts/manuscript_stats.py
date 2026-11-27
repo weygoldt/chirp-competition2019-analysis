@@ -12,7 +12,7 @@ builds on numbers that no longer match the analysis outputs.
 
 Standard library only: ``check`` runs outside the paper environment.
 
-    python3 paper/scripts/manuscript_stats.py collect rtdetr_gapfill_t080
+    python3 paper/scripts/manuscript_stats.py collect rtdetr_sw_gapfill_t080
     python3 paper/scripts/manuscript_stats.py check manuscript/stats.json
 """
 
@@ -182,7 +182,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("collect", help="merge the stats files of a run into stats.json")
-    p.add_argument("run", help="output directory under paper/output, e.g. rtdetr_gapfill_t080")
+    p.add_argument("run", help="output directory under paper/output, e.g. rtdetr_sw_gapfill_t080")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p = sub.add_parser("check", help="fail if a stats.json differs from its run's stats files")
     p.add_argument("paths", type=Path, nargs="*", default=[DEFAULT_OUT])

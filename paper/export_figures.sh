@@ -3,11 +3,11 @@
 # The only way figures enter the manuscript; sensitivity runs never do.
 #
 #   paper/export_figures.sh [--dry-run]
-#   PAPER_PRIMARY=rtdetr_gapfill_t080 paper/export_figures.sh
+#   PAPER_PRIMARY=rtdetr_sw_gapfill_t080 paper/export_figures.sh
 set -euo pipefail
 PAPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$PAPER/.." && pwd)"
-PRIMARY=${PAPER_PRIMARY:-rtdetr_gapfill_t080}
+PRIMARY=${PAPER_PRIMARY:-rtdetr_sw_gapfill_t080}
 SRC="$PAPER/output/$PRIMARY/figures"
 DST="$REPO/manuscript/figures"
 DRY=0; [[ ${1:-} == --dry-run ]] && DRY=1
@@ -27,7 +27,6 @@ FIGS=(
   plot_v2_pipeline_explainer
   plot_v2_performance
   plot_v2_failure_modes
-  plot_v2_frontend_ablation
   plot_chase_validation
 )
 [[ -d $DST ]] || { echo "no $DST (git submodule update --init manuscript)" >&2; exit 2; }

@@ -16,18 +16,20 @@ import json
 import numpy as np
 
 from manuscript_stats import write_stats
-from paper_config import CHIRP_DATA
+from paper_config import CHIRP_DATA, pipeline_path
 
 TEMPLATES = CHIRP_DATA / "templates" / "v4"
 BACKGROUND = CHIRP_DATA / "background" / "v2" / "manifest.csv"
-DATASET = CHIRP_DATA / "datasets" / "sim_v4" / "diagnostics" / "counts.json"
-BENCHMARK = CHIRP_DATA / "labels" / "benchmark" / "report_v2" / "metrics.json"
-REAL = CHIRP_DATA / "labels" / "real_v1" / "report"
-PRODUCTION = CHIRP_DATA / "detections" / "competition2019_v2_20261113"  # the run all analyses derive from
-# the chirp-parameter decoder, recalibrated without the octave-error template of its
-# validation split (same weights as v4-dualhead-sim-v4-r2; 2026-11-27)
-DECODER = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" / "bundle"
-TRAIN_SCENES = CHIRP_DATA / "scenes" / "train_v4"
+# the selected pipeline's (paper_config.PIPELINES, by PAPER_DETECTIONS): its
+# detector's dataset, blind benchmark, real-recording session, production run
+# (the run all analyses derive from), chirp-parameter decoder (recalibrated
+# without the octave-error template of its validation split) and training scenes
+DATASET = pipeline_path("sim_dataset") / "diagnostics" / "counts.json"
+BENCHMARK = pipeline_path("benchmark") / "metrics.json"
+REAL = pipeline_path("real_session")
+PRODUCTION = pipeline_path("source_run")
+DECODER = pipeline_path("decoder")
+TRAIN_SCENES = pipeline_path("train_scenes")
 # the template-library flags the simulator excludes (scenes' chirps.exclude)
 EXCLUDE = ("has_nan", "truncated", "step_flag", "too_short", "brief_cycles", "ripple_flag",
            "multi_peak", "line_in_span", "baseline_drift", "low_snr", "decay_interrupted")
