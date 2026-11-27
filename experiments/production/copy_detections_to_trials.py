@@ -30,6 +30,14 @@ Idempotent and conservative, because the recording directories hold raw data:
   the script reports it and exits non-zero;
 - files are created with exclusive create (``open(..., "xb")``), so nothing
   is ever overwritten, moved or deleted in a recording directory;
+- the one exception is ``--replace-from OLD_RUN``, for a run that supersedes
+  OLD_RUN's copies under the same names (author's decision 2026-11-27 for the
+  recalibrated chirp parameters, ``recalibrate_params.py``): a destination
+  with different content is replaced only if it is byte-identical to OLD_RUN's
+  file of the same name, i.e. exactly the copy being superseded (OLD_RUN, the
+  archive, keeps it). The new file is written to an exclusive temporary file
+  next to it, checked and renamed over it; the manifest records the replaced
+  file's sha256;
 - recording directories are never created; a missing one is an error;
 - before writing, the free space of the destination must exceed the bytes
   still to copy plus 1 GiB, otherwise the script stops before the first write.
@@ -55,6 +63,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -106,9 +115,13 @@ def check_counts(rec_dir: Path, meta: dict, suffix: str = "") -> list[str]:
     ids = np.load(rec_dir / f"chirp_ids_rtdetr{suffix}.npy")
     if not (len(times) == len(ids) == n_legacy):
         problems.append(f"legacy arrays {len(times)}/{len(ids)} != legacy.n {n_legacy}")
-    table = pq.read_table(rec_dir / f"chirps_rtdetr{suffix}.parquet", columns=["chirp", "track_id"])
+    table = pq.read_table(
+        rec_dir / f"chirps_rtdetr{suffix}.parquet", columns=["chirp", "track_id"]
+    )
     if table.num_rows != int(meta["counts"]["stored"]):
-        problems.append(f"parquet rows {table.num_rows} != counts.stored {meta['counts']['stored']}")
+        problems.append(
+            f"parquet rows {table.num_rows} != counts.stored {meta['counts']['stored']}"
+        )
     df = table.to_pandas()
     n_keep = int((df["chirp"] & df["track_id"].notna()).sum())
     if n_keep != n_legacy:
@@ -119,14 +132,24 @@ def check_counts(rec_dir: Path, meta: dict, suffix: str = "") -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
-        "--run", type=Path, default=DATA / "detections" / "competition2019_v2_20261113",
+        "--run",
+        type=Path,
+        default=DATA / "detections" / "competition2019_v2_20261113",
         help="source run directory",
     )
     ap.add_argument(
-        "--suffix", default="",
+        "--suffix",
+        default="",
         help="suffix of the run's file names, e.g. _gapfill (default: none)",
     )
     ap.add_argument("--dest", type=Path, default=REC_2019)
+    ap.add_argument(
+        "--replace-from",
+        type=Path,
+        default=None,
+        help="run whose copies this run supersedes: a destination byte-identical "
+        "to that run's file is replaced (module docstring)",
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_-]*", args.suffix):
@@ -135,11 +158,10 @@ def main() -> int:
     names = files(args.suffix)
 
     recs = sorted(
-        p.name
-        for p in args.run.iterdir()
-        if p.is_dir() and (p / "meta.json").is_file()
+        p.name for p in args.run.iterdir() if p.is_dir() and (p / "meta.json").is_file()
     )
     plan, conflicts, missing = [], [], []
+    superseded: dict[str, str] = {}  # destination -> sha256 of the copy it replaces
     for rec in recs:
         meta = json.loads((args.run / rec / "meta.json").read_text())
         if meta.get("status") != "complete":
@@ -153,8 +175,17 @@ def main() -> int:
             src, dst = args.run / rec / src_name, dest_dir / dst_name
             digest = sha256(src)
             if dst.exists():
-                if sha256(dst) == digest:
+                current = sha256(dst)
+                old = (
+                    None
+                    if args.replace_from is None
+                    else args.replace_from / rec / src_name
+                )
+                if current == digest:
                     plan.append((rec, src, dst, digest, "present"))
+                elif old is not None and old.is_file() and sha256(old) == current:
+                    plan.append((rec, src, dst, digest, "replace"))
+                    superseded[str(dst)] = current
                 else:
                     conflicts.append(f"{dst} exists with different content")
             else:
@@ -168,12 +199,14 @@ def main() -> int:
         print("nothing written")
         return 1
 
-    to_copy = [p for p in plan if p[4] == "copy"]
+    to_copy = [p for p in plan if p[4] in ("copy", "replace")]
+    n_replace = sum(p[4] == "replace" for p in plan)
     need = sum(p[1].stat().st_size for p in to_copy)
     free = shutil.disk_usage(args.dest).free
     print(
         f"{len(recs)} recordings, {len(plan)} files: {len(to_copy)} to copy "
-        f"({need / 1e6:.1f} MB), {len(plan) - len(to_copy)} already present; "
+        f"({n_replace} of them replacing copies of {args.replace_from}; "
+        f"{need / 1e6:.1f} MB), {len(plan) - len(to_copy)} already present; "
         f"{free / 1e9:.0f} GB free on {args.dest}"
     )
     if free < need + MARGIN_BYTES:
@@ -188,7 +221,7 @@ def main() -> int:
         with manifest.open() as f:
             lines = [ln for ln in f if not ln.startswith("#")]
         previous = {
-            (r["destination"], r["sha256"]): r["copied_at"]
+            (r["destination"], r["sha256"]): r
             for r in csv.DictReader(lines)
             if r.get("copied_at")
         }
@@ -199,11 +232,26 @@ def main() -> int:
         if action == "copy":
             copy_exclusive(src, dst)
             action, copied_at = "copied", now
+        elif action == "replace":
+            tmp = dst.with_name(f".{dst.name}.replacing")
+            copy_exclusive(src, tmp)
+            if sha256(tmp) != digest:
+                tmp.unlink()
+                failed.append(
+                    f"{dst}: the replacement did not copy intact; left as it was"
+                )
+                continue
+            os.replace(tmp, dst)
+            action, copied_at = "replaced", now
         else:
             # not in an earlier manifest: the inode change time is the copy time
             # (copystat keeps the source mtime; nothing else touches these files)
-            ctime = datetime.fromtimestamp(dst.stat().st_ctime).isoformat(timespec="seconds")
-            copied_at = previous.get((str(dst), digest), ctime)
+            ctime = datetime.fromtimestamp(dst.stat().st_ctime).isoformat(
+                timespec="seconds"
+            )
+            earlier = previous.get((str(dst), digest), {})
+            copied_at = earlier.get("copied_at", ctime)
+            superseded.setdefault(str(dst), earlier.get("replaced_sha256") or "")
         got = sha256(dst)
         if got != digest:
             failed.append(f"{dst}: sha256 {got} != source {digest}")
@@ -217,11 +265,14 @@ def main() -> int:
                 "destination": str(dst),
                 "action": action,
                 "copied_at": copied_at,
+                "replaced_sha256": superseded.get(str(dst), ""),
             }
         )
     for rec in recs:
         meta = json.loads((args.run / rec / "meta.json").read_text())
-        failed += [f"{rec}: {p}" for p in check_counts(args.dest / rec, meta, args.suffix)]
+        failed += [
+            f"{rec}: {p}" for p in check_counts(args.dest / rec, meta, args.suffix)
+        ]
 
     with manifest.open("w", newline="") as f:
         f.write(f"# written {now} by {Path(__file__).name}\n")
@@ -229,7 +280,11 @@ def main() -> int:
         w.writeheader()
         w.writerows(rows)
     n_copied = sum(r["action"] == "copied" for r in rows)
-    print(f"copied {n_copied}, already present {len(rows) - n_copied}; manifest {manifest}")
+    n_replaced = sum(r["action"] == "replaced" for r in rows)
+    print(
+        f"copied {n_copied}, replaced {n_replaced}, already present "
+        f"{len(rows) - n_copied - n_replaced}; manifest {manifest}"
+    )
     for msg in failed:
         print(f"ERROR: {msg}")
     return 1 if failed else 0
