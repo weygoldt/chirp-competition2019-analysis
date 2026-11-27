@@ -1,12 +1,19 @@
-"""Candidate examples for Figs. 9B (duplicate) and S4A (missed labelled chirp) in a run.
+"""Candidate examples for Figs. 9B (harmonic copy, duplicate) and S4A (missed labelled chirp) in a run.
 
 The examples of the pipeline-v2 figures were chosen among v2's detections; under
 the single-window detector (production since 2026-11-27) two of them no longer
-hold: the duplicate pair of Fig. 9B is kept as two chirps, and the labelled chirp
-that v2 missed in Fig. S4A is detected. This lists candidates of both kinds in the
+hold: the harmonic copy of Fig. 9B scores below the operating threshold, the
+duplicate pair is kept as two chirps, and the labelled chirp that v2 missed in
+Fig. S4A is detected. This lists candidates of each kind in the
 run of PAPER_DETECTIONS, for the author to choose from (rendered with
 ``v2_fig_extract.py snippets --window`` and the figures):
 
+``harmonics``
+    Rows removed as harmonic copies (``pp_drop_reason == "harmonic"``) at the
+    operating threshold with a kept chirp at the same time (centres within
+    30 ms) whose box lies at half the frequencies (lower edge 0.4-0.6 of the
+    copy's), in the analysed trials' dark phase; ranked by the copy's score.
+    One per recording, a 0.6-s window (as Fig. 9B).
 ``duplicates``
     Rows removed as duplicates (``pp_drop_reason == "duplicate"``) at the
     operating threshold whose kept twin (``pp_duplicate_of``) is a chirp, in
@@ -41,6 +48,31 @@ def regions(recording: str) -> pd.DataFrame:
             / "traces-grid1-editable-labels.csv")
     lab = pd.read_csv(path)
     return lab[lab["category"] == "labeled_region"]
+
+
+def harmonics() -> pd.DataFrame:
+    rows = []
+    for rec in sorted(C.analysed_recordings()):
+        d = C.detections(rec)
+        chirps = d[d["chirp"]]
+        harm = d[(d["pp_drop_reason"] == "harmonic") & d["operating"]
+                 & (d["t_center_s"] < DARK_PHASE_S)]
+        for r in harm.itertuples():
+            f = chirps[((chirps.t_center_s - r.t_center_s).abs() < 0.03)
+                       & (chirps.f_low_hz > 0.4 * r.f_low_hz) & (chirps.f_low_hz < 0.6 * r.f_low_hz)]
+            if f.empty:
+                continue
+            fund = f.iloc[0]
+            rows.append({"recording": rec, "fundamental": int(fund.chirp_id), "harmonic": int(r.chirp_id),
+                         "fundamental_score": float(fund.score), "harmonic_score": float(r.score),
+                         "fundamental_box_hz": (round(float(fund.f_low_hz)), round(float(fund.f_high_hz))),
+                         "harmonic_box_hz": (round(r.f_low_hz), round(r.f_high_hz)),
+                         "t0": round(r.t_center_s - 0.3, 2), "t1": round(r.t_center_s + 0.3, 2)})
+    t = pd.DataFrame(rows)
+    if t.empty:
+        return t
+    t = t.sort_values("harmonic_score", ascending=False)
+    return t.groupby("recording").head(1).reset_index(drop=True)
 
 
 def duplicates() -> pd.DataFrame:
@@ -112,6 +144,8 @@ def missed() -> pd.DataFrame:
 def main() -> None:
     pd.set_option("display.width", 200)
     print(f"run {C.RUN} (operating threshold {C.OPERATING})")
+    print("\nharmonic copies (one per recording, best first):")
+    print(harmonics().head(12).to_string())
     print("\nduplicates (one per recording, best first):")
     print(duplicates().head(12).to_string())
     print("\nmissed labelled chirps (best windows first):")
