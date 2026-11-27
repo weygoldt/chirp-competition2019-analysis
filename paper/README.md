@@ -278,3 +278,31 @@ cannot build on numbers that no longer match the outputs; `#stat(…, run:
 files in the manuscript submodule, then the submodule pointer here. `compare_runs.py` tabulates the same stats files across the
 runs (0.5, 0.8, 0.9) in `paper/output/compare/comparison.md`.
 
+
+## Derived-data package
+
+`python3 paper/scripts/build_data_package.py OUT [--dry-run]` collects every
+input of the analyses except the raw recordings, the videos and the caches
+computed from them (about 1.7 TB) into one folder of about 4.5 GB: per
+recording the wavetracker tracks (without `sign_v`), the detections of the
+three threshold runs (from the `*_recal1` runs; the trial-folder copies must be
+identical or the build stops), rises, grid configuration, BORIS annotations,
+LED synchronization and video frame times; the trial and fish metadata; the
+re-labeled chases and the Fig. 1 extractions (`inputs/`); and the data of the
+detection pipeline at their `$CHIRP_DATA` paths (`pipeline/`: chirp templates,
+detection metadata, gap-filled tracks, evaluation outputs, simulated test
+scenes and training chirps, dataset manifests, decoder evaluation, expert
+labels). It writes `README.md` (layout and file descriptions), `MANIFEST.tsv`
+(sha256 of every file), `package.json` (sources, commits, counts) and
+`recordings/recordings.csv` (durations, from the detection metadata). Run it
+from the main checkout (it reads the git-ignored `paper/inputs/`; elsewhere set
+`PAPER_INPUTS`). It is safe to rerun when the data change: only changed files
+are copied, `--prune` deletes files that are no longer part of the package,
+`--verify` re-hashes the package against its manifest.
+
+To run the analyses on the package instead of the original data:
+`CHIRP_REC_2019=<package>/recordings CHIRP_DATA=<package>/pipeline
+PAPER_INPUTS=<package>/inputs`. Steps that read raw recordings, videos or
+spectrogram caches (example chirps of Fig. 3, the overview spectrogram, the
+video motion of the chase-timing figure, the raw windows of the v2 pipeline
+figures) cannot run on it; the package README lists them.

@@ -279,6 +279,15 @@ with gap-filled tracks); only the operating threshold, and with it the
   recording time with the LED flashes (`LED_frames.npy`, `led_idxs.csv`), as
   described in the paper's Methods.
 - **Not included.** {excluded}.
+- **What needs the raw data.** A few figure steps read raw recordings, videos or
+  spectrograms and cannot run on this package: the example chirps of the
+  chirp-parameter figure, the competition overview spectrogram, the video motion
+  of the chase-timing figure, and the raw windows of the pipeline explainer,
+  failure-mode and front-end ablation figures. The recording durations, which
+  the analysis otherwise reads from the raw files, are in
+  `recordings/recordings.csv`. `pipeline/datasets/sim_v4/dataset.json` records the
+  original absolute paths of the simulated scenes (they are part of its content
+  hash); the scenes themselves are under `pipeline/scenes/train_v4/`.
 - **Running the analyses on this package.** Point the analysis code at it:
   `CHIRP_REC_2019=<package>/recordings`, `CHIRP_DATA=<package>/pipeline` and
   `PAPER_INPUTS=<package>/inputs`, then follow the analysis repository's README.
