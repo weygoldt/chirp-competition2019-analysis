@@ -65,7 +65,8 @@ I-K Chirp-parameter decoder for boxes at the operating threshold on the
     the points' densities (densest on top; the scale starts above the
     palest mint so that sparse points stay visible); a very thin light-grey
     dashed contour encloses the densest 95 % of the chirps (the KDE level
-    that 95 % of the points exceed). Limits fit the data after the octave
+    that 95 % of the points exceed; one key for I-K in I's upper left:
+    author, 2026-11-27). Limits fit the data after the octave
     fix: I 20-800 Hz, J 1.5-600 ms, K 3-700 ms (``n_beyond_axes``: 0). The
     test split's octave-error template
     (``v2_fig_common.OCTAVE_TEMPLATES``: a frequency trace at twice the
@@ -702,6 +703,18 @@ def decoder_panel(ax, sim, param, scale, unit, lims, ticks, report):
     return out
 
 
+def decoder_legend(ax):
+    """The key of I-K (they share it): the 95 % region and the identity, in I's empty upper left."""
+    share = rf"{round(100 * DECODER_REGION)}\,\%"
+    handles = [
+        Line2D([], [], color=REGION_COLOR, lw=REGION_LW, ls=REGION_LS,
+               label=f"{share} of chirps"),
+        Line2D([], [], color="k", lw=REF_LW, ls=(0, (3, 2)), label="Identity"),
+    ]
+    ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(-0.02, 1.04), frameon=False,
+              handlelength=2.2, handletextpad=0.5, borderaxespad=0.1, labelspacing=0.3)
+
+
 def main() -> None:
     set_light_style()
     C.rc_tweaks()
@@ -770,6 +783,7 @@ def main() -> None:
     ax_j.set_ylabel("Estimated FWHM [ms]")
     ax_k.set_xlabel(r"True 10\,\% width [ms]")
     ax_k.set_ylabel("Estimated\n" r"10\,\% width [ms]")  # two lines: longer than the square
+    decoder_legend(ax_i)  # one key for I-K (author, 2026-11-27)
 
     # --- key, group headings, letters ---------------------------------------------
     fig.legend(handles=series_handles({m: {**SERIES[m], "label": LABELS[m]}
