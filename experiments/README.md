@@ -139,6 +139,20 @@ in [ablation_scenarios/README.md](ablation_scenarios/README.md).
 `gallery_contact_sheet.png`), `upper_bound_cases.py`: everything in
 `$CHIRP_DATA/runs/reattribution_report/` (`report.md`).
 
+### Production switch v3 (`production_v3/`, 2026-11-27)
+
+The author's decision after the front-end ablation round 2: production moves
+to the single-window detector trained on train_v4r (round 2, seed 3; promoted
+to `$CHIRP_DATA/runs/dualhead_r18_single_v4r_s3`). `run_switch.sh` does every
+GPU step: decoder training on its boxes (`params/runs/v4r-single-s3`, calibration
+without the octave template 1598 -> `v4r-single-s3-recal1`) and its evaluation,
+the production run (`configs/detect/competition2019_v3.toml` ->
+`detections/competition2019_v3`), gap-fill, the 0.8 and 0.9 variants, copies
+into the recording directories as `rtdetr_sw{,_gapfill,_gapfill_t080,_gapfill_t090}`
+(`copy_detections_to_trials.py --dest-suffix`, next to the v2 copies), and the
+blind benchmark (`labels/benchmark/report_v3`). Launch and stages: the script's
+header. The paper then runs on `PAPER_DETECTIONS=rtdetr_sw_gapfill_t080`.
+
 ### Production (`production/`)
 
 `launch_competition2019_v2.sh`: the full run over the 2019/2020

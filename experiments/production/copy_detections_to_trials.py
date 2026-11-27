@@ -77,13 +77,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from paths import DATA, REC_2019  # noqa: E402
 
 
-def files(suffix: str = "") -> tuple[tuple[str, str], ...]:
-    """(source, destination) file names of one recording."""
+def files(suffix: str = "", dest_suffix: str | None = None) -> tuple[tuple[str, str], ...]:
+    """(source, destination) file names of one recording; the destination
+    names carry ``dest_suffix`` (default: the source's ``suffix``)."""
+    d = suffix if dest_suffix is None else dest_suffix
     return (
-        (f"chirps_rtdetr{suffix}.parquet", f"chirps_rtdetr{suffix}.parquet"),
-        (f"chirp_times_rtdetr{suffix}.npy", f"chirp_times_rtdetr{suffix}.npy"),
-        (f"chirp_ids_rtdetr{suffix}.npy", f"chirp_ids_rtdetr{suffix}.npy"),
-        ("meta.json", f"chirps_rtdetr{suffix}_meta.json"),
+        (f"chirps_rtdetr{suffix}.parquet", f"chirps_rtdetr{d}.parquet"),
+        (f"chirp_times_rtdetr{suffix}.npy", f"chirp_times_rtdetr{d}.npy"),
+        (f"chirp_ids_rtdetr{suffix}.npy", f"chirp_ids_rtdetr{d}.npy"),
+        ("meta.json", f"chirps_rtdetr{d}_meta.json"),
     )
 
 
@@ -142,6 +144,12 @@ def main() -> int:
         default="",
         help="suffix of the run's file names, e.g. _gapfill (default: none)",
     )
+    ap.add_argument(
+        "--dest-suffix",
+        default=None,
+        help="suffix of the copies' file names (default: --suffix), e.g. _sw_gapfill_t080 "
+        "for the gap-filled 0.8 run of the single-window detector next to the v2 copies",
+    )
     ap.add_argument("--dest", type=Path, default=REC_2019)
     ap.add_argument(
         "--replace-from",
@@ -152,10 +160,12 @@ def main() -> int:
     )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
-    if not re.fullmatch(r"[A-Za-z0-9_-]*", args.suffix):
-        print(f"ERROR: suffix {args.suffix!r}: letters, digits, '_' and '-' only")
-        return 2
-    names = files(args.suffix)
+    for value in (args.suffix, args.dest_suffix or ""):
+        if not re.fullmatch(r"[A-Za-z0-9_-]*", value):
+            print(f"ERROR: suffix {value!r}: letters, digits, '_' and '-' only")
+            return 2
+    dest_suffix = args.suffix if args.dest_suffix is None else args.dest_suffix
+    names = files(args.suffix, dest_suffix)
 
     recs = sorted(
         p.name for p in args.run.iterdir() if p.is_dir() and (p / "meta.json").is_file()
@@ -271,7 +281,7 @@ def main() -> int:
     for rec in recs:
         meta = json.loads((args.run / rec / "meta.json").read_text())
         failed += [
-            f"{rec}: {p}" for p in check_counts(args.dest / rec, meta, args.suffix)
+            f"{rec}: {p}" for p in check_counts(args.dest / rec, meta, dest_suffix)
         ]
 
     with manifest.open("w", newline="") as f:
