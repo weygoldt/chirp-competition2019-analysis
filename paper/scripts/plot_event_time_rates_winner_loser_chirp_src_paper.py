@@ -410,6 +410,30 @@ def find_significant_extrema(
     return sorted(best.values(), key=lambda d: d["time"])
 
 
+def split_extrema(time, rate, baseline_lo, baseline_med, baseline_hi, min_samples=2):
+    """``find_significant_extrema`` on each side of the event separately (before:
+    t < 0, after: t ≥ 0).
+
+    ``find_significant_extrema`` gives a stretch outside the CI that crosses the
+    event time to the side of its overall extremum, so the other side falls back to
+    whatever smaller stretch it has. Here such a stretch is cut at the event time and
+    each side gets the extremum of its own part; the region of that part starts (after)
+    or ends (before) at the event time. Example, winner chirps around loser chirps at
+    threshold 0.8: one stretch from -14.2 to +6.9 s, highest at -0.7 s; unsplit, the
+    after peak was a 0.4-s blip at +9.9 s, split it is +0.6 s with the region 0 to 6.9 s.
+    """
+    time = np.asarray(time)
+    arrays = [np.asarray(a) for a in (rate, baseline_lo, baseline_med, baseline_hi)]
+    out = []
+    for side in (time < 0, time >= 0):
+        out.extend(
+            find_significant_extrema(
+                time[side], *(a[side] for a in arrays), min_samples=min_samples
+            )
+        )
+    return out
+
+
 def report_extrema(group_label, event_label, extrema):
     """Pretty-print the strongest extremum per (side × type) category.
 
@@ -491,13 +515,14 @@ def plot_conv_rates(
     extrema = find_significant_extrema(
         time, rate_med, baseline_lo, baseline_med, baseline_hi
     )
+    split = split_extrema(time, rate_med, baseline_lo, baseline_med, baseline_hi)
 
     if mark_significant:
         for e in extrema:
             kw = peak_marker_kwargs if e["type"] == "peak" else trough_marker_kwargs
             ax.plot(e["time"], e["rate"], **kw)
 
-    return extrema
+    return extrema, split
 
 
 def plot_conv_rates_heatmap(ax, data):
@@ -547,10 +572,12 @@ def plot_conv_rates_heatmap(ax, data):
 PANEL_EVENTS = ["other_chirps", "chase_onset", "chase_offset", "contact"]
 
 
-def extrema_stats(extrema):
+def extrema_stats(extrema, split):
     """The extrema of one panel for write_stats: side (before/after) -> type (peak/trough),
     and ``peak``, the strongest peak on either side (largest excess over the CI), which
-    can move across the event time between detection thresholds."""
+    can move across the event time between detection thresholds; ``split_at_event``:
+    side -> type of ``split_extrema`` (stretches cut at the event time), for what
+    happens after (before) the event when one stretch spans it."""
 
     def entry(e):
         return {
@@ -570,6 +597,9 @@ def extrema_stats(extrema):
     peaks = [e for e in extrema if e["type"] == "peak"]
     if peaks:
         out["peak"] = entry(max(peaks, key=lambda e: e["delta"]))
+    for e in split:
+        side = out.setdefault("split_at_event", {}).setdefault(e["side"], {})
+        side[e["type"]] = entry(e)
     return out
 
 
@@ -604,20 +634,21 @@ def main():
             group = "Winner"
         event_label = texts[i % 4]
 
-        extrema = plot_conv_rates(
+        extrema, split = plot_conv_rates(
             axs[rp],
             d,
             chirpratec=chirpratec,
             mark_significant=args.plot_significant,
         )
         report_extrema(group, event_label, extrema)
+        report_extrema(group, event_label + " (split at t = 0)", split)
         all_extrema.append((group, event_label, extrema))
 
         n_trials, n_zero = plot_conv_rates_heatmap(axs[ep], d)
         stats[group.lower()][PANEL_EVENTS[i % 4]] = {
             "n_trials": n_trials,
             "n_trials_without_chirps": n_zero,
-            **extrema_stats(extrema),
+            **extrema_stats(extrema, split),
         }
 
         # add n to top right corner

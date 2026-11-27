@@ -239,7 +239,7 @@ script owns each namespace:
 | `allocation`, `allocation_15_fish` | `plot_event_trial_progression_correlations_{all,15}_fish` | rates, first/last-hour rates, durations and intervals |
 | `status_model`, `status_figure` | `stats_bayesian_glmm_chirps_status_v3`, `plot_chirp_winner_loser_trial_summary` | model size; per-trial medians |
 | `chirp_distributions` | `plot_chirp_distributions_manuscript` | the plotted decoder FWHMs, heights, undershoots; chirps outside the decoder's validated domain |
-| `event_rates` | `plot_event_time_rates_winner_loser_chirp_src_paper` | peaks and troughs of the event-triggered rates |
+| `event_rates` | `plot_event_time_rates_winner_loser_chirp_src_paper` | peaks and troughs of the event-triggered rates (a stretch outside the null counts for the side of its extremum); `split_at_event`: the same with each stretch cut at the event time, so each side has its own extremum |
 | `offset_window` | `offset_window` | the window around chase offsets (the primary's, in every run), its width, the unrounded region, the rule |
 | `echo` | `stats_bayesian_logreg_echo_responses_new` | observed, chance and model echo fractions, diagnostics |
 | `chase_windows` | `summarize_chirp_event_correlation_around_chasing` | chases, merged chases, overlap of the offset windows |
