@@ -24,6 +24,14 @@ DATASET = CHIRP_DATA / "datasets" / "sim_v4" / "diagnostics" / "counts.json"
 BENCHMARK = CHIRP_DATA / "labels" / "benchmark" / "report_v2" / "metrics.json"
 REAL = CHIRP_DATA / "labels" / "real_v1" / "report"
 PRODUCTION = CHIRP_DATA / "detections" / "competition2019_v2_20261113"  # the run all analyses derive from
+# the chirp-parameter decoder, recalibrated without the octave-error template of its
+# validation split (same weights as v4-dualhead-sim-v4-r2; 2026-11-27)
+DECODER = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" / "bundle"
+TRAIN_SCENES = CHIRP_DATA / "scenes" / "train_v4"
+# the template-library flags the simulator excludes (scenes' chirps.exclude)
+EXCLUDE = ("has_nan", "truncated", "step_flag", "too_short", "brief_cycles", "ripple_flag",
+           "multi_peak", "line_in_span", "baseline_drift", "low_snr", "decay_interrupted")
+OCTAVE_RATIO = 0.9  # chirp plateau / baseline EODf above this: the trace reads 2x the EODf
 
 
 def read_json(path):
@@ -108,9 +116,75 @@ def production() -> dict:
     }
 
 
+def octave_templates() -> dict:
+    """Big templates whose chirp plateau sits at the baseline EODf above it (octave error).
+
+    Plateau: median frequency excursion between the 50 % crossings, the outer
+    fifth on each side left out; ratio to the template's baseline EODf. Over
+    the templates the simulator draws from (default selection).
+    """
+    import pandas as pd
+
+    t = pd.read_parquet(TEMPLATES / "templates.parquet")
+    keep = t["valid"] & (t["duplicate_of"] < 0)
+    for flag in EXCLUDE:
+        keep &= ~t[flag].astype(bool)
+    n_default = read_json(TEMPLATES / "manifest.json")["counts"]["cumulative"]["after_decay_interrupted"]
+    if int(keep.sum()) != n_default:
+        raise SystemExit(f"default selection {int(keep.sum())} != manifest {n_default}")
+    big = t[keep & (t["family"] == "big")]
+    delta_f = np.load(TEMPLATES / "delta_f_hz.npy", mmap_mode="r")
+    centre, rate = delta_f.shape[1] // 2, 20000.0
+    ratio = {}
+    for k, row in big.iterrows():
+        a = int(centre + row["onset_50_s"] * rate)
+        b = int(centre + row["offset_50_s"] * rate)
+        if b - a < 40 or not np.isfinite(row["baseline_hz"]):
+            continue
+        m = (b - a) // 5
+        ratio[int(row["template_id"])] = float(np.median(delta_f[k, a + m:b - m])) / row["baseline_hz"]
+    values = np.array(list(ratio.values()))
+    octave = sorted(i for i, r in ratio.items() if r > OCTAVE_RATIO)
+    splits = read_json(TEMPLATES / "splits_v1.json")["template_ids"]
+    in_split = {s: [i for i in octave if i in set(splits[s])] for s in ("train", "val", "test")}
+    train = pd.concat([pd.read_parquet(f, columns=["template_id"])
+                       for f in sorted((TRAIN_SCENES / "train").glob("*/chirps.parquet"))])
+    on_train = train["template_id"].isin(in_split["train"])
+    excursion = t.set_index("template_id").loc[octave, "excursion_hz"]
+    return {
+        "n_big_checked": len(ratio),
+        "n": len(octave),
+        "template_ids": octave,
+        "per_split": {s: len(v) for s, v in in_split.items()},
+        "ratio": {"min": min(ratio[i] for i in octave), "max": max(ratio[i] for i in octave)},
+        "ratio_others_max": float(values[values <= OCTAVE_RATIO].max()),
+        "excursion_hz": {"min": float(excursion.min()), "max": float(excursion.max())},
+        "train_scene_chirps": {"n": int(on_train.sum()), "of": len(train),
+                               "share": float(on_train.mean())},
+    }
+
+
+def decoder() -> dict:
+    bundle = read_json(DECODER / "bundle.json")
+    recal = bundle["training"]["recalibration"]
+    octave = octave_templates()
+    val = [i for i in octave["template_ids"] if str(i) in recal["excluded_boxes"]]
+    if sorted(recal["excluded_template_ids"]) != val or octave["per_split"]["val"] != len(val):
+        raise SystemExit(f"the bundle left out {recal['excluded_template_ids']}; octave templates: "
+                         f"{octave['template_ids']} ({octave['per_split']} per split)")
+    return {
+        "octave_templates": octave,
+        "recalibration": {
+            "val_boxes_excluded": sum(recal["excluded_boxes"].values()),
+            "val_boxes_before": recal["n_calibration_before"],
+            "val_boxes_after": bundle["training"]["n_calibration"],
+        },
+    }
+
+
 def main() -> None:
     stats = {"templates": templates(), "scenes": scenes(), "benchmark": benchmark(),
-             "real_session": real_session(), "production": production()}
+             "real_session": real_session(), "production": production(), "decoder": decoder()}
     print(json.dumps(stats, indent=1, default=float))
     write_stats("pipeline", stats)
 
