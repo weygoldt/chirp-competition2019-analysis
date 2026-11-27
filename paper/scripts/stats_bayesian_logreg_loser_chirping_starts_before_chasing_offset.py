@@ -91,13 +91,20 @@ def fit(df: pd.DataFrame):
 
 
 def summarize(df: pd.DataFrame, trace, n_offsets: int) -> dict:
+    """Event counts and the odds ratio exp(beta_0): median, 95 % HDI, P(> 1).
+
+    The HDI is taken on the odds-ratio scale (of exp(beta_0)), the convention of every other
+    multiplier in the manuscript (``summarize_reported_posteriors``, ``stats_chirp_coupling``,
+    ``stats_reattack_hazard``); HDIs are not invariant under exp, and exp of the log-odds HDI made
+    the re-labelled offsets' interval include 1 where the odds-ratio HDI excludes it (2026-11-27).
+    """
     b0 = trace.posterior["Intercept"].to_numpy().ravel()
-    lo, hi = az.hdi(b0, hdi_prob=HDI_PROB).tolist()
+    lo, hi = az.hdi(np.exp(b0), hdi_prob=HDI_PROB).tolist()
     div = int(trace.sample_stats["diverging"].to_numpy().sum())
     return {"n_offsets": int(n_offsets), "n_events": int(len(df)), "n_recordings": int(df["recording"].nunique()),
             "observed_fraction": float(df["y"].mean()), "expected_fraction": float(df["p0"].mean()),
             "n_chirps_before": int(df["before"].sum()), "n_chirps_after": int(df["after"].sum()),
-            "odds_ratio": {"median": float(np.exp(np.median(b0))), "hdi": [float(np.exp(lo)), float(np.exp(hi))],
+            "odds_ratio": {"median": float(np.exp(np.median(b0))), "hdi": [float(lo), float(hi)],
                            "p_gt_1": float(np.mean(b0 > 0))},
             "divergences": div}
 
