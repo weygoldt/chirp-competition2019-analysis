@@ -32,7 +32,15 @@ ACTIVE_S = 3 * 3600
 
 
 def recording_hours(recording: str) -> tuple[float, int]:
-    """Duration (h) and electrode count of a raw grid recording."""
+    """Duration (h) and electrode count of a raw grid recording.
+
+    Without the raw recording (in the derived-data package), from the data folder's
+    ``recordings.csv``, which ``build_data_package.py`` writes from the detection metadata.
+    """
+    table = DATA_ROOT / "recordings.csv"
+    if not (DATA_ROOT / recording / "traces-grid1.raw").exists() and table.exists():
+        row = pd.read_csv(table, index_col="recording").loc[recording]
+        return float(row["n_samples"]) / float(row["samplerate_hz"]) / 3600, int(row["n_electrodes"])
     with DataLoader(str(DATA_ROOT / recording)) as data:
         return len(data) / data.rate / 3600, data.channels
 

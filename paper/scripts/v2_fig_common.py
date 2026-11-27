@@ -48,7 +48,7 @@ import paper_config
 CM = 1 / 2.54
 FIG_WIDTH = 17.4 * CM  # width of the manuscript's full-width figures
 
-CHIRP_DATA = Path("/mnt/data1/chirp_v2")
+CHIRP_DATA = paper_config.CHIRP_DATA  # env CHIRP_DATA (default /mnt/data1/chirp_v2)
 # the detections follow PAPER_DETECTIONS (paper_config): the production run,
 # its dataset patch with the trial fish's track gaps filled (interior gaps
 # 10-300 s with an EODf jump <= 15 Hz, linear interpolation), and that patch
@@ -130,7 +130,7 @@ DECODER_EVAL = CHIRP_DATA / "params" / "runs" / "v4-dualhead-sim-v4-r2-recal1" /
 # 1598 (val; left out of the decoder's calibration) and 391 (test; left out of
 # the decoder panels of Fig. 10). The library fix follows after submission.
 OCTAVE_TEMPLATES = (61, 1598, 391)
-TRIAL_SUMMARY = Path("/mnt/data2/2019_tube_competition/trial_summary.csv")
+TRIAL_SUMMARY = paper_config.DATA_ROOT / "trial_summary.csv"
 
 SNIPPETS = paper_config.PROCESSED / "v2_figures"
 FIGURES = paper_config.FIGURES

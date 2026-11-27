@@ -73,7 +73,9 @@ PRIMARY = os.environ.get("PAPER_PRIMARY", "rtdetr_gapfill_t080")
 PRIMARY_OUT = PAPER / "output" / PRIMARY
 # The author's blind re-labelling of chase onsets / offsets (paper/chase_review): a frozen copy of the
 # session (session.json) and the saves (revisions.jsonl), with their sha256 in paper/inputs/README.md.
-CHASE_VALIDATION = _env("CHASE_VALIDATION", PAPER / "inputs" / "chase_validation")
+CHASE_VALIDATION = _env("CHASE_VALIDATION", _env("PAPER_INPUTS", PAPER / "inputs") / "chase_validation")
+# Git-ignored data inputs (paper/inputs), or the inputs/ folder of the derived-data package.
+INPUTS = _env("PAPER_INPUTS", PAPER / "inputs")
 
 # Seed for scripts that were unseeded in the old analysis (seeded ones keep theirs).
 SEED = 42
