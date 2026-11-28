@@ -360,7 +360,8 @@ def scored_items(base: Path, labels_sw: Path | None) -> tuple[pd.DataFrame, dict
     info = {"old_items_labelled": int(len(old)), "old_items_in_P": int(len(p))}
     parts = [p]
     truth_path = base / "truth.parquet"
-    if labels_sw is not None and truth_path.exists() and (labels_sw / "labels").exists():
+    if (labels_sw is not None and truth_path.exists()
+            and any((labels_sw / "labels").glob("*.csv"))):  # the labeller makes the folder at start
         new_truth = pd.read_parquet(truth_path)
         t = S.candidate_table(new_truth, S.read_labels(labels_sw))
         info["new_items_total"] = int((t["stratum"].str.startswith("new/")).sum())
@@ -491,8 +492,13 @@ def score(args: argparse.Namespace) -> None:
         "candidates_labelled": old_metrics["progress"]["candidates_labelled"] + info["new_items_labelled"],
         "old_candidates_labelled_2019": info["old_items_labelled"], "old_items_in_P": info["old_items_in_P"],
         "new_items_labelled": info["new_items_labelled"], "new_items_total": info.get("new_items_total", 0),
-        "windows_done": int(rec["per_window"].shape[0]), "marks": int(rec["per_window"]["marks"].sum())
-        if len(rec["per_window"]) else 0, "N_estimated": bool(complete),
+        # session totals (real_v1, both datasets), as candidates_labelled; the
+        # windows and marks of 2019/2020 that the recall uses are in recall.csv
+        "windows_done": old_metrics["progress"]["windows_done"],
+        "marks": old_metrics["progress"]["marks"],
+        "windows_2019": int(rec["per_window"].shape[0]),
+        "marks_2019": int(rec["per_window"]["marks"].sum()) if len(rec["per_window"]) else 0,
+        "N_estimated": bool(complete),
     }
     metrics = {"progress": progress, "frame": {k: frame_info[k] for k in (
         "new_frame_rows", "P", "N", "N_share_score_ge_0.5", "match_iou", "p_min_old_score")},
