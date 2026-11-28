@@ -237,8 +237,8 @@ def agreement_panel(ax, report):
     with 95 % intervals (both directions)."""
     prec = pd.read_csv(REAL_V1 / "precision_at_threshold.csv")
     rec = pd.read_csv(REAL_V1 / "recall.csv")
-    prec = prec[prec.dataset == REAL_DATASET].set_index("threshold")
-    rec = rec[rec.dataset == REAL_DATASET].set_index("threshold")
+    prec = prec[prec.dataset.astype(str) == REAL_DATASET].set_index("threshold")
+    rec = rec[rec.dataset.astype(str) == REAL_DATASET].set_index("threshold")
     thr = np.array(sorted(set(prec.index) & set(rec.index)))
     if not np.any(np.isclose(thr, THR)):
         msg = f"operating threshold {THR} not among the session's thresholds {thr}"
@@ -283,7 +283,7 @@ def agreement_panel(ax, report):
 
 def status_panel(ax, report):
     s = pd.read_csv(REAL_V1 / "precision_by_status.csv")
-    s = s[(s.dataset == REAL_DATASET) & s.scores.isin(STATUS_BINS)]
+    s = s[(s.dataset.astype(str) == REAL_DATASET) & s.scores.isin(STATUS_BINS)]
     out = {}
     for status, col, dx in (("winner", winner_color, -0.012), ("loser", loser_color, 0.012)):
         g = s[s.status == status].set_index("scores").reindex(STATUS_BINS)
